@@ -2,12 +2,14 @@ node_modules
 .turbo
 *.tsbuildinfo
 
-# Builds
+# Builds. Anchored where they are unambiguous; `build` and `dist` unanchored
+# would match any directory of that name anywhere in the tree.
 dist
 out
-build
 .next
 .open-next
+apps/mac/build/
+apps/mac/Kit/.build/
 
 # The compiled custom-metric runner. ~60 MB, produced by `pnpm runner`, and
 # embedded into the .app at package time — a build artefact, not a source.
@@ -34,8 +36,11 @@ DerivedData
 
 # Release artefacts. Never cached, never committed — a 60 MB disk image per
 # version is how a repository quietly reaches several gigabytes.
+#
+# Anchored to the Mac app. An unanchored `release/` matches *any* directory of
+# that name at any depth, which silently swallowed .claude/skills/release/.
 dist/
-release/
+apps/mac/release/
 *.dmg
 *.xcarchive
 
