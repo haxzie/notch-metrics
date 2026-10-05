@@ -23,6 +23,17 @@
       "type": "string",
       "maxLength": 400
     },
+    "appId": {
+      "default": "custom",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "appName": {
+      "type": "string",
+      "maxLength": 40
+    },
     "unit": {
       "type": "string",
       "enum": [
@@ -165,6 +176,7 @@
     "name",
     "shortLabel",
     "description",
+    "appId",
     "unit",
     "format",
     "granularities",

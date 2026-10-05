@@ -90,29 +90,73 @@ struct IntegrationsPane: View {
 struct WidgetsPane: View {
     @Environment(AppEnvironment.self) private var env
 
+    private var layout: NotchLayout { env.layoutModel.layout }
+
     var body: some View {
         Form {
-            Section("In the notch") {
-                ForEach(env.layoutModel.layout.widgets) { widget in
-                    LabeledContent {
-                        Text(widget.size.rawValue)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        Label(
-                            widget.title ?? widget.metric ?? widget.customMetricId ?? "Widget",
-                            systemImage: widget.kind == .customMetric ? "curlybraces" : "chart.bar")
+            Section("Layout") {
+                Picker(
+                    "Show as",
+                    selection: Binding(
+                        get: { layout.display },
+                        set: { env.layoutModel.setDisplay($0) })
+                ) {
+                    ForEach(DisplayMode.allCases, id: \.self) { mode in
+                        Label(mode.label, systemImage: mode.symbol).tag(mode)
                     }
+                }
+                .pickerStyle(.segmented)
+
+                LabeledContent("Height") {
+                    Stepper(
+                        "\(layout.rows) row\(layout.rows == 1 ? "" : "s")",
+                        value: Binding(
+                            get: { layout.rows },
+                            set: { env.layoutModel.setRows($0) }),
+                        in: NotchLayout.minRows...NotchLayout.maxRows)
+                }
+            }
+
+            // Grouped by app, because that is how the list view reads and how
+            // somebody with four integrations thinks about their numbers.
+            ForEach(layout.groupedByApp(), id: \.app.id) { group in
+                Section {
+                    ForEach(group.widgets) { widget in
+                        LabeledContent {
+                            Text(layout.display == .grid ? widget.size.rawValue : "—")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Text(widget.title ?? widget.metric ?? widget.customMetricId ?? "Widget")
+                        }
+                    }
+                } header: {
+                    Label(group.app.name, systemImage: group.app.symbol)
+                }
+            }
+
+            if hidden > 0 {
+                Section {
+                    Label(
+                        "\(hidden) widget\(hidden == 1 ? " does" : "s do") not fit the grid. "
+                            + "Switch to the list view, or make the notch taller.",
+                        systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
             }
 
             Section {
-                Text("Hover the notch and click the grid button to rearrange or resize.")
+                Text("Hover the notch and click the pencil to rearrange or resize.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var hidden: Int {
+        layout.display == .grid ? layout.widgets.count(where: { !$0.visible }) : 0
     }
 }
 

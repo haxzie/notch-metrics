@@ -7,7 +7,7 @@ description: Cut a Notch Metrics Mac release end to end. Use when someone wants 
 
 The longest and least reversible sequence in the repository: a published tag, a
 notarised artefact, and a `latest.json` that every installed copy polls. Most
-of what can go wrong goes wrong *quietly*.
+of what can go wrong goes wrong _quietly_.
 
 ## Before you start
 
@@ -61,12 +61,12 @@ the release, not two.
 
 ## Recovery
 
-| What failed | What to do |
-|---|---|
-| The build, after the tag was pushed | Fix, then re-run `release-mac.yml` by `workflow_dispatch` with the same tag. It is idempotent: `sign-and-notarize.sh` short-circuits on anything already stapled. |
-| The mirror, after the GitHub release exists | `R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… scripts/mirror-release.sh mac-v0.2.0` |
-| "Refuse to go backwards" fired | Believe it. `latest.json` already points at something newer; you are mirroring an old tag. |
-| Notarisation was rejected | `xcrun notarytool log <submission-id> --key …`. It is the only output that names the offending binary. See the `signing` skill. |
+| What failed                                 | What to do                                                                                                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The build, after the tag was pushed         | Fix, then re-run `release-mac.yml` by `workflow_dispatch` with the same tag. It is idempotent: `sign-and-notarize.sh` short-circuits on anything already stapled. |
+| The mirror, after the GitHub release exists | `R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… scripts/mirror-release.sh mac-v0.2.0`                                                                  |
+| "Refuse to go backwards" fired              | Believe it. `latest.json` already points at something newer; you are mirroring an old tag.                                                                        |
+| Notarisation was rejected                   | `xcrun notarytool log <submission-id> --key …`. It is the only output that names the offending binary. See the `signing` skill.                                   |
 
 ## Verifying, from a different Mac
 

@@ -6,14 +6,26 @@ import SwiftUI
 @MainActor
 @Observable
 public final class NotchWindowController {
-    public private(set) var presentation: NotchPresentation = .collapsed
+    /// Read once rather than through @Environment: the controller is AppKit,
+    /// outside any SwiftUI environment.
+    private var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
     public private(set) var geometry: NotchGeometry?
+
+    public var onOpenSettings: () -> Void = {}
+
+    /// What the SwiftUI tree reads. Mutating this updates the notch in place;
+    /// the hosting view is built once and never replaced except when the
+    /// display configuration changes underneath it.
+    private var view: NotchViewModel?
+
+    public var presentation: NotchPresentation { view?.presentation ?? .collapsed }
     /// Clicking pins the notch open. Without it, dragging a widget towards the
     /// edge takes the pointer out of the trigger area and the notch closes
     /// mid-gesture — so rearranging would be impossible.
-    public private(set) var isPinned = false
-
-    public var onOpenSettings: () -> Void = {}
+    public var isPinned: Bool { view?.isPinned ?? false }
 
     private var panel: NotchPanel?
     private var container: HitTestingContainerView?
@@ -23,7 +35,6 @@ public final class NotchWindowController {
     private var reconfigureTask: Task<Void, Never>?
 
     private let model: NotchLayoutModel
-    private var states: [String: TileState] = [:]
     private var settings: AppSettings
 
     public init(model: NotchLayoutModel, settings: AppSettings = AppSettings()) {
@@ -69,8 +80,15 @@ public final class NotchWindowController {
     }
 
     public func update(states: [String: TileState]) {
-        self.states = states
-        refreshContent()
+        // A property change, not a view rebuild. This used to replace the
+        // hosting view, which killed any gesture in progress — a metric
+        // landing mid-drag would drop the widget being moved.
+        view?.states = states
+    }
+
+    /// App names and colours from the server's provider manifests.
+    public func update(appOverrides: [String: MetricApp]) {
+        view?.appOverrides = appOverrides
     }
 
     private func scheduleRebuild() {
@@ -92,19 +110,37 @@ public final class NotchWindowController {
         let next = NotchGeometryResolver.geometry(for: screen)
 
         // Equatable, so an unchanged geometry costs nothing. This is what
-        // makes the debounce above safe to run often.
-        if next == geometry, panel != nil {
-            refreshContent()
-            return
-        }
+        // makes the debounce above safe to run often — and why a redundant
+        // notification cannot tear down a view mid-gesture.
+        if next == geometry, panel != nil { return }
 
+        // `.public`, because os_log redacts interpolated values by default
+        // and a screen rectangle logged as `<private>` is the one thing this
+        // line exists to show.
+        Log.notch.debug(
+            """
+            geometry screen=\(next.screenNumber, privacy: .public) \
+            hasNotch=\(next.hasNotch, privacy: .public) \
+            notch=\(next.notchRect.debugDescription, privacy: .public)
+            """)
         geometry = next
-        collapse(animated: false)
+
+        // Carried across a display change so the notch does not forget it was
+        // open because somebody plugged in a monitor.
+        let carried = view
+        let viewModel = carried ?? NotchViewModel(geometry: next)
+        viewModel.geometry = next
+        viewModel.presentation = .collapsed
+        viewModel.isPinned = false
+        viewModel.onOpenSettings = { [weak self] in self?.onOpenSettings() }
+        viewModel.onTogglePin = { [weak self] in self?.togglePin() }
+        viewModel.onClose = { [weak self] in self?.close() }
+        self.view = viewModel
 
         let container = HitTestingContainerView(frame: CGRect(origin: .zero, size: NotchPanel.maxSize))
         container.autoresizingMask = [.width, .height]
 
-        let hosting = NSHostingView(rootView: contentView(for: next))
+        let hosting = NSHostingView(rootView: NotchContentView(model: model, view: viewModel))
         hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
@@ -126,7 +162,9 @@ public final class NotchWindowController {
         }
         monitor.dwell = .milliseconds(settings.hoverDwellMilliseconds)
         monitor.collapseDelay = .milliseconds(settings.collapseDelayMilliseconds)
+        monitor.triggerScreenRect = { [weak self] in self?.triggerScreenRect ?? .zero }
         monitor.expandedScreenRect = { [weak self] in self?.expandedScreenRect ?? .zero }
+        monitor.isExpanded = { [weak self] in self?.presentation == .expanded }
         container.onPointerEntered = { [weak monitor] in monitor?.pointerEntered() }
         container.onPointerExited = { [weak monitor] in monitor?.pointerExited() }
         monitor.attach(to: container, rect: triggerRect(for: next))
@@ -142,7 +180,6 @@ public final class NotchWindowController {
             if !isPinned { togglePin() }
             if ProcessInfo.processInfo.environment["NOTCH_DEBUG_EDIT"] == "1" {
                 model.isEditing = true
-                refreshContent()
             }
         }
 
@@ -150,33 +187,7 @@ public final class NotchWindowController {
         updateHitRect()
     }
 
-    private func contentView(for geometry: NotchGeometry) -> some View {
-        NotchContentView(
-            model: model,
-            presentation: presentation,
-            geometry: geometry,
-            states: states,
-            isPinned: isPinned,
-            onOpenSettings: { [weak self] in self?.onOpenSettings() },
-            onTogglePin: { [weak self] in self?.togglePin() },
-            onClose: { [weak self] in self?.close() }
-        )
-    }
 
-    private func refreshContent() {
-        guard let geometry, let container else { return }
-        // The root view is replaced wholesale rather than mutated through a
-        // retained `NSHostingView<ConcreteType>`. Naming that type means
-        // spelling out the opaque result of `contentView(for:)`, which Swift
-        // will not let you do — and the tree here is a dozen views that
-        // SwiftUI diffs anyway.
-        container.subviews.forEach { $0.removeFromSuperview() }
-        let hosting = NSHostingView(rootView: contentView(for: geometry))
-        hosting.frame = container.bounds
-        hosting.autoresizingMask = [.width, .height]
-        container.addSubview(hosting)
-        updateHitRect()
-    }
 
     /// The collapsed hot zone, in the container's coordinates.
     ///
@@ -204,17 +215,53 @@ public final class NotchWindowController {
             : triggerRect(for: geometry)
     }
 
+    /// The strip that opens the notch, in screen coordinates.
+    private var triggerScreenRect: CGRect {
+        guard let geometry else { return .zero }
+        let rect = geometry.hasNotch
+            ? geometry.notchRect
+            : CGRect(
+                x: geometry.screenFrame.midX - 60,
+                y: geometry.screenFrame.maxY - geometry.menuBarHeight,
+                width: 120, height: geometry.menuBarHeight)
+
+        // Inflated sideways and downward so a pointer travelling toward the
+        // menu bar still catches it — aiming at a 185x32 strip exactly is a
+        // precision task nobody should be set.
+        return rect.insetBy(dx: -8, dy: -3)
+    }
+
+    /// The panel as drawn, in screen coordinates — not the window, which is
+    /// sized to the maximum and would keep the notch open across a third of
+    /// the screen.
     private var expandedScreenRect: CGRect {
-        guard let panel else { return .zero }
-        return panel.frame
+        guard let panel, let view, view.visiblePanelSize != .zero else {
+            return panel?.frame ?? .zero
+        }
+        let size = view.visiblePanelSize
+        let rect = CGRect(
+            x: panel.frame.midX - size.width / 2,
+            y: panel.frame.maxY - size.height,
+            width: size.width,
+            height: size.height)
+
+        // A few points of slack, so a pointer resting exactly on the border
+        // does not flicker the notch open and shut.
+        return rect.insetBy(dx: -4, dy: -4)
     }
 
     public func expand() {
-        guard presentation != .expanded else { return }
-        presentation = .expanded
+        guard let view, view.presentation != .expanded else { return }
+        // Animated here rather than inside the view, so the frame change and
+        // the content transition are driven by one spring. Without an explicit
+        // transaction the change arrives from AppKit outside any animation and
+        // the panel simply snaps.
+        Log.notch.debug("expand")
+        withAnimation(NotchMotion.expansion(reduceMotion: reduceMotion)) {
+            view.presentation = .expanded
+        }
         hover?.beginExpandedWatch()
         updateHitRect()
-        refreshContent()
     }
 
     public func collapseIfUnpinned() {
@@ -223,29 +270,36 @@ public final class NotchWindowController {
     }
 
     public func collapse(animated: Bool) {
-        guard presentation != .collapsed else { return }
-        presentation = .collapsed
-        isPinned = false
-        model.isEditing = false
+        guard let view, view.presentation != .collapsed else { return }
+        Log.notch.debug("collapse")
+        let apply = {
+            view.presentation = .collapsed
+            view.isPinned = false
+            self.model.isEditing = false
+        }
+        if animated {
+            withAnimation(NotchMotion.collapse(reduceMotion: reduceMotion)) { apply() }
+        } else {
+            apply()
+        }
         // Idle cost returns to zero: the global mouse monitor and the poll
         // timer only exist while the notch is open.
         hover?.endExpandedWatch()
         updateHitRect()
-        refreshContent()
     }
 
     /// The × in the header. Leaves edit mode and collapses, whether pinned or
     /// not — a close button that does nothing because the panel is pinned is a
     /// close button that looks broken.
     public func close() {
-        isPinned = false
+        view?.isPinned = false
         collapse(animated: true)
     }
 
     public func togglePin() {
-        isPinned.toggle()
-        if isPinned { hover?.cancelPendingCollapse() }
-        refreshContent()
+        guard let view else { return }
+        view.isPinned.toggle()
+        if view.isPinned { hover?.cancelPendingCollapse() }
     }
 
     private func reassertLevel() {

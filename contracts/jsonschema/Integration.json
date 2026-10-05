@@ -13,7 +13,8 @@
         "stripe",
         "dodopayments",
         "lemonsqueezy",
-        "polar"
+        "polar",
+        "google-analytics"
       ]
     },
     "label": {

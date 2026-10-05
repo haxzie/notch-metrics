@@ -10,8 +10,41 @@ import { z } from "zod";
  * has to be rejected before it reaches the filesystem.
  */
 
-export const ProviderId = z.enum(["stripe", "dodopayments", "lemonsqueezy", "polar"]);
+/**
+ * A provider the Worker can call on the user's behalf.
+ *
+ * Every id here must have an adapter in `packages/integrations` — the registry
+ * is typed as a total record so adding one to this list without writing the
+ * adapter fails to compile, rather than throwing "unknown provider" at
+ * whichever user connects it first.
+ */
+export const ProviderId = z.enum([
+  "stripe",
+  "dodopayments",
+  "lemonsqueezy",
+  "polar",
+  "google-analytics",
+]);
 export type ProviderId = z.infer<typeof ProviderId>;
+
+/**
+ * The app a number came from, for display.
+ *
+ * A superset of `ProviderId`: every metric in the notch belongs to an app, and
+ * that includes the ones the Worker does not fetch. A custom metric written by
+ * an agent still reads "GitHub" rather than "Custom" when it says so.
+ *
+ * Deliberately a loose string rather than an enum. The app catalogue is
+ * presentation, and an unrecognised id has a perfectly good fallback — whereas
+ * a strict enum would make one unfamiliar value fail the decode of a whole
+ * layout and blank every widget at once.
+ */
+export const AppId = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9-]*$/);
+export type AppId = z.infer<typeof AppId>;
 
 export const MetricId = z.enum([
   "mrr",

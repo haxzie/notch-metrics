@@ -7,6 +7,20 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
+    "rows": {
+      "default": 2,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "display": {
+      "default": "grid",
+      "type": "string",
+      "enum": [
+        "grid",
+        "list"
+      ]
+    },
     "widgets": {
       "type": "array",
       "items": {
@@ -24,6 +38,13 @@
               "custom_metric",
               "divider"
             ]
+          },
+          "appId": {
+            "default": "unknown",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
           },
           "integrationId": {
             "anyOf": [
@@ -84,18 +105,18 @@
               "1x1",
               "2x1",
               "2x2",
-              "4x2"
+              "6x2"
             ]
           },
           "col": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 7
+            "maximum": 5
           },
           "row": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 1
+            "maximum": 3
           },
           "position": {
             "type": "integer",
@@ -140,6 +161,7 @@
         "required": [
           "id",
           "kind",
+          "appId",
           "integrationId",
           "metric",
           "customMetricId",
@@ -159,6 +181,8 @@
   },
   "required": [
     "revision",
+    "rows",
+    "display",
     "widgets"
   ],
   "additionalProperties": false

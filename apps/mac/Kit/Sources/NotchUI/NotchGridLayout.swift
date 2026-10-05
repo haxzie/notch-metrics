@@ -88,8 +88,13 @@ public final class NotchLayoutModel {
 
     public var displayed: NotchLayout { preview ?? layout }
 
+    /// Accepts a layout from disk or from the server.
+    ///
+    /// Repacked rather than trusted: an older `layout.json` was written
+    /// against a different grid, and a `PUT /v1/widgets` from another Mac can
+    /// carry anything. Overlapping tiles render on top of each other.
     public func replace(with layout: NotchLayout) {
-        self.layout = GridPacker.normalised(layout)
+        self.layout = GridPacker.repack(layout)
     }
 
     public func beginDrag(_ id: String) {
@@ -114,6 +119,20 @@ public final class NotchLayoutModel {
         }
         preview = nil
         draggingID = nil
+    }
+
+    /// Switches between the grid and the list.
+    ///
+    /// Leaves edit mode on the way: the two views have different affordances —
+    /// the grid resizes tiles, the list removes rows — and staying in edit
+    /// mode across the switch leaves handles on screen that do nothing.
+    public func setDisplay(_ display: DisplayMode) {
+        guard display != layout.display else { return }
+        layout.display = display
+        isEditing = false
+        preview = nil
+        draggingID = nil
+        persist(layout)
     }
 
     /// Sets the number of grid rows, dropping the preview used while dragging.

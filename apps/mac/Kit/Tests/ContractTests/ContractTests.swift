@@ -43,7 +43,8 @@ struct ContractTests {
         let notDecodedHere: Set<String> = ["provider-manifest-list", "integration", "plugin-manifest"]
         let decoded: Set<String> = [
             "metric-series", "metric-series-empty", "metric-series-no-currency",
-            "metric-error", "metric-batch", "widget-layout", "latest-json",
+            "metric-error", "metric-batch", "widget-layout", "widget-layout-list",
+            "latest-json",
         ]
 
         let uncovered = Set(files).subtracting(decoded).subtracting(notDecodedHere)
@@ -107,19 +108,39 @@ struct ContractTests {
         #expect(batch.results[1].series == nil)
     }
 
-    @Test("a layout with a provider widget and a custom one decodes")
+    @Test("a grid layout decodes, and every widget names its app")
     func layout() throws {
-        struct Response: Decodable {
-            let revision: Int
-            let widgets: [NotchWidget]
-        }
-        let layout = try JSONDecoder().decode(Response.self, from: Self.load("widget-layout"))
+        let layout = try JSONDecoder().decode(NotchLayout.self, from: Self.load("widget-layout"))
         #expect(layout.revision == 7)
+        #expect(layout.rows == 2)
+        #expect(layout.display == .grid)
         #expect(layout.widgets.count == 2)
         #expect(layout.widgets[0].kind == .providerMetric)
-        #expect(layout.widgets[0].size == .wide)
+        #expect(layout.widgets[0].size == .square)
+        #expect(layout.widgets[0].appId == "stripe")
         #expect(layout.widgets[1].kind == .customMetric)
         #expect(layout.widgets[1].customMetricId == "github-stars")
+        #expect(layout.widgets[1].appId == "github")
+    }
+
+    @Test("a list layout groups by app, including one this build has never seen")
+    func listLayout() throws {
+        let layout = try JSONDecoder().decode(
+            NotchLayout.self, from: Self.load("widget-layout-list"))
+        #expect(layout.display == .list)
+        #expect(layout.rows == 3)
+
+        let groups = layout.groupedByApp()
+        #expect(groups.map(\.app.id) == ["stripe", "google-analytics", "linear"])
+        #expect(groups.map(\.app.name) == ["Stripe", "Google Analytics", "Linear"])
+
+        // "linear" is not in this build's catalogue. It must render with a
+        // titlecased name and a fallback mark rather than being dropped —
+        // otherwise a server that learns about a new app silently removes a
+        // row from everybody's notch.
+        let unknown = try #require(groups.last)
+        #expect(!unknown.app.symbol.isEmpty)
+        #expect(unknown.widgets.count == 1)
     }
 
     @Test("an unknown enum value falls back instead of failing the whole decode")

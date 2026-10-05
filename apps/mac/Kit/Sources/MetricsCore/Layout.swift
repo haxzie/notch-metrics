@@ -46,9 +46,54 @@ public enum ChartKind: String, Codable, Sendable, Hashable {
     case none, sparkline, bars
 }
 
+/// Tiles on a grid, or rows grouped by app.
+///
+/// The list is not a lesser view. The grid tops out at six tiles and starts
+/// hiding things; the list fits a dozen numbers from four apps into the same
+/// space, which is what somebody with Stripe, Google Analytics and two custom
+/// metrics actually has.
+public enum DisplayMode: String, Codable, Sendable, Hashable, CaseIterable {
+    case grid, list
+
+    /// Unknown values fall back to the grid.
+    ///
+    /// Same rule as every other wire enum here: a server that starts sending a
+    /// mode this build predates must not make the whole layout fail to decode
+    /// and blank the notch.
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = DisplayMode(rawValue: raw) ?? .grid
+    }
+
+    public var label: String {
+        switch self {
+        case .grid: "Grid"
+        case .list: "List"
+        }
+    }
+
+    public var symbol: String {
+        switch self {
+        case .grid: "square.grid.2x2"
+        case .list: "list.bullet"
+        }
+    }
+
+    public var toggled: DisplayMode { self == .grid ? .list : .grid }
+}
+
 public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     public var id: String
     public var kind: WidgetKind
+
+    /// Which app this number comes from. See `AppCatalog`.
+    ///
+    /// Held on the widget rather than looked up through `integrationId`,
+    /// because a widget whose integration was disconnected still has to
+    /// render — it becomes a "reconnect Stripe" tile, and it cannot name the
+    /// app to reconnect if the only link was the row that was deleted.
+    public var appId: String
+
     public var integrationId: String?
     public var metric: String?
     public var customMetricId: String?
@@ -64,6 +109,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
 
     public init(
         id: String = UUID().uuidString, kind: WidgetKind = .providerMetric,
+        appId: String = AppCatalog.unknownId,
         integrationId: String? = nil, metric: String? = nil, customMetricId: String? = nil,
         title: String? = nil, size: WidgetSize = .wide, col: Int = 0, row: Int = 0,
         position: Int = 0, granularity: Granularity = .day, range: TimeRange = .month,
@@ -71,6 +117,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     ) {
         self.id = id
         self.kind = kind
+        self.appId = appId
         self.integrationId = integrationId
         self.metric = metric
         self.customMetricId = customMetricId
@@ -83,6 +130,39 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         self.range = range
         self.chart = chart
         self.visible = visible
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, appId, integrationId, metric, customMetricId, title, size
+        case col, row, position, granularity, range, chart, visible
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        kind = try c.decode(WidgetKind.self, forKey: .kind)
+        integrationId = try c.decodeIfPresent(String.self, forKey: .integrationId)
+        metric = try c.decodeIfPresent(String.self, forKey: .metric)
+        customMetricId = try c.decodeIfPresent(String.self, forKey: .customMetricId)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        size = try c.decodeIfPresent(WidgetSize.self, forKey: .size) ?? .wide
+        col = try c.decodeIfPresent(Int.self, forKey: .col) ?? 0
+        row = try c.decodeIfPresent(Int.self, forKey: .row) ?? 0
+        position = try c.decodeIfPresent(Int.self, forKey: .position) ?? 0
+        granularity = try c.decodeIfPresent(Granularity.self, forKey: .granularity) ?? .day
+        range = try c.decodeIfPresent(TimeRange.self, forKey: .range) ?? .month
+        chart = try c.decodeIfPresent(ChartKind.self, forKey: .chart) ?? .sparkline
+        visible = try c.decodeIfPresent(Bool.self, forKey: .visible) ?? true
+
+        // Users have a layout.json from before apps existed. Rather than
+        // stranding those widgets under "Unknown", infer what we can: a
+        // custom metric is at least "custom", and anything else keeps its
+        // place until the next sync from the server fills it in properly.
+        if let declared = try c.decodeIfPresent(String.self, forKey: .appId), !declared.isEmpty {
+            appId = declared
+        } else {
+            appId = kind == .customMetric ? AppCatalog.customId : AppCatalog.unknownId
+        }
     }
 }
 
@@ -105,20 +185,23 @@ public struct NotchLayout: Codable, Sendable, Hashable {
     /// token that stops a second Mac silently clobbering the backup.
     public var revision: Int
     public var rows: Int
+    public var display: DisplayMode
     public var widgets: [NotchWidget]
 
     public init(
         schemaVersion: Int = 1, revision: Int = 0,
-        rows: Int = NotchLayout.defaultRows, widgets: [NotchWidget] = []
+        rows: Int = NotchLayout.defaultRows, display: DisplayMode = .grid,
+        widgets: [NotchWidget] = []
     ) {
         self.schemaVersion = schemaVersion
         self.revision = revision
         self.rows = rows.clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
+        self.display = display
         self.widgets = widgets
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, rows, widgets
+        case schemaVersion, revision, rows, display, widgets
     }
 
     public init(from decoder: any Decoder) throws {
@@ -129,7 +212,28 @@ public struct NotchLayout: Codable, Sendable, Hashable {
         // decodes rather than stranding the user with an empty notch.
         rows = (try c.decodeIfPresent(Int.self, forKey: .rows) ?? NotchLayout.defaultRows)
             .clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
+        display = try c.decodeIfPresent(DisplayMode.self, forKey: .display) ?? .grid
         widgets = try c.decodeIfPresent([NotchWidget].self, forKey: .widgets) ?? []
+    }
+
+    /// The visible widgets, grouped by app, in the order the list draws them.
+    ///
+    /// Apps keep the order of their first widget rather than being sorted
+    /// alphabetically: the user arranged these, and re-sorting under them on
+    /// every render is the sort of tidiness nobody asked for.
+    public func groupedByApp(overrides: [String: MetricApp] = [:]) -> [(app: MetricApp, widgets: [NotchWidget])] {
+        var order: [String] = []
+        var byApp: [String: [NotchWidget]] = [:]
+
+        for widget in widgets.sorted(by: { $0.position < $1.position }) where widget.visible {
+            let app = widget.app(overrides: overrides)
+            if byApp[app.id] == nil { order.append(app.id) }
+            byApp[app.id, default: []].append(widget)
+        }
+
+        return order.map { id in
+            (AppCatalog.resolve(id, overrides: overrides), byApp[id] ?? [])
+        }
     }
 }
 
@@ -264,6 +368,47 @@ public enum GridPacker {
         placed.col = slot.col
         placed.row = slot.row
         next.widgets.append(placed)
+        return normalised(next)
+    }
+
+    /// Resolves a layout that may not be valid into one that is.
+    ///
+    /// Positions arrive from three places that cannot all be trusted to agree:
+    /// a `layout.json` written by an older build with a different grid, a
+    /// `PUT /v1/widgets` from another Mac, and the packer. Rendering them
+    /// as-is draws overlapping tiles on top of each other, which looks like a
+    /// rendering fault rather than a layout one.
+    ///
+    /// Anything that still cannot be placed is marked not visible rather than
+    /// dropped — the widget survives a trip through a smaller grid and comes
+    /// back when there is room.
+    public static func repack(_ layout: NotchLayout) -> NotchLayout {
+        var next = layout
+        var settled: [NotchWidget] = []
+
+        for var widget in layout.widgets.sorted(by: { $0.position < $1.position }) {
+            guard widget.visible else {
+                settled.append(widget)
+                continue
+            }
+
+            let scratch = NotchLayout(
+                schemaVersion: layout.schemaVersion, revision: layout.revision,
+                rows: layout.rows, display: layout.display, widgets: settled)
+
+            if fits(widget, at: (widget.col, widget.row), in: scratch) {
+                settled.append(widget)
+            } else if let slot = firstFit(for: widget, in: scratch) {
+                widget.col = slot.col
+                widget.row = slot.row
+                settled.append(widget)
+            } else {
+                widget.visible = false
+                settled.append(widget)
+            }
+        }
+
+        next.widgets = settled
         return normalised(next)
     }
 

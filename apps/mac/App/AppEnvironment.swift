@@ -69,6 +69,14 @@ final class AppEnvironment {
         if layoutModel.layout.widgets.isEmpty {
             layoutModel.replace(with: Self.starterLayout())
         }
+        // After the starter layout, which would otherwise reset the mode.
+        let wantsList = ProcessInfo.processInfo.environment["NOTCH_DEBUG_LIST"] == "1"
+        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" {
+            layoutModel.replace(with: Self.demoLayout(display: wantsList ? .list : .grid))
+        } else if wantsList {
+            layoutModel.setDisplay(.list)
+        }
+
         states = ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1"
             ? Self.demoStates(for: layoutModel.layout)
             : Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
@@ -111,15 +119,51 @@ final class AppEnvironment {
         // Three 2x2 tiles fill the 6x2 grid exactly.
         NotchLayout(widgets: [
             NotchWidget(
-                id: "starter-revenue", kind: .providerMetric, metric: "revenue",
+                id: "starter-revenue", kind: .providerMetric, appId: "stripe", metric: "revenue",
                 title: "Revenue", size: .square, col: 0, row: 0, position: 0, chart: .sparkline),
             NotchWidget(
-                id: "starter-mrr", kind: .providerMetric, metric: "mrr", title: "MRR",
-                size: .square, col: 2, row: 0, position: 1, chart: .none),
+                id: "starter-mrr", kind: .providerMetric, appId: "stripe", metric: "mrr",
+                title: "MRR", size: .square, col: 2, row: 0, position: 1, chart: .none),
             NotchWidget(
-                id: "starter-subs", kind: .providerMetric, metric: "active_subscribers",
+                id: "starter-subs", kind: .providerMetric, appId: "stripe",
+                metric: "active_subscribers",
                 title: "Subscribers", size: .square, col: 4, row: 0, position: 2, chart: .bars),
         ])
+    }
+
+    /// Widgets from three apps — enough to show what the list view is for.
+    ///
+    /// All six are present in both modes. `repack` marks the ones that do not
+    /// fit the grid as hidden, which is exactly the situation the list solves.
+    nonisolated private static func demoLayout(display: DisplayMode) -> NotchLayout {
+        NotchLayout(
+            rows: display == .list ? 4 : 2,
+            display: display,
+            widgets: [
+                NotchWidget(
+                    id: "starter-revenue", kind: .providerMetric, appId: "stripe",
+                    metric: "revenue", title: "Revenue", size: .square, col: 0, row: 0,
+                    position: 0, chart: .sparkline),
+                NotchWidget(
+                    id: "starter-mrr", kind: .providerMetric, appId: "stripe", metric: "mrr",
+                    title: "MRR", size: .square, col: 2, row: 0, position: 1, chart: .none),
+                NotchWidget(
+                    id: "starter-subs", kind: .providerMetric, appId: "stripe",
+                    metric: "active_subscribers", title: "Subscribers", size: .square,
+                    col: 4, row: 0, position: 2, chart: .bars),
+                NotchWidget(
+                    id: "demo-ga-users", kind: .providerMetric, appId: "google-analytics",
+                    metric: "active_subscribers", title: "Active users", size: .wide,
+                    col: 0, row: 0, position: 3, chart: .sparkline),
+                NotchWidget(
+                    id: "demo-ga-new", kind: .providerMetric, appId: "google-analytics",
+                    metric: "new_subscribers", title: "New users", size: .wide,
+                    col: 0, row: 0, position: 4, chart: .none),
+                NotchWidget(
+                    id: "demo-stars", kind: .customMetric, appId: "github",
+                    customMetricId: "github-stars", title: "Stars", size: .small,
+                    col: 0, row: 0, position: 5, chart: .none),
+            ])
     }
 
     /// Plausible numbers for screenshots and design work.
@@ -159,6 +203,15 @@ final class AppEnvironment {
             "starter-subs": series(
                 "active_subscribers", 3_456, unit: .count, currency: nil,
                 trend: [2_980, 3_110, 3_240, 3_300, 3_398, 3_456]),
+            "demo-ga-users": series(
+                "active_subscribers", 18_402, unit: .count, currency: nil,
+                trend: [14_900, 15_800, 16_100, 17_400, 17_900, 18_402]),
+            "demo-ga-new": series(
+                "new_subscribers", 2_117, unit: .count, currency: nil,
+                trend: [2_400, 2_310, 2_290, 2_180, 2_140, 2_117]),
+            "demo-stars": series(
+                "stars", 6_786, unit: .count, currency: nil,
+                trend: [6_310, 6_420, 6_560, 6_700, 6_786]),
         ]
 
         return Dictionary(

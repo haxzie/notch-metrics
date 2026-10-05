@@ -1,14 +1,17 @@
 {
   "revision": 7,
+  "rows": 2,
+  "display": "grid",
   "widgets": [
     {
       "id": "wid_01",
       "kind": "provider_metric",
+      "appId": "stripe",
       "integrationId": "int_4f2a9c",
       "metric": "mrr",
       "customMetricId": null,
       "title": "MRR",
-      "size": "2x1",
+      "size": "2x2",
       "col": 0,
       "row": 0,
       "position": 0,
@@ -20,6 +23,7 @@
     {
       "id": "wid_02",
       "kind": "custom_metric",
+      "appId": "github",
       "integrationId": null,
       "metric": null,
       "customMetricId": "github-stars",

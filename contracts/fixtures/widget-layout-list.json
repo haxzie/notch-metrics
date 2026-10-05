@@ -1,0 +1,58 @@
+{
+  "revision": 9,
+  "rows": 3,
+  "display": "list",
+  "widgets": [
+    {
+      "id": "wid_01",
+      "kind": "provider_metric",
+      "appId": "stripe",
+      "integrationId": "int_4f2a9c",
+      "metric": "revenue",
+      "customMetricId": null,
+      "title": "Revenue",
+      "size": "2x1",
+      "col": 0,
+      "row": 0,
+      "position": 0,
+      "granularity": "day",
+      "range": "30d",
+      "chart": "sparkline",
+      "visible": true
+    },
+    {
+      "id": "wid_02",
+      "kind": "provider_metric",
+      "appId": "google-analytics",
+      "integrationId": "int_b71e02",
+      "metric": "active_subscribers",
+      "customMetricId": null,
+      "title": "Active users",
+      "size": "2x1",
+      "col": 2,
+      "row": 0,
+      "position": 1,
+      "granularity": "day",
+      "range": "30d",
+      "chart": "none",
+      "visible": true
+    },
+    {
+      "id": "wid_03",
+      "kind": "custom_metric",
+      "appId": "linear",
+      "integrationId": null,
+      "metric": null,
+      "customMetricId": "linear-open-issues",
+      "title": "Open issues",
+      "size": "1x1",
+      "col": 4,
+      "row": 0,
+      "position": 2,
+      "granularity": "day",
+      "range": "30d",
+      "chart": "none",
+      "visible": true
+    }
+  ]
+}

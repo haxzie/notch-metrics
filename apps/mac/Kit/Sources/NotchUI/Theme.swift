@@ -1,3 +1,4 @@
+import MetricsCore
 import SwiftUI
 
 /// The brand gradient, taken from the app icon.
@@ -40,8 +41,15 @@ public enum NotchTheme {
     public static let editDot = Color.white.opacity(0.22)
     public static let editHighlight = Color(nsColor: .systemBlue)
 
-    /// Tints a tile from its index so a row is distinguishable at a glance
-    /// without anybody having to choose colours.
+    /// The app's own colour, from `MetricApp.accentHex`.
+    ///
+    /// Preferred over `accent(for:)` everywhere an app is known: two Stripe
+    /// tiles should look like two Stripe tiles, not like tile one and tile two.
+    public static func accent(for app: MetricApp) -> Color {
+        Color(hex: app.accentHex) ?? gradientStart
+    }
+
+    /// Tints a tile from its index. Only for the case where no app is known.
     public static func accent(for index: Int) -> Color {
         let stops: [Color] = [
             gradientStart,
@@ -56,14 +64,31 @@ public enum NotchTheme {
 /// Respects Reduce Motion, which matters more here than in most apps: the
 /// notch expands under the pointer, unprompted, several times an hour.
 public enum NotchMotion {
+    /// Opening. Deliberately under-damped so the panel overshoots a little and
+    /// settles — the "gooey" part. A critically damped spring is technically
+    /// smoother and reads as a window resizing rather than as something
+    /// growing out of the bezel.
     public static func expansion(reduceMotion: Bool) -> Animation {
         reduceMotion
-            ? .easeOut(duration: 0.12)
-            : .spring(response: 0.34, dampingFraction: 0.82)
+            ? .easeOut(duration: 0.1)
+            : .spring(response: 0.34, dampingFraction: 0.62)
     }
 
+    /// Closing. Faster and almost fully damped: an overshoot on the way out
+    /// means the notch is still wobbling after the pointer has gone, which
+    /// reads as lag rather than as polish.
+    public static func collapse(reduceMotion: Bool) -> Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.08)
+            : .spring(response: 0.26, dampingFraction: 0.9)
+    }
+
+    /// The content inside. Scaled from the top edge so it appears to be
+    /// squeezed out of the notch rather than cross-faded in behind it.
     public static func content(reduceMotion: Bool) -> AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -10))
+        reduceMotion
+            ? .opacity
+            : .scale(scale: 0.94, anchor: .top).combined(with: .opacity)
     }
 }
 
@@ -161,5 +186,21 @@ public struct DottedGrid: View {
         }
         .allowsHitTesting(false)
         .transition(.opacity)
+    }
+}
+
+extension Color {
+    /// `RRGGBB`, as stored in `MetricApp.accentHex`.
+    ///
+    /// Returns nil rather than black on a malformed value, so the caller can
+    /// fall back to something visible — a black mark on a black panel is
+    /// indistinguishable from a missing one.
+    init?(hex: String) {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard cleaned.count == 6, let value = UInt32(cleaned, radix: 16) else { return nil }
+        self.init(
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255)
     }
 }

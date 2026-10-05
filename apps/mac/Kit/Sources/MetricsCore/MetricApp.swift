@@ -1,0 +1,85 @@
+import Foundation
+
+/// The app a number came from.
+///
+/// Every metric in the notch belongs to one — Stripe, Google Analytics, or
+/// whatever a custom metric declared. That is what the list view groups by and
+/// what the tile's mark identifies, so it needs an answer for *any* id,
+/// including ones this build predates.
+public struct MetricApp: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let name: String
+    /// An SF Symbol. Deliberately not the vendor's own logo: third-party marks
+    /// mean an asset pipeline, a licence question each, and a release every
+    /// time somebody rebrands.
+    public let symbol: String
+    /// `RRGGBB`. Converted to a colour in NotchUI, so MetricsCore stays free
+    /// of SwiftUI and can be tested without a UI.
+    public let accentHex: String
+
+    public init(id: String, name: String, symbol: String, accentHex: String) {
+        self.id = id
+        self.name = name
+        self.symbol = symbol
+        self.accentHex = accentHex
+    }
+}
+
+public enum AppCatalog {
+    public static let customId = "custom"
+    public static let unknownId = "unknown"
+
+    /// What ships in the binary.
+    ///
+    /// The server's provider manifests carry a name and an accent colour too,
+    /// and `resolve(_:overrides:)` prefers those — but the app has to render a
+    /// cold launch with no network, and custom metrics name apps the server
+    /// has never heard of.
+    public static let builtIn: [MetricApp] = [
+        MetricApp(id: "stripe", name: "Stripe", symbol: "creditcard.fill", accentHex: "635BFF"),
+        MetricApp(
+            id: "dodopayments", name: "Dodo Payments", symbol: "bird.fill", accentHex: "111111"),
+        MetricApp(
+            id: "lemonsqueezy", name: "Lemon Squeezy", symbol: "cart.fill", accentHex: "FFC233"),
+        MetricApp(id: "polar", name: "Polar", symbol: "snowflake", accentHex: "0062FF"),
+        MetricApp(
+            id: "google-analytics", name: "Google Analytics", symbol: "chart.bar.xaxis",
+            accentHex: "E8710A"),
+        MetricApp(id: "plausible", name: "Plausible", symbol: "waveform.path.ecg", accentHex: "5850EC"),
+        MetricApp(id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right", accentHex: "F0F6FC"),
+        MetricApp(id: "linear", name: "Linear", symbol: "square.stack.3d.up.fill", accentHex: "5E6AD2"),
+        MetricApp(id: "posthog", name: "PostHog", symbol: "hedgehog.fill", accentHex: "F54E00"),
+        MetricApp(id: customId, name: "Custom", symbol: "curlybraces", accentHex: "D819C2"),
+    ]
+
+    private static let byId: [String: MetricApp] = Dictionary(
+        uniqueKeysWithValues: builtIn.map { ($0.id, $0) })
+
+    /// Never fails.
+    ///
+    /// An unrecognised id is titlecased and given a neutral mark rather than
+    /// dropped. The alternative — hiding the row, or refusing the layout — is
+    /// how one unfamiliar value from a newer server blanks a whole notch.
+    public static func resolve(_ id: String?, overrides: [String: MetricApp] = [:]) -> MetricApp {
+        let key = (id?.isEmpty == false ? id! : unknownId).lowercased()
+        if let override = overrides[key] { return override }
+        if let known = byId[key] { return known }
+        return MetricApp(
+            id: key, name: titlecase(key), symbol: "app.dashed", accentHex: "8E8E93")
+    }
+
+    /// "google-analytics" → "Google Analytics".
+    static func titlecase(_ id: String) -> String {
+        id.split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+}
+
+extension NotchWidget {
+    /// The app this widget belongs to, with the server's manifests preferred
+    /// when they are loaded.
+    public func app(overrides: [String: MetricApp] = [:]) -> MetricApp {
+        AppCatalog.resolve(appId, overrides: overrides)
+    }
+}

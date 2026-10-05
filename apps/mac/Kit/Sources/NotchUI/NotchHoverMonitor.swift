@@ -3,22 +3,19 @@ import Foundation
 
 /// Decides when the notch opens and closes.
 ///
-/// Two mechanisms, each covering the other's gap.
+/// The two decisions are asymmetric and that is the whole design:
 ///
-/// An `NSTrackingArea` is free when nothing is happening, which matters for
-/// something that sits in the menu bar all day. But on a borderless,
-/// click-through panel it can miss `mouseExited` entirely — if the pointer
-/// teleports (a trackpad flick, `CGWarpMouseCursorPosition`, a hot corner), or
-/// if another always-on-top window overlaps us, the exit event is simply never
-/// delivered and the notch stays open forever.
+/// **Opening** is governed by the notch itself — a small strip at the top of
+/// the screen. A tracking area wakes us up, but the decision is made by
+/// testing the pointer against that strip in *screen* coordinates. The
+/// tracking area alone is not trustworthy enough to be the authority: it fires
+/// for reasons that have nothing to do with where the pointer actually is, and
+/// an unreliable open means the notch appears when nobody asked for it.
 ///
-/// A global `.mouseMoved` monitor never misses, but it fires on essentially
-/// every frame of every pointer movement system-wide, for an event we care
-/// about perhaps a dozen times an hour.
-///
-/// So: the tracking area is the primary signal, and the global monitor is
-/// installed **only while expanded** as exit insurance and torn down on
-/// collapse. Idle cost returns to zero the moment the notch closes.
+/// **Closing** is governed by the *expanded panel*, not by the strip. Moving
+/// from the notch down into the panel necessarily leaves the strip, so an exit
+/// from the trigger area means nothing once we are open — treating it as a
+/// close makes the notch shut the instant you try to use it.
 @MainActor
 public final class NotchHoverMonitor {
     public enum Event { case shouldExpand, shouldCollapse }
@@ -32,30 +29,39 @@ public final class NotchHoverMonitor {
     private var dwellTask: Task<Void, Never>?
     private var collapseTask: Task<Void, Never>?
 
-    public var dwell: Duration = .milliseconds(120)
-    public var collapseDelay: Duration = .milliseconds(400)
-    /// Supplied by the controller: the expanded region in screen coordinates.
+    /// Zero by default: the notch opens the instant the pointer reaches it.
+    public var dwell: Duration = .zero
+    /// Zero as well, so it closes the moment the pointer leaves the panel.
+    public var collapseDelay: Duration = .zero
+
+    /// The strip that opens the notch, in screen coordinates.
+    public var triggerScreenRect: () -> CGRect = { .zero }
+    /// The *visible* expanded panel, in screen coordinates. Not the window,
+    /// which is much larger than what is drawn and would keep the notch open
+    /// across half the screen.
     public var expandedScreenRect: () -> CGRect = { .zero }
+    /// Whether the notch is currently open, which decides who owns the close.
+    public var isExpanded: () -> Bool = { false }
 
     public init(onEvent: @escaping (Event) -> Void) {
         self.onEvent = onEvent
     }
 
-    /// Installs the trigger area. `rect` is the collapsed hot zone in `view`'s
-    /// coordinates, usually the notch inflated a little downward and sideways
-    /// so a pointer heading for the menu bar still catches it.
+    /// Installs the trigger area. `rect` is the hot zone in `view`'s own
+    /// coordinates — the notch, inflated a little so a pointer heading for the
+    /// menu bar still catches it.
     public func attach(to view: NSView, rect: CGRect) {
         detachTrackingArea()
         self.view = view
 
         let area = NSTrackingArea(
             rect: rect,
-            // `.activeAlways`, because the app is an accessory and is almost
-            // never the active application — `.activeInKeyWindow` would mean
-            // the notch only worked while the app had focus, which it never has.
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways],
+            // `.activeAlways`, because this app is an accessory and is almost
+            // never frontmost — `.activeInKeyWindow` would mean the notch only
+            // worked while it had focus, which it never has.
+            options: [.mouseEnteredAndExited, .activeAlways],
             owner: view,
-            userInfo: ["notchHover": true]
+            userInfo: nil
         )
         view.addTrackingArea(area)
         trackingArea = area
@@ -68,14 +74,21 @@ public final class NotchHoverMonitor {
 
     /// Called from the hosting view's `mouseEntered`.
     public func pointerEntered() {
+        guard !isExpanded() else { return }
+
+        // The authority is the pointer's actual position, not the fact that a
+        // tracking area fired. Without this the notch opens for pointer
+        // movement nowhere near it.
+        guard triggerScreenRect().contains(NSEvent.mouseLocation) else { return }
+
         collapseTask?.cancel()
         collapseTask = nil
 
-        // The dwell is what stops the notch flashing open every time somebody
-        // travels to the menu bar. 120 ms is below the threshold at which the
-        // delay is perceptible, and above the time a passing pointer spends
-        // over a 200-point strip.
         dwellTask?.cancel()
+        guard dwell > .zero else {
+            onEvent(.shouldExpand)
+            return
+        }
         dwellTask = Task { [dwell, onEvent] in
             try? await Task.sleep(for: dwell)
             guard !Task.isCancelled else { return }
@@ -84,21 +97,15 @@ public final class NotchHoverMonitor {
     }
 
     public func pointerExited() {
+        // Deliberately does *not* close an open notch. Moving from the strip
+        // into the panel leaves the trigger area every time, so acting on this
+        // would shut the notch the moment somebody tried to use it. Once open,
+        // `evaluatePointer` is the only thing that closes it.
         dwellTask?.cancel()
         dwellTask = nil
-        scheduleCollapse()
     }
 
-    private func scheduleCollapse() {
-        collapseTask?.cancel()
-        collapseTask = Task { [collapseDelay, onEvent] in
-            try? await Task.sleep(for: collapseDelay)
-            guard !Task.isCancelled else { return }
-            onEvent(.shouldCollapse)
-        }
-    }
-
-    /// Call on expand. Installs the insurance.
+    /// Call on expand. Watches for the pointer leaving the panel.
     public func beginExpandedWatch() {
         guard globalMonitor == nil else { return }
 
@@ -107,11 +114,10 @@ public final class NotchHoverMonitor {
             MainActor.assumeIsolated { self?.evaluatePointer() }
         }
 
-        // Belt and braces for the case the monitor itself misses: a pointer
-        // that moves while a modal drag is in progress generates no
-        // `.mouseMoved` at all, so a slow poll catches the user who has walked
-        // away with the notch open.
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+        // Insurance for the case the monitor misses: a pointer that moves
+        // during a modal drag generates no `.mouseMoved` at all, so a poll
+        // catches somebody who has walked away with the notch open.
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.evaluatePointer() }
         }
     }
@@ -122,15 +128,28 @@ public final class NotchHoverMonitor {
         globalMonitor = nil
         pollTimer?.invalidate()
         pollTimer = nil
+        collapseTask?.cancel()
+        collapseTask = nil
     }
 
     private func evaluatePointer() {
-        let location = NSEvent.mouseLocation
-        if expandedScreenRect().contains(location) {
+        guard isExpanded() else { return }
+
+        if expandedScreenRect().contains(NSEvent.mouseLocation) {
             collapseTask?.cancel()
             collapseTask = nil
-        } else if collapseTask == nil {
-            scheduleCollapse()
+            return
+        }
+
+        guard collapseDelay > .zero else {
+            onEvent(.shouldCollapse)
+            return
+        }
+        guard collapseTask == nil else { return }
+        collapseTask = Task { [collapseDelay, onEvent] in
+            try? await Task.sleep(for: collapseDelay)
+            guard !Task.isCancelled else { return }
+            onEvent(.shouldCollapse)
         }
     }
 
@@ -140,6 +159,6 @@ public final class NotchHoverMonitor {
     }
 
     // No deinit. A nonisolated deinit cannot touch this actor's state, and
-    // both resources are owned by endExpandedWatch() — which the controller
-    // calls on every collapse, including the one before teardown.
+    // both resources are owned by endExpandedWatch(), which the controller
+    // calls on every collapse.
 }

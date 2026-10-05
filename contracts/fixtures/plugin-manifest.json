@@ -4,6 +4,7 @@
   "name": "GitHub stars",
   "shortLabel": "Stars",
   "description": "Stargazers on a repository.",
+  "appId": "github",
   "unit": "count",
   "format": {
     "decimals": 0,

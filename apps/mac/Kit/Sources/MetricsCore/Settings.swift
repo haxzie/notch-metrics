@@ -13,8 +13,14 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var showInFullscreen: Bool = true
     public var showMenuBarIcon: Bool = false
     public var launchAtLogin: Bool = true
-    public var hoverDwellMilliseconds: Int = 120
-    public var collapseDelayMilliseconds: Int = 400
+    /// Zero: the notch opens the instant the pointer reaches it.
+    ///
+    /// A dwell debounces a pointer travelling to the menu bar, and the cost is
+    /// that the notch always feels a beat behind the cursor. Instant is the
+    /// better default; this stays configurable for anyone who disagrees.
+    public var hoverDwellMilliseconds: Int = 0
+    /// Zero as well, so it closes the moment the pointer leaves.
+    public var collapseDelayMilliseconds: Int = 0
     public var reduceMotionOverride: Bool? = nil
     /// Plugins are not executed until the user enables them here. An agent can
     /// drop a file into Application Support; it should not thereby start making

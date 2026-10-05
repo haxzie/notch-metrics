@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Granularity } from "./money.ts";
-import { PluginId } from "./ids.ts";
+import { AppId, PluginId } from "./ids.ts";
 import { MetricFormat, MetricPoint, MetricUnit } from "./metric.ts";
 
 /**
@@ -22,6 +22,21 @@ export const PluginManifest = z.object({
   name: z.string().min(1).max(60),
   shortLabel: z.string().max(12),
   description: z.string().max(400),
+
+  /**
+   * Which app this number comes from — "github", "plausible", "linear".
+   *
+   * Every metric in the notch belongs to an app, and a custom one is no
+   * exception: a row that reads "GitHub · Stars" is worth more than one that
+   * reads "Custom · Stars", and the list view groups by this.
+   *
+   * Defaults to "custom" rather than being required, so the simplest possible
+   * metric is still three fields and a function.
+   */
+  appId: AppId.default("custom"),
+  /** Shown when `appId` is not one the app already knows. */
+  appName: z.string().max(40).optional(),
+
   unit: MetricUnit,
   currency: z.string().length(3).optional(),
   format: MetricFormat.default({ decimals: 0, compact: true, prefix: "", suffix: "" }),

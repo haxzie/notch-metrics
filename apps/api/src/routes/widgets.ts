@@ -19,13 +19,23 @@ export const widgets = new Hono<AppContext>();
 
 widgets.use("*", authenticate);
 
-async function currentRevision(db: Database, userId: string): Promise<number> {
+interface LayoutMeta {
+  revision: number;
+  rows: number;
+  display: "grid" | "list";
+}
+
+async function layoutMeta(db: Database, userId: string): Promise<LayoutMeta> {
   const [row] = await db
     .select()
     .from(widgetRevision)
     .where(eq(widgetRevision.userId, userId))
     .limit(1);
-  return row?.revision ?? 0;
+  return {
+    revision: row?.revision ?? 0,
+    rows: row?.rows ?? 2,
+    display: (row?.display === "list" ? "list" : "grid") as "grid" | "list",
+  };
 }
 
 widgets.get("/", async (c) => {
@@ -33,15 +43,16 @@ widgets.get("/", async (c) => {
   const userId = c.get("identity").userId;
 
   const rows = await db.select().from(widgetTable).where(eq(widgetTable.userId, userId));
-  const revision = await currentRevision(db, userId);
+  const meta = await layoutMeta(db, userId);
 
   return c.json({
-    revision,
+    ...meta,
     widgets: rows
       .sort((a, b) => a.position - b.position)
       .map((r) => ({
         id: r.id,
         kind: r.kind,
+        appId: r.appId,
         integrationId: r.integrationId,
         metric: r.metric,
         customMetricId: r.customMetricId,
@@ -64,14 +75,14 @@ widgets.put("/", async (c) => {
 
   const db = c.get("db");
   const userId = c.get("identity").userId;
-  const revision = await currentRevision(db, userId);
+  const meta = await layoutMeta(db, userId);
 
-  if (body.data.revision !== revision) {
+  if (body.data.revision !== meta.revision) {
     const rows = await db.select().from(widgetTable).where(eq(widgetTable.userId, userId));
     return c.json(
       {
         code: "STALE_REVISION",
-        revision,
+        ...meta,
         widgets: rows.sort((a, b) => a.position - b.position),
       },
       409,
@@ -88,6 +99,7 @@ widgets.put("/", async (c) => {
         id: w.id,
         userId,
         kind: w.kind,
+        appId: w.appId,
         integrationId: w.integrationId,
         metric: w.metric,
         customMetricId: w.customMetricId,
@@ -104,14 +116,15 @@ widgets.put("/", async (c) => {
     );
   }
 
-  const next = revision + 1;
+  const next = meta.revision + 1;
+  const { rows, display } = body.data;
   await db
     .insert(widgetRevision)
-    .values({ userId, revision: next })
+    .values({ userId, revision: next, rows, display })
     .onConflictDoUpdate({
       target: widgetRevision.userId,
-      set: { revision: next, updatedAt: new Date() },
+      set: { revision: next, rows, display, updatedAt: new Date() },
     });
 
-  return c.json({ revision: next, widgets: body.data.widgets });
+  return c.json({ revision: next, rows, display, widgets: body.data.widgets });
 });

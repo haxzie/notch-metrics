@@ -1,6 +1,15 @@
 import MetricsCore
 import SwiftUI
 
+/// Carries the rendered panel size back up to the controller.
+struct PanelSizeKey: PreferenceKey {
+    static let defaultValue = CGSize.zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
 public enum NotchPresentation: Equatable, Sendable {
     case collapsed
     /// Reserved for the always-on compact metric. Nothing renders it yet — the
@@ -18,33 +27,25 @@ public enum NotchPresentation: Equatable, Sendable {
 /// resize anywhere in it.
 public struct NotchContentView: View {
     @Bindable public var model: NotchLayoutModel
-    public let presentation: NotchPresentation
-    public let geometry: NotchGeometry
-    public let states: [String: TileState]
-    public var onOpenSettings: () -> Void
-    public var onTogglePin: () -> Void
-    public var onClose: () -> Void
-    public var isPinned: Bool
+    @Bindable public var view: NotchViewModel
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isResizing = false
     @State private var rowsAtDragStart = NotchLayout.defaultRows
 
-    public init(
-        model: NotchLayoutModel, presentation: NotchPresentation, geometry: NotchGeometry,
-        states: [String: TileState], isPinned: Bool,
-        onOpenSettings: @escaping () -> Void, onTogglePin: @escaping () -> Void,
-        onClose: @escaping () -> Void
-    ) {
+    public init(model: NotchLayoutModel, view: NotchViewModel) {
         self.model = model
-        self.presentation = presentation
-        self.geometry = geometry
-        self.states = states
-        self.isPinned = isPinned
-        self.onOpenSettings = onOpenSettings
-        self.onTogglePin = onTogglePin
-        self.onClose = onClose
+        self.view = view
     }
+
+    private var presentation: NotchPresentation { view.presentation }
+    private var geometry: NotchGeometry { view.geometry }
+    private var states: [String: TileState] { view.states }
+    private var appOverrides: [String: MetricApp] { view.appOverrides }
+    private var isPinned: Bool { view.isPinned }
+    private var onOpenSettings: () -> Void { view.onOpenSettings }
+    private var onTogglePin: () -> Void { view.onTogglePin }
+    private var onClose: () -> Void { view.onClose }
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -52,7 +53,14 @@ public struct NotchContentView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(NotchMotion.expansion(reduceMotion: reduceMotion), value: presentation)
+        // The controller already wraps the state change in a transaction, so
+        // this is the fallback for changes that arrive from SwiftUI's side —
+        // the resize handle, a widget being removed.
+        .animation(
+            presentation == .expanded
+                ? NotchMotion.expansion(reduceMotion: reduceMotion)
+                : NotchMotion.collapse(reduceMotion: reduceMotion),
+            value: presentation)
     }
 
     private var panel: some View {
@@ -84,14 +92,35 @@ public struct NotchContentView: View {
             width: presentation == .expanded ? expandedSize.width : collapsedSize.width,
             height: presentation == .expanded ? expandedSize.height : collapsedSize.height
         )
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: PanelSizeKey.self, value: proxy.size)
+            }
+        )
+        .onPreferenceChange(PanelSizeKey.self) { size in
+            // Back to the controller, which uses it to decide when the
+            // pointer has left.
+            MainActor.assumeIsolated { view.visiblePanelSize = size }
+        }
     }
 
     private var expandedContent: some View {
         VStack(spacing: 0) {
             header
-            NotchWidgetCanvas(model: model, states: states)
-                .padding(.horizontal, 16)
+            content
             grabber
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.displayed.display {
+        case .grid:
+            NotchWidgetCanvas(model: model, states: states, appOverrides: appOverrides)
+                .padding(.horizontal, 16)
+        case .list:
+            NotchListView(model: model, states: states, appOverrides: appOverrides)
+                .padding(.horizontal, 10)
         }
     }
 
@@ -113,14 +142,41 @@ public struct NotchContentView: View {
             Spacer(minLength: 0)
 
             if model.isEditing {
-                Text("Drag to move · click the corner to resize")
-                    .font(.system(size: 10))
-                    .foregroundStyle(NotchTheme.tertiaryText)
-                    .transition(.opacity)
+                Text(
+                    model.displayed.display == .grid
+                        ? "Drag to move · click the corner to resize"
+                        : "Hover a row to remove it"
+                )
+                .font(.system(size: 10))
+                .foregroundStyle(NotchTheme.tertiaryText)
+                .transition(.opacity)
+            } else if hiddenCount > 0 {
+                // The grid ran out of room. Saying so — and offering the view
+                // that has room — beats silently showing fewer numbers than
+                // the user added.
+                Button {
+                    model.setDisplay(.list)
+                } label: {
+                    Text("+\(hiddenCount) more")
+                        .font(.system(size: 10, weight: .medium))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.white.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(NotchTheme.secondaryText)
+                .help("Show them all in the list view")
+                .transition(.opacity)
             }
 
             headerButton(
-                model.isEditing ? "checkmark" : "square.grid.2x2",
+                model.displayed.display.toggled.symbol,
+                // Shows the mode it switches *to*, which is the only reading
+                // of a single-button toggle that does not need a legend.
+                help: "Switch to \(model.displayed.display.toggled.label.lowercased()) view",
+                action: { model.setDisplay(model.layout.display.toggled) })
+            headerButton(
+                model.isEditing ? "checkmark" : "pencil",
                 help: model.isEditing ? "Done" : "Edit layout",
                 active: model.isEditing,
                 action: toggleEditing)
@@ -145,6 +201,13 @@ public struct NotchContentView: View {
         .buttonStyle(.plain)
         .foregroundStyle(active ? NotchTheme.editHighlight : NotchTheme.secondaryText)
         .help(help)
+    }
+
+    /// Widgets the grid could not find room for. Always zero in list view,
+    /// which has no fixed capacity.
+    private var hiddenCount: Int {
+        guard model.displayed.display == .grid else { return 0 }
+        return model.displayed.widgets.count { !$0.visible }
     }
 
     /// Entering edit mode pins the notch open.
@@ -225,8 +288,15 @@ public struct NotchContentView: View {
     /// screen below the last row of tiles.
     private var expandedSize: CGSize {
         let header = max(34, geometry.hasNotch ? geometry.notchRect.height + 6 : 34)
-        let content = NotchWidgetCanvas.canvasHeight(rows: model.displayed.rows)
-            + Self.grabberHeight
+        // The two modes are different shapes, so the panel cannot assume the
+        // grid's. A list of six rows in a four-row-tall notch was leaving a
+        // hand's width of empty glass under the last one.
+        let body =
+            switch model.displayed.display {
+            case .grid: NotchWidgetCanvas.canvasHeight(rows: model.displayed.rows)
+            case .list: NotchListView.height(for: model.displayed, overrides: appOverrides)
+            }
+        let content = body + Self.grabberHeight
         return CGSize(
             width: min(NotchPanel.maxSize.width, max(560, geometry.notchRect.width + 480)),
             height: min(NotchPanel.maxSize.height, header + content)
@@ -249,12 +319,33 @@ public struct NotchContentView: View {
 public struct NotchWidgetCanvas: View {
     @Bindable public var model: NotchLayoutModel
     public let states: [String: TileState]
+    public let appOverrides: [String: MetricApp]
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: NotchLayoutModel, states: [String: TileState]) {
+    /// Live pointer offset for the tile being dragged.
+    ///
+    /// The tile used to be drawn only at whole grid cells, so it jumped a
+    /// cell at a time while the pointer moved smoothly — which is what made
+    /// dragging feel jittery. It now follows the cursor exactly, and the grid
+    /// snap is what happens to *everything else*.
+    @State private var dragTranslation: CGSize = .zero
+    /// Where the dragged tile started, so it is drawn relative to that rather
+    /// than to the preview layout it is busy rearranging.
+    @State private var dragOrigin: CGPoint = .zero
+    /// The last cell handed to the packer. Re-running it on every mouse-move
+    /// restarts the displacement animation ~120 times a second, which is the
+    /// other half of the jitter.
+    @State private var lastCell: GridCell?
+
+    public init(
+        model: NotchLayoutModel,
+        states: [String: TileState],
+        appOverrides: [String: MetricApp] = [:]
+    ) {
         self.model = model
         self.states = states
+        self.appOverrides = appOverrides
     }
 
     public var body: some View {
@@ -268,24 +359,47 @@ public struct NotchWidgetCanvas: View {
                         .frame(width: grid.contentSize.width, height: grid.contentSize.height)
                 }
 
-                ForEach(Array(layout.widgets.enumerated()), id: \.element.id) { index, widget in
+                // Filtered, because `repack` marks what it could not place as
+                // not visible rather than dropping it. Rendering those draws
+                // them all at the origin, on top of each other and of the
+                // tiles that did fit — which reads as a rendering fault.
+                ForEach(layout.widgets.filter(\.visible)) { widget in
+                    let isDragging = model.draggingID == widget.id
                     let frame = grid.rect(for: widget)
+                    // The dragged tile is positioned from where it started
+                    // plus the pointer offset. Using its *preview* frame would
+                    // animate it to the cell it is hovering while it is also
+                    // following the cursor — two movements fighting.
+                    let x = isDragging ? dragOrigin.x + dragTranslation.width : frame.minX
+                    let y = isDragging ? dragOrigin.y + dragTranslation.height : frame.minY
 
                     WidgetTile(
                         widget: widget,
+                        app: widget.app(overrides: appOverrides),
                         state: states[widget.id] ?? .loading,
-                        accent: NotchTheme.accent(for: index),
                         isEditing: model.isEditing
                     )
                     .frame(width: frame.width, height: frame.height)
-                    .offset(x: frame.minX, y: frame.minY)
-                    .zIndex(model.draggingID == widget.id ? 1 : 0)
-                    .opacity(model.draggingID == widget.id ? 0.85 : 1)
+                    .offset(x: x, y: y)
+                    .scaleEffect(isDragging ? 1.04 : 1)
+                    .shadow(color: .black.opacity(isDragging ? 0.4 : 0), radius: 12, y: 4)
+                    .zIndex(isDragging ? 1 : 0)
+                    .opacity(isDragging ? 0.92 : 1)
+                    // The dragged tile must not inherit the container's
+                    // layout animation, or it lags behind the cursor by the
+                    // spring's duration.
+                    .animation(isDragging ? nil : .snappy(duration: 0.2), value: frame)
                     .overlay(alignment: .bottomTrailing) {
                         if model.isEditing { resizeHandle(for: widget) }
                     }
-                    .gesture(dragGesture(for: widget, grid: grid))
-                    .onLongPressGesture(minimumDuration: 0.5) { model.isEditing = true }
+                    .gesture(dragGesture(for: widget, grid: grid, frame: frame))
+                    .simultaneousGesture(
+                        // Simultaneous, not `.onLongPressGesture`: as a plain
+                        // modifier it competes with the drag for the same
+                        // press and swallows the first few points of movement.
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in model.isEditing = true }
+                    )
                 }
             }
             .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: layout)
@@ -304,13 +418,43 @@ public struct NotchWidgetCanvas: View {
         CGFloat(rows) * rowHeight + CGFloat(max(0, rows - 1)) * rowSpacing
     }
 
-    private func dragGesture(for widget: NotchWidget, grid: GridGeometry) -> some Gesture {
-        DragGesture(minimumDistance: 6, coordinateSpace: .named("notch-grid"))
+    private func dragGesture(
+        for widget: NotchWidget, grid: GridGeometry, frame: CGRect
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .named("notch-grid"))
             .onChanged { value in
-                if model.draggingID != widget.id { model.beginDrag(widget.id) }
-                model.dragMoved(to: grid.gridPoint(at: value.location))
+                if model.draggingID != widget.id {
+                    model.beginDrag(widget.id)
+                    dragOrigin = frame.origin
+                    lastCell = GridCell(col: widget.col, row: widget.row)
+                }
+
+                dragTranslation = value.translation
+
+                // The target cell comes from the tile's projected top-left,
+                // not from the cursor. Using the cursor means grabbing a tile
+                // by its right edge teleports it a cell to the left on the
+                // first pixel of movement.
+                let projected = CGPoint(
+                    x: dragOrigin.x + value.translation.width,
+                    y: dragOrigin.y + value.translation.height)
+                let target = grid.gridPoint(at: projected)
+                let cell = GridCell(col: target.col, row: target.row)
+
+                guard cell != lastCell else { return }
+                lastCell = cell
+                model.dragMoved(to: target)
             }
-            .onEnded { _ in model.endDrag(commit: true) }
+            .onEnded { _ in
+                model.endDrag(commit: true)
+                // Cleared inside the same animation that settles the tile into
+                // its cell, so it glides home rather than teleporting.
+                withAnimation(.snappy(duration: 0.22)) {
+                    dragTranslation = .zero
+                    dragOrigin = .zero
+                }
+                lastCell = nil
+            }
     }
 
     private func resizeHandle(for widget: NotchWidget) -> some View {

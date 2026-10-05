@@ -127,6 +127,15 @@ export const widget = sqliteTable(
     workspaceId: text("workspace_id"),
     kind: text("kind").notNull(),
     /**
+     * The app this number comes from — "stripe", "google-analytics", or a
+     * custom metric's declared app.
+     *
+     * Denormalised onto the widget rather than joined through `integration`,
+     * because `integration_id` is SET NULL on disconnect: a widget whose
+     * integration is gone still has to say which app to reconnect.
+     */
+    appId: text("app_id").notNull().default("unknown"),
+    /**
      * SET NULL rather than CASCADE.
      *
      * Disconnecting Stripe should leave a tile saying "reconnect Stripe" where
@@ -168,6 +177,10 @@ export const widgetRevision = sqliteTable("widget_revision", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
   revision: integer("revision").notNull().default(0),
+  /** How tall the notch opens, in grid rows. Set by the handle on its edge. */
+  rows: integer("rows").notNull().default(2),
+  /** "grid" or "list". */
+  display: text("display").notNull().default("grid"),
   updatedAt: updatedAt(),
 });
 

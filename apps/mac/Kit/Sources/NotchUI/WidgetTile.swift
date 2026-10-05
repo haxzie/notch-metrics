@@ -16,8 +16,11 @@ public enum TileState: Equatable, Sendable {
 /// dialog is worse than one showing a stale number with a mark against it.
 public struct WidgetTile: View {
     public let widget: NotchWidget
+    /// Which app the number came from. Supplies the mark, the name and the
+    /// tile's accent — two Stripe tiles should look like two Stripe tiles,
+    /// not like tile one and tile two.
+    public let app: MetricApp
     public let state: TileState
-    public let accent: Color
     /// Drives the hover affordance. Only meaningful while rearranging — a
     /// highlight on a tile the user cannot move is a promise the UI does not
     /// keep.
@@ -25,12 +28,16 @@ public struct WidgetTile: View {
 
     @State private var isHovered = false
 
-    public init(widget: NotchWidget, state: TileState, accent: Color, isEditing: Bool = false) {
+    public init(
+        widget: NotchWidget, app: MetricApp, state: TileState, isEditing: Bool = false
+    ) {
         self.widget = widget
+        self.app = app
         self.state = state
-        self.accent = accent
         self.isEditing = isEditing
     }
+
+    private var accent: Color { NotchTheme.accent(for: app) }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -70,21 +77,22 @@ public struct WidgetTile: View {
 
     private var highlighted: Bool { isEditing && isHovered }
 
-    /// Where the number came from, as a mark rather than a word.
+    /// Which app the number came from, as a mark and a name.
     ///
-    /// A monochrome SF Symbol per provider, not the vendor's own logo: shipping
+    /// A monochrome SF Symbol rather than the vendor's own logo: shipping
     /// third-party marks means an asset pipeline, a licence question for each
-    /// one, and a release every time somebody rebrands. The manifest's
-    /// `iconPath` exists for when that is worth doing.
+    /// one, and a release every time somebody rebrands. The provider
+    /// manifest's `iconPath` exists for when that becomes worth doing.
     private var source: some View {
         HStack(spacing: 4) {
-            Image(systemName: sourceSymbol)
+            Image(systemName: app.symbol)
                 .font(.system(size: symbolSize, weight: .semibold))
                 .foregroundStyle(accent)
-            if widget.size != .small, let name = sourceName {
-                Text(name)
+            if widget.size != .small {
+                Text(app.name)
                     .font(.system(size: symbolSize - 1, weight: .semibold))
                     .foregroundStyle(NotchTheme.tertiaryText)
+                    .lineLimit(1)
             }
             Spacer(minLength: 0)
             if case .value(let series) = state, series.stale {
@@ -178,25 +186,7 @@ public struct WidgetTile: View {
         widget.title ?? widget.metric ?? widget.customMetricId ?? "Metric"
     }
 
-    private var sourceName: String? {
-        if widget.kind == .customMetric { return "Custom" }
-        return nil
-    }
 
-    private var sourceSymbol: String {
-        switch widget.kind {
-        case .customMetric: "curlybraces"
-        case .divider: "minus"
-        case .providerMetric:
-            switch widget.metric {
-            case "mrr", "revenue": "creditcard.fill"
-            case "active_subscribers", "new_subscribers": "person.2.fill"
-            case "churned_subscribers": "person.fill.xmark"
-            case "refunds": "arrow.uturn.backward"
-            default: "chart.line.uptrend.xyaxis"
-            }
-        }
-    }
 
     private var cornerRadius: CGFloat { widget.size == .small ? 12 : 16 }
     private var horizontalPadding: CGFloat { widget.size == .small ? 11 : 14 }
