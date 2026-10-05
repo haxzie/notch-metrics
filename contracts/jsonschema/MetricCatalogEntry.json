@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "integrationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "provider": {
+      "type": "string"
+    },
+    "accountLabel": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metric": {
+      "type": "string",
+      "enum": [
+        "mrr",
+        "revenue",
+        "active_subscribers",
+        "new_subscribers",
+        "churned_subscribers",
+        "refunds"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "shortLabel": {
+      "type": "string"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "currency",
+        "count",
+        "ratio",
+        "duration",
+        "bytes"
+      ]
+    },
+    "currency": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "granularities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "hour",
+          "day",
+          "week",
+          "month"
+        ]
+      }
+    },
+    "supportsSeries": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "integrationId",
+    "provider",
+    "accountLabel",
+    "metric",
+    "label",
+    "shortLabel",
+    "unit",
+    "currency",
+    "granularities",
+    "supportsSeries"
+  ],
+  "additionalProperties": false
+}

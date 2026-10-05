@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "enum": [
+        "stripe",
+        "dodopayments",
+        "lemonsqueezy",
+        "polar"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "tagline": {
+      "type": "string"
+    },
+    "docsUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "iconPath": {
+      "type": "string"
+    },
+    "accentColor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "authMode": {
+      "type": "string",
+      "enum": [
+        "api_key",
+        "oauth2"
+      ]
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "secret",
+              "select",
+              "url",
+              "boolean"
+            ]
+          },
+          "required": {
+            "default": true,
+            "type": "boolean"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "help": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "value",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "default": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "type",
+          "required"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "metrics": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "mrr",
+              "revenue",
+              "active_subscribers",
+              "new_subscribers",
+              "churned_subscribers",
+              "refunds"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "shortLabel": {
+            "type": "string",
+            "maxLength": 12
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "currency",
+              "count",
+              "ratio",
+              "duration",
+              "bytes"
+            ]
+          },
+          "granularities": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "hour",
+                "day",
+                "week",
+                "month"
+              ]
+            }
+          },
+          "supportsSeries": {
+            "type": "boolean"
+          },
+          "supportsCompare": {
+            "type": "boolean"
+          },
+          "help": {
+            "type": "string"
+          },
+          "methodology": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "shortLabel",
+          "unit",
+          "granularities",
+          "supportsSeries",
+          "supportsCompare",
+          "methodology"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowedHosts": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "stable",
+        "beta",
+        "coming_soon"
+      ]
+    },
+    "minAppVersion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "tagline",
+    "docsUrl",
+    "iconPath",
+    "accentColor",
+    "authMode",
+    "fields",
+    "metrics",
+    "allowedHosts",
+    "status",
+    "minAppVersion"
+  ],
+  "additionalProperties": false
+}

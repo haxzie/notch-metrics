@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "build": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "tag": {
+      "type": "string"
+    },
+    "publishedAt": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string",
+      "const": "darwin-arm64"
+    },
+    "minimumSystemVersion": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "size": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "notes": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "mandatory": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "version",
+    "build",
+    "tag",
+    "publishedAt",
+    "platform",
+    "minimumSystemVersion",
+    "filename",
+    "url",
+    "size",
+    "sha256",
+    "notes",
+    "mandatory"
+  ],
+  "additionalProperties": false
+}

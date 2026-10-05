@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "github-stars",
+  "name": "GitHub stars",
+  "shortLabel": "Stars",
+  "description": "Stargazers on a repository.",
+  "unit": "count",
+  "format": {
+    "decimals": 0,
+    "compact": true,
+    "prefix": "",
+    "suffix": ""
+  },
+  "granularities": ["day"],
+  "supportsSeries": false,
+  "refreshIntervalSeconds": 900,
+  "secrets": [
+    {
+      "key": "GITHUB_TOKEN",
+      "label": "GitHub token",
+      "help": "A classic token with no scopes.",
+      "required": true
+    }
+  ],
+  "allowedHosts": ["api.github.com"],
+  "timeoutMs": 8000,
+  "entry": "metric.mjs",
+  "author": "claude-code",
+  "createdAt": "2026-10-05T12:00:00.000Z",
+  "updatedAt": "2026-10-05T12:00:00.000Z"
+}

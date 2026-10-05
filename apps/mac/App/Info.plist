@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hand-written and committed. Do NOT add an `info:` block for this target in
+  project.yml: supplying one makes XcodeGen *generate* a plist at that path,
+  silently replacing this file with only the keys listed there — which is how
+  LSUIElement and the URL scheme disappear and the app starts showing a Dock
+  icon and failing to handle its own sign-in callback.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Notch Metrics</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+
+	<!-- Never literals. These resolve from Config/Version.xcconfig, which
+	     scripts/sync-mac-version.mjs generates from the changesets version. -->
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+
+	<!-- Set here rather than at runtime so it applies before the app draws.
+	     Consequence worth knowing: an LSUIElement app has no Cmd-Q, which is
+	     why install-local.sh kills by pid. -->
+	<key>LSUIElement</key>
+	<true/>
+
+	<!-- Resolved from Config/Config.xcconfig, which sync-mac-config.mjs
+	     writes from the environment. check-release-env.mjs refuses to ship a
+	     build whose values point at localhost. -->
+	<key>NMAPIBaseURL</key>
+	<string>$(NM_API_URL)</string>
+	<key>NMAppBaseURL</key>
+	<string>$(NM_APP_URL)</string>
+	<key>NMAssetsBaseURL</key>
+	<string>$(NM_ASSETS_URL)</string>
+
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.notchmetrics.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>notchmetrics</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Musthaq Ahamad</string>
+</dict>
+</plist>

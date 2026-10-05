@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "integrationId": "int_4f2a9c",
+  "metric": "mrr",
+  "code": "rate_limited",
+  "message": "Stripe asked us to wait 30 seconds.",
+  "retryAfterSeconds": 30
+}

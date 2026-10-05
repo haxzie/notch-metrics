@@ -1,0 +1,92 @@
+name: NotchMetrics
+
+options:
+  bundleIdPrefix: com.notchmetrics
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  # The generated project is gitignored and rebuilt by `pnpm mac:gen`. Editing
+  # build settings in Xcode's UI writes them into that generated file, where
+  # they are lost on the next generate — change project.yml instead.
+  xcodeVersion: "26.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+# Applied to every target. Version.xcconfig is included from Base.xcconfig.
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+settings:
+  base:
+    # No space in the product name, on purpose. A space means every codesign,
+    # ditto, create-dmg and stapler invocation across six shell scripts needs
+    # quoting, and the one that forgets fails at notarisation time. The user
+    # sees CFBundleDisplayName, which does have one.
+    PRODUCT_NAME: NotchMetrics
+    # MARKETING_VERSION and CURRENT_PROJECT_VERSION are deliberately absent
+    # here and everywhere else in this file. They come from
+    # Config/Version.xcconfig, and a build setting declared at *any* level
+    # overrides an xcconfig — including an empty one, which silently reverts
+    # the app to Xcode's 1.0 default while the xcconfig sits alongside looking
+    # perfectly correct.
+
+packages:
+  NotchMetricsKit:
+    path: Kit
+
+targets:
+  NotchMetrics:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+    # NOTE: deliberately no MARKETING_VERSION / CURRENT_PROJECT_VERSION under
+    # `settings` here. A target build setting *overrides* an xcconfig value, so
+    # setting them would make the app ship whatever is written here while
+    # Version.xcconfig sat alongside looking correct.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.notchmetrics.app
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/NotchMetrics.entitlements
+        ENABLE_PREVIEWS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: NotchMetricsKit
+        product: NotchUI
+      - target: UpdateInstaller
+        embed: true
+        codeSign: true
+
+  # A small signed CLI that outlives the app while it replaces its bundle.
+  #
+  # A `/bin/sh -c 'sleep 2; ditto …'` one-liner would do the same job and be
+  # unverifiable, unloggable, and exactly the shape of thing the hardened
+  # runtime exists to discourage. This is ~120 lines, signed and notarised with
+  # everything else.
+  UpdateInstaller:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Helper/UpdateInstaller
+    settings:
+      base:
+        PRODUCT_NAME: UpdateInstaller
+        PRODUCT_BUNDLE_IDENTIFIER: com.notchmetrics.app.updateinstaller
+        CODE_SIGN_ENTITLEMENTS: Config/UpdateInstaller.entitlements
+        SKIP_INSTALL: YES
+
+schemes:
+  NotchMetrics:
+    build:
+      targets:
+        NotchMetrics: all
+    run:
+      config: Debug
+    archive:
+      config: Release

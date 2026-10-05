@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Which jobs are worth running. macOS runners bill at ten times the Linux
+  # rate, so the Swift job is gated on the Swift tree actually changing.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mac: ${{ steps.filter.outputs.mac }}
+      ts: ${{ steps.filter.outputs.ts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            mac:
+              - 'apps/mac/**'
+              - 'contracts/**'
+              - '.github/workflows/ci.yml'
+            ts:
+              - 'apps/web/**'
+              - 'apps/api/**'
+              - 'apps/mcp/**'
+              - 'packages/**'
+              - 'contracts/**'
+              - 'pnpm-lock.yaml'
+              - 'turbo.json'
+              - '.github/workflows/ci.yml'
+
+  # No toolchain, fails in under a minute, catches the most common review noise.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+
+  typescript:
+    needs: changes
+    if: needs.changes.outputs.ts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generated contracts are committed
+        # The Swift test suite decodes these fixtures. If they are regenerated
+        # here and differ, somebody changed a wire shape without the file that
+        # proves the Mac app can still read it.
+        run: |
+          pnpm contracts
+          git diff --exit-code contracts/ || {
+            echo "::error::contracts/ is stale. Run: pnpm contracts"
+            exit 1
+          }
+
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  swift:
+    needs: changes
+    if: needs.changes.outputs.mac == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        # The runner image default lags behind, and building against an older
+        # toolchain fails with errors that name the source rather than the SDK.
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then
+            echo "::error::no Xcode 26 on this runner image"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+
+      - name: Assert the toolchain
+        # A runner image change that quietly drops Xcode 26 should fail loudly
+        # rather than compile against something older.
+        run: swift --version | grep -qE 'version 6\.[3-9]'
+
+      - run: brew install xcodegen
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Version.xcconfig matches package.json
+        run: node scripts/sync-mac-version.mjs --check
+
+      - name: Cache SwiftPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: apps/mac/build/SourcePackages
+          key: spm-${{ hashFiles('apps/mac/Kit/Package.swift') }}
+
+      - run: ./scripts/mac.sh gen
+
+      - name: Build
+        # Fork pull requests get no secrets, so there is no certificate to sign
+        # with. Nothing signed is ever released from this workflow anyway.
+        run: |
+          xcodebuild build \
+            -project apps/mac/NotchMetrics.xcodeproj \
+            -scheme NotchMetrics \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath apps/mac/build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test
+        run: cd apps/mac/Kit && swift test
+
+  changeset-guard:
+    if: github.event_name == 'pull_request'
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: A Mac change must name @notch/mac
+        # The Swift app depends on nothing in the workspace, so
+        # `updateInternalDependencies` will never bump it — a changeset has to
+        # name it explicitly. That is correct and silently forgettable, which
+        # is what this job is for.
+        #
+        # Scoped to Sources/ deliberately: editing project.yml or a test needs
+        # no user-facing changelog entry.
+        run: |
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
+            | grep -q '^apps/mac/Kit/Sources/\|^apps/mac/App/' || exit 0
+          if ! grep -rlq '"@notch/mac"' .changeset/*.md 2>/dev/null; then
+            echo "::error::this PR changes the Mac app but no changeset names @notch/mac."
+            echo "Run: pnpm changeset, and tick @notch/mac."
+            exit 1
+          fi

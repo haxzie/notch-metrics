@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "currency",
+                "count",
+                "ratio",
+                "duration",
+                "bytes"
+              ]
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "t": {
+                    "type": "string"
+                  },
+                  "v": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "t",
+                  "v"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "previousValue": {
+              "type": "number"
+            },
+            "format": {
+              "type": "object",
+              "properties": {
+                "decimals": {
+                  "default": 0,
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "compact": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "prefix": {
+                  "default": "",
+                  "type": "string",
+                  "maxLength": 3
+                },
+                "suffix": {
+                  "default": "",
+                  "type": "string",
+                  "maxLength": 4
+                }
+              },
+              "additionalProperties": false
+            },
+            "asOf": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "durationMs": {
+          "type": "number"
+        },
+        "httpCalls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ms": {
+                "type": "number"
+              },
+              "blocked": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "host",
+              "method",
+              "status",
+              "ms",
+              "blocked"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "result",
+        "durationMs",
+        "httpCalls",
+        "logs"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "const": false
+        },
+        "code": {
+          "type": "string",
+          "enum": [
+            "manifest",
+            "entry",
+            "timeout",
+            "policy",
+            "runtime",
+            "bad_result"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "number"
+        },
+        "httpCalls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ms": {
+                "type": "number"
+              },
+              "blocked": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "host",
+              "method",
+              "status",
+              "ms",
+              "blocked"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "code",
+        "message",
+        "durationMs",
+        "httpCalls",
+        "logs"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

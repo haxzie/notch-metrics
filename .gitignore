@@ -1,0 +1,53 @@
+node_modules
+.turbo
+*.tsbuildinfo
+
+# Builds
+dist
+out
+build
+.next
+.open-next
+
+# The compiled custom-metric runner. ~60 MB, produced by `pnpm runner`, and
+# embedded into the .app at package time — a build artefact, not a source.
+packages/metric-runtime/bin/
+
+# Env. The .example files are committed; these are not.
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Cloudflare
+.wrangler
+
+# macOS app
+apps/mac/*.xcodeproj
+apps/mac/Config/Config.xcconfig
+apps/mac/Kit/.build
+apps/mac/Kit/.swiftpm
+DerivedData
+*.xcuserdatad
+
+# Release artefacts. Never cached, never committed — a 60 MB disk image per
+# version is how a repository quietly reaches several gigabytes.
+dist/
+release/
+*.dmg
+*.xcarchive
+
+# Signing material. Should never be on disk in the repo at all, but a typo
+# shouldn't be the only thing standing between a .p12 and a public push.
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+
+# macOS
+.DS_Store
+
+# Conductor's scratch directory
+.context

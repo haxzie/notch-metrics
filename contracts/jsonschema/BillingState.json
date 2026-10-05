@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "plan": {
+      "type": "string",
+      "enum": [
+        "trial",
+        "pro",
+        "expired"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "trialing",
+        "active",
+        "past_due",
+        "cancelled",
+        "expired"
+      ]
+    },
+    "trialEndsAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "currentPeriodEnd": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "graceUntil": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cancelAtPeriodEnd": {
+      "type": "boolean"
+    },
+    "hasCustomer": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "plan",
+    "status",
+    "trialEndsAt",
+    "currentPeriodEnd",
+    "graceUntil",
+    "cancelAtPeriodEnd",
+    "hasCustomer"
+  ],
+  "additionalProperties": false
+}

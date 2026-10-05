@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "stripe",
+        "dodopayments",
+        "lemonsqueezy",
+        "polar"
+      ]
+    },
+    "label": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "auth_failed",
+        "rate_limited",
+        "disabled"
+      ]
+    },
+    "credentialHint": {
+      "type": "string"
+    },
+    "accountLabel": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "accountCurrency": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "enabledMetrics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "mrr",
+          "revenue",
+          "active_subscribers",
+          "new_subscribers",
+          "churned_subscribers",
+          "refunds"
+        ]
+      }
+    },
+    "availableMetrics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "mrr",
+          "revenue",
+          "active_subscribers",
+          "new_subscribers",
+          "churned_subscribers",
+          "refunds"
+        ]
+      }
+    },
+    "lastSyncedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lastErrorAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lastErrorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "createdAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "provider",
+    "label",
+    "status",
+    "credentialHint",
+    "accountLabel",
+    "accountCurrency",
+    "enabledMetrics",
+    "availableMetrics",
+    "lastSyncedAt",
+    "lastErrorAt",
+    "lastErrorCode",
+    "createdAt"
+  ],
+  "additionalProperties": false
+}

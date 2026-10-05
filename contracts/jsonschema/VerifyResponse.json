@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "accountLabel": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "currency": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "availableMetrics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "mrr",
+          "revenue",
+          "active_subscribers",
+          "new_subscribers",
+          "churned_subscribers",
+          "refunds"
+        ]
+      }
+    },
+    "code": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "message": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "ok",
+    "accountLabel",
+    "currency",
+    "availableMetrics",
+    "code",
+    "message"
+  ],
+  "additionalProperties": false
+}

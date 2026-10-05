@@ -1,0 +1,10 @@
+#include "Base.xcconfig"
+
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+// Local builds sign ad-hoc so a clone with no certificate still runs. The
+// consequence is worth knowing: an ad-hoc signature pins macOS's TCC grants to
+// that exact binary, so permission prompts return on every rebuild. That is
+// macOS being correct, not a bug.
+CODE_SIGN_IDENTITY = -
+CODE_SIGNING_REQUIRED = NO

@@ -1,0 +1,103 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "notch-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-30",
+
+  // Not optional. Better Auth reaches for `node:crypto` for its token
+  // primitives, and without this the Worker fails to start with a bare
+  // "Cannot find module" that names nothing useful.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": { "enabled": true },
+
+  // Pinned, because `wrangler dev` otherwise walks to the next free port while
+  // API_URL below keeps saying 8787 — and API_URL is what Better Auth builds
+  // the Google `redirect_uri` from. Google then returns the browser to whatever
+  // else holds 8787, whose own Better Auth has no state for the code and
+  // answers with a state mismatch from an origin unrelated to this app.
+  // Failing to start is the honest outcome.
+  "dev": { "port": 8787 },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "notch",
+      "database_id": "PLACEHOLDER_RUN_CF_BOOTSTRAP",
+      // Where `wrangler d1 migrations apply` looks. Generated into this app by
+      // packages/db's drizzle.config.ts, because wrangler resolves the path
+      // relative to this file and silently reports "no migrations" otherwise.
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "ASSETS_BUCKET",
+      "bucket_name": "notch"
+      // Deliberately *not* `"remote": true`. The tests read this same file, and
+      // a remote binding would point them at the live bucket — a suite that
+      // writes to production storage, and one that cannot run in CI at all
+      // without a Cloudflare token.
+    }
+  ],
+
+  "vars": {
+    "APP_URL": "http://localhost:3000",
+    "API_URL": "http://localhost:8787",
+    "ASSETS_URL": "http://localhost:8787",
+    "GITHUB_REPO": "haxzie/notch-metrics",
+
+    // Which KEK generation new rows are sealed with. A var rather than a
+    // secret: it names a secret, it is not one. Rotation is documented in
+    // scripts/rotate-kek.ts — in particular, never delete a KEK while any row
+    // still names it, because there is no backup of a user's Stripe key.
+    "INTEGRATION_KEK_ACTIVE": "1",
+
+    // Not secrets. A product id identifies what is being sold and is visible to
+    // anybody who opens a checkout page. The API key and the webhook signing
+    // key are secrets and live in .dev.vars.
+    //
+    // These are the *test* ids. The production block repeats them with the live
+    // ones: a named environment inherits nothing, so leaving them out there
+    // would point live traffic at products that do not exist.
+    "DODOPAYMENT_MODE": "test",
+    "DODOPAYMENT_PRO_PRODUCT_ID": "",
+    "DODOPAYMENT_PRO_ANNUAL_PRODUCT_ID": "",
+
+    "POSTHOG_HOST": "https://us.i.posthog.com"
+  },
+
+  // Every five minutes: warms the caches a notch opens into, and closes the two
+  // windows no webhook announces — a grace period ending, and a cache row that
+  // outlived its usefulness. `wrangler dev` does not fire this on its own;
+  // trigger one with `curl http://localhost:8787/cdn-cgi/handler/scheduled`.
+  "triggers": { "crons": ["*/5 * * * *"] },
+
+  "env": {
+    "production": {
+      "vars": {
+        "APP_URL": "https://notchmetrics.com",
+        "API_URL": "https://api.notchmetrics.com",
+        "ASSETS_URL": "https://assets.notchmetrics.com",
+        "GITHUB_REPO": "haxzie/notch-metrics",
+        "INTEGRATION_KEK_ACTIVE": "1",
+        "DODOPAYMENT_MODE": "live",
+        "DODOPAYMENT_PRO_PRODUCT_ID": "",
+        "DODOPAYMENT_PRO_ANNUAL_PRODUCT_ID": "",
+        "POSTHOG_HOST": "https://us.i.posthog.com"
+      },
+      "triggers": { "crons": ["*/5 * * * *"] },
+      "routes": [{ "pattern": "api.notchmetrics.com", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "notch",
+          "database_id": "PLACEHOLDER_RUN_CF_BOOTSTRAP",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "ASSETS_BUCKET", "bucket_name": "notch" }]
+    }
+  }
+}

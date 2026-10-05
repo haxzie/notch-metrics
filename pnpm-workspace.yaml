@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Only these packages may run install scripts. Everything else is denied by
+# default, which is the point: a postinstall script is arbitrary code running
+# with your shell's privileges at `pnpm install` time.
+onlyBuiltDependencies:
+  - esbuild
+  # The Workers runtime that `wrangler dev` and the API's tests run inside.
+  - workerd
+  - sharp

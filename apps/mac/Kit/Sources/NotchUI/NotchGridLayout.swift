@@ -1,0 +1,181 @@
+import MetricsCore
+import SwiftUI
+
+/// Converts between grid coordinates and points.
+///
+/// A value type shared by the renderer and the drag gesture, so the rectangle
+/// a tile is drawn in and the rectangle a drop is tested against are computed
+/// by the same code. Two implementations of this is how a widget ends up
+/// landing one cell left of where it was released.
+public struct GridGeometry: Equatable, Sendable {
+    public let cellSize: CGSize
+    public let spacing: CGFloat
+    public let origin: CGPoint
+    public let rows: Int
+
+    public init(
+        available: CGSize, rows: Int = NotchLayout.defaultRows,
+        spacing: CGFloat = 10, origin: CGPoint = .zero
+    ) {
+        self.spacing = spacing
+        self.origin = origin
+        self.rows = max(1, rows)
+        let totalSpacingX = spacing * CGFloat(NotchLayout.columns - 1)
+        let totalSpacingY = spacing * CGFloat(self.rows - 1)
+        self.cellSize = CGSize(
+            width: max(1, (available.width - totalSpacingX) / CGFloat(NotchLayout.columns)),
+            height: max(1, (available.height - totalSpacingY) / CGFloat(self.rows))
+        )
+    }
+
+    /// One row's worth of height, including the gap above it. The handle drag
+    /// converts a pointer offset into rows with this.
+    public var rowStride: CGFloat { cellSize.height + spacing }
+
+    public func rect(for widget: NotchWidget) -> CGRect {
+        rect(col: widget.col, row: widget.row, size: widget.size)
+    }
+
+    public func rect(col: Int, row: Int, size: WidgetSize) -> CGRect {
+        CGRect(
+            x: origin.x + CGFloat(col) * (cellSize.width + spacing),
+            y: origin.y + CGFloat(row) * (cellSize.height + spacing),
+            width: CGFloat(size.cols) * cellSize.width + CGFloat(size.cols - 1) * spacing,
+            height: CGFloat(size.rows) * cellSize.height + CGFloat(size.rows - 1) * spacing
+        )
+    }
+
+    /// The cell a point falls in, clamped to the grid.
+    ///
+    /// Rounded rather than floored, so a tile dropped slightly past the midline
+    /// of a cell snaps forward — which is what the eye expects, and what
+    /// flooring gets subtly wrong on every drag.
+    public func gridPoint(at location: CGPoint) -> (col: Int, row: Int) {
+        let col = Int(((location.x - origin.x) / (cellSize.width + spacing)).rounded())
+        let row = Int(((location.y - origin.y) / (cellSize.height + spacing)).rounded())
+        return (
+            min(max(0, col), NotchLayout.columns - 1),
+            min(max(0, row), rows - 1)
+        )
+    }
+
+    public var contentSize: CGSize {
+        CGSize(
+            width: CGFloat(NotchLayout.columns) * cellSize.width
+                + CGFloat(NotchLayout.columns - 1) * spacing,
+            height: CGFloat(rows) * cellSize.height + CGFloat(rows - 1) * spacing
+        )
+    }
+}
+
+/// Owns the layout and the in-progress drag.
+@MainActor
+@Observable
+public final class NotchLayoutModel {
+    public private(set) var layout: NotchLayout
+    /// A copy mutated during a drag so displacement animates live. Committing
+    /// is just keeping it; cancelling is discarding it.
+    public private(set) var preview: NotchLayout?
+    public private(set) var draggingID: String?
+    public var isEditing = false
+
+    private let persist: @Sendable (NotchLayout) -> Void
+
+    public init(layout: NotchLayout = NotchLayout(), persist: @escaping @Sendable (NotchLayout) -> Void = { _ in }) {
+        self.layout = layout
+        self.persist = persist
+    }
+
+    public var displayed: NotchLayout { preview ?? layout }
+
+    public func replace(with layout: NotchLayout) {
+        self.layout = GridPacker.normalised(layout)
+    }
+
+    public func beginDrag(_ id: String) {
+        draggingID = id
+        isEditing = true
+        preview = layout
+    }
+
+    /// Runs the packer against a copy, so the user sees the displacement that
+    /// dropping here would cause before they commit to it.
+    public func dragMoved(to origin: (col: Int, row: Int)) {
+        guard let draggingID else { return }
+        if let next = GridPacker.place(draggingID, at: origin, in: layout) {
+            preview = next
+        }
+    }
+
+    public func endDrag(commit: Bool) {
+        if commit, let preview {
+            layout = preview
+            persist(layout)
+        }
+        preview = nil
+        draggingID = nil
+    }
+
+    /// Sets the number of grid rows, dropping the preview used while dragging.
+    ///
+    /// Shrinking is refused when a widget would be left off the grid rather
+    /// than silently dropping it — the handle just stops, which is the normal
+    /// way a resize communicates a limit.
+    @discardableResult
+    public func setRows(_ rows: Int, commit: Bool = true) -> Bool {
+        let wanted = rows.clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
+        guard wanted != layout.rows else { return true }
+
+        var next = layout
+        next.rows = wanted
+        let fits = next.widgets.allSatisfy { widget in
+            GridPacker.cells(for: widget, at: (widget.col, widget.row), rows: wanted) != nil
+        }
+        guard fits else { return false }
+
+        layout = next
+        if commit { persist(layout) }
+        return true
+    }
+
+    /// Writes the row count reached by a drag.
+    ///
+    /// The drag itself passes `commit: false` on every frame — persisting a
+    /// file per frame would be absurd — so the gesture ending is what saves.
+    public func commitRows() {
+        persist(layout)
+    }
+
+    public func resize(_ id: String, to size: WidgetSize) {
+        guard GridPacker.canResize(id, to: size, in: layout),
+              let index = layout.widgets.firstIndex(where: { $0.id == id })
+        else { return }
+        layout.widgets[index].size = size
+        layout = GridPacker.normalised(layout)
+        persist(layout)
+    }
+
+    /// The next larger size that actually fits, for the resize handle to snap to.
+    public func nextSize(for id: String, growing: Bool) -> WidgetSize? {
+        guard let widget = layout.widgets.first(where: { $0.id == id }) else { return nil }
+        let order: [WidgetSize] = [.small, .wide, .square, .hero]
+        guard let index = order.firstIndex(of: widget.size) else { return nil }
+        let candidates = growing
+            ? Array(order[(index + 1)...])
+            : Array(order[..<index].reversed())
+        return candidates.first { GridPacker.canResize(id, to: $0, in: layout) }
+    }
+
+    public func remove(_ id: String) {
+        layout.widgets.removeAll { $0.id == id }
+        layout = GridPacker.normalised(layout)
+        persist(layout)
+    }
+
+    public func add(_ widget: NotchWidget) -> Bool {
+        guard let next = GridPacker.append(widget, to: layout) else { return false }
+        layout = next
+        persist(layout)
+        return true
+    }
+}

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "integrationId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "metric": {
+      "type": "string"
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "currency",
+        "count",
+        "ratio",
+        "duration",
+        "bytes"
+      ]
+    },
+    "currency": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "value": {
+      "type": "number"
+    },
+    "previousValue": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "delta": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "absolute": {
+              "type": "number"
+            },
+            "percent": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "absolute",
+            "percent"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "v": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "t",
+          "v"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "granularity": {
+      "type": "string",
+      "enum": [
+        "hour",
+        "day",
+        "week",
+        "month"
+      ]
+    },
+    "range": {
+      "type": "string",
+      "enum": [
+        "24h",
+        "7d",
+        "30d",
+        "90d",
+        "12m"
+      ]
+    },
+    "from": {
+      "type": "string"
+    },
+    "to": {
+      "type": "string"
+    },
+    "format": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decimals": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4
+            },
+            "compact": {
+              "default": true,
+              "type": "boolean"
+            },
+            "prefix": {
+              "default": "",
+              "type": "string",
+              "maxLength": 3
+            },
+            "suffix": {
+              "default": "",
+              "type": "string",
+              "maxLength": 4
+            }
+          },
+          "required": [
+            "decimals",
+            "compact",
+            "prefix",
+            "suffix"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "stale": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "integrationId",
+    "metric",
+    "unit",
+    "currency",
+    "value",
+    "previousValue",
+    "delta",
+    "points",
+    "granularity",
+    "range",
+    "from",
+    "to",
+    "format",
+    "generatedAt",
+    "stale"
+  ],
+  "additionalProperties": false
+}

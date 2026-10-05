@@ -1,0 +1,37 @@
+{
+  "revision": 7,
+  "widgets": [
+    {
+      "id": "wid_01",
+      "kind": "provider_metric",
+      "integrationId": "int_4f2a9c",
+      "metric": "mrr",
+      "customMetricId": null,
+      "title": "MRR",
+      "size": "2x1",
+      "col": 0,
+      "row": 0,
+      "position": 0,
+      "granularity": "day",
+      "range": "30d",
+      "chart": "sparkline",
+      "visible": true
+    },
+    {
+      "id": "wid_02",
+      "kind": "custom_metric",
+      "integrationId": null,
+      "metric": null,
+      "customMetricId": "github-stars",
+      "title": "Stars",
+      "size": "1x1",
+      "col": 2,
+      "row": 0,
+      "position": 1,
+      "granularity": "day",
+      "range": "30d",
+      "chart": "none",
+      "visible": true
+    }
+  ]
+}

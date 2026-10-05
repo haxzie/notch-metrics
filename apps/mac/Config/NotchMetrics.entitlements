@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Two keys, and that is the whole file.
+
+	  The App Sandbox is off because this app spawns a helper process to run
+	  custom metrics and replaces its own bundle when it updates — neither is
+	  possible sandboxed, and sandboxing buys nothing outside the Mac App Store.
+
+	  Notably absent: allow-jit, allow-unsigned-executable-memory and
+	  disable-library-validation. An Electron app needs all three; a native one
+	  needs none, and each is a hole in the hardened runtime. If a signing error
+	  ever tempts you toward disable-library-validation, the real cause is
+	  almost always an unsigned embedded binary — see the `signing` skill.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

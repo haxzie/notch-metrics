@@ -1,0 +1,48 @@
+name: Deploy the API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "packages/db/**"
+      - "packages/schemas/**"
+      - "packages/integrations/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  # Never cancel. A run stopped between applying migrations and deploying
+  # leaves the schema ahead of the code, which is the one state nothing here
+  # recovers from automatically.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @notch/api typecheck
+      - run: pnpm --filter @notch/api test
+
+      - name: Apply migrations
+        # Strictly before the deploy. Migrations in this repository only ever
+        # add, so the old code keeps working against the new schema for the few
+        # seconds in between. The other order puts new code live against a
+        # schema that does not have its tables yet.
+        run: pnpm --filter @notch/api migrate:remote
+
+      - run: pnpm --filter @notch/api deploy

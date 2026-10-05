@@ -1,0 +1,166 @@
+name: Mirror release to R2
+
+# Ported almost unchanged from the prequel repository, where this shape has
+# already survived a couple of dozen releases. The changes here are the tag
+# prefix, the bucket and domain names, and three extra fields in latest.json.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The mac-v* tag to mirror"
+        required: true
+        type: string
+
+concurrency:
+  group: release-mirror
+  # Never cancel. A run stopped between uploading the disk image and writing
+  # latest.json leaves a release that exists but is invisible.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BUCKET: notch
+  PREFIX: desktop
+  PUBLIC_URL: https://assets.notchmetrics.com
+  # R2 rejects the integrity headers the AWS CLI sends by default, with an
+  # error that reads as a credentials problem. These three lines are the fix
+  # and they are not optional.
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+  AWS_DEFAULT_REGION: auto
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the release
+        id: release
+        run: |
+          set -eu
+          case "$TAG" in mac-v*) ;; *) echo "::error::$TAG is not a Mac release tag."; exit 1 ;; esac
+          version="${TAG#mac-v}"
+
+          mkdir -p dist
+          # Only the .dmg is mirrored. The .zip stays on GitHub for the people
+          # whose MDM blocks mounting disk images.
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.dmg' --dir dist
+
+          count=$(ls dist/*.dmg 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$count" != "1" ]; then
+            echo "::error::expected exactly one .dmg in $TAG, found $count."
+            exit 1
+          fi
+
+          file=$(basename "$(ls dist/*.dmg)")
+          published_at=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq .publishedAt)
+          build=$(node -p "require('./apps/mac/package.json').version" >/dev/null 2>&1 && \
+                  grep -E '^CURRENT_PROJECT_VERSION' apps/mac/Config/Version.xcconfig | awk '{print $3}')
+
+          {
+            echo "tag=$TAG"
+            echo "version=$version"
+            echo "build=${build:-0}"
+            echo "file=$file"
+            echo "size=$(stat -c%s "dist/$file")"
+            echo "sha256=$(sha256sum "dist/$file" | cut -d' ' -f1)"
+            echo "published_at=$published_at"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to go backwards
+        # Guards a hand-run mirror of an older tag, which would otherwise
+        # offer every installed copy a downgrade.
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          BUILD: ${{ steps.release.outputs.build }}
+        run: |
+          set -eu
+          current=$(curl -fsSL "$PUBLIC_URL/$PREFIX/latest.json" 2>/dev/null \
+            | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -n 1) || current=""
+          if [ -z "$current" ]; then
+            echo "no latest.json yet — $VERSION will be the first."
+            exit 0
+          fi
+          newest=$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -n 1)
+          if [ "$newest" != "$VERSION" ] && [ "$current" != "$VERSION" ]; then
+            echo "::error::latest.json already points at $current, which is newer than $VERSION."
+            exit 1
+          fi
+
+      - name: Upload the disk image
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          FILE: ${{ steps.release.outputs.file }}
+        run: |
+          # Version-pinned key, so the object never changes and can be cached
+          # forever.
+          aws s3 cp "dist/$FILE" "s3://$BUCKET/$PREFIX/$VERSION/$FILE" \
+            --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/x-apple-diskimage \
+            --cache-control "public, max-age=31536000, immutable" \
+            --only-show-errors
+
+      - name: Write and upload latest.json
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          BUILD: ${{ steps.release.outputs.build }}
+          TAG_NAME: ${{ steps.release.outputs.tag }}
+          FILE: ${{ steps.release.outputs.file }}
+          SIZE: ${{ steps.release.outputs.size }}
+          SHA256: ${{ steps.release.outputs.sha256 }}
+          PUBLISHED_AT: ${{ steps.release.outputs.published_at }}
+        run: |
+          jq -n \
+            --arg version "$VERSION" \
+            --argjson build "${BUILD:-0}" \
+            --arg tag "$TAG_NAME" \
+            --arg publishedAt "$PUBLISHED_AT" \
+            --arg minimumSystemVersion "14.0" \
+            --arg filename "$FILE" \
+            --arg url "$PUBLIC_URL/$PREFIX/$VERSION/$FILE" \
+            --arg sha256 "$SHA256" \
+            --arg notes "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG_NAME" \
+            --argjson size "$SIZE" \
+            '{ version: $version, build: $build, tag: $tag, publishedAt: $publishedAt,
+               platform: "darwin-arm64", minimumSystemVersion: $minimumSystemVersion,
+               filename: $filename, url: $url, size: $size, sha256: $sha256,
+               notes: $notes, mandatory: false }' > latest.json
+          cat latest.json
+
+          # The one mutable object, with a short TTL. A release nobody can see
+          # for an hour is a release that did not happen.
+          aws s3 cp latest.json "s3://$BUCKET/$PREFIX/latest.json" \
+            --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/json \
+            --cache-control "public, max-age=60" \
+            --only-show-errors
+
+      - name: Verify through the public domain
+        # Through the custom domain, not the bucket. This is the step that
+        # catches a write that succeeded behind a domain which is not actually
+        # serving it — which looks like a successful release until somebody
+        # tries to download.
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          FILE: ${{ steps.release.outputs.file }}
+        run: |
+          curl -fsSL "$PUBLIC_URL/$PREFIX/latest.json" | tee /dev/stderr | grep -q "\"version\": \"$VERSION\""
+          code=$(curl -sIL -o /dev/null -w '%{http_code}' "$PUBLIC_URL/$PREFIX/$VERSION/$FILE")
+          [ "$code" = "200" ] || { echo "::error::$PUBLIC_URL/$PREFIX/$VERSION/$FILE returned $code"; exit 1; }

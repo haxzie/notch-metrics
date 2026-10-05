@@ -1,0 +1,41 @@
+# Copy to apps/api/.dev.vars, which is gitignored. Wrangler loads it for
+# `wrangler dev` and for the tests; the deployed Worker gets these through
+# `wrangler secret put <NAME> --env production` instead.
+#
+# Non-secret configuration — the URLs, the Dodo product ids, the active KEK
+# version — lives in wrangler.jsonc, not here.
+
+# `openssl rand -base64 32`
+BETTER_AUTH_SECRET=
+
+# Redirect URI to register: http://localhost:8787/api/auth/callback/google
+# Leave both empty to run without Google sign-in.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# The key that wraps every user's provider credentials. 32 bytes, base64:
+#
+#     openssl rand -base64 32
+#
+# Must be valid base64 of exactly 32 bytes. A placeholder that is not valid
+# base64 fails inside atob(), so every crypto test *errors* rather than fails,
+# and the message points at the decoder instead of at this line.
+#
+# Rotation adds INTEGRATION_KEK_V2 and bumps INTEGRATION_KEK_ACTIVE; see
+# scripts/rotate-kek.ts. Never delete a version while any row still names it —
+# those integrations become permanently unreadable and there is no backup of a
+# user's Stripe key.
+INTEGRATION_KEK_V1=
+
+# Dodo Payments. The product and brand ids are not secret and live in
+# wrangler.jsonc; these two are.
+#
+# The webhook key is the `whsec_…` signing key under Developer → Webhooks, not
+# the API key. Without it the webhook route refuses every call, which is
+# deliberate: an unsigned POST to it could set any user's plan.
+DODOPAYMENT_API_KEY=
+DODOPAYMENT_WEBHOOK_SECRET=
+
+# Error reporting. Absent means errors go to the console only, which is a
+# working local state rather than a broken one.
+SENTRY_DSN=

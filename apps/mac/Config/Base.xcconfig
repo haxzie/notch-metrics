@@ -1,0 +1,20 @@
+// Settings shared by every configuration and every target.
+#include "Version.xcconfig"
+// Gitignored and regenerated per build by scripts/sync-mac-config.mjs.
+// `?` so a checkout without it still builds.
+#include? "Config.xcconfig"
+
+SWIFT_VERSION = 6.0
+SWIFT_STRICT_CONCURRENCY = complete
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+
+// Apple Silicon only. The notch exists on exactly one family of machines and
+// a universal binary would double the download for nobody.
+ARCHS = arm64
+ONLY_ACTIVE_ARCH = NO
+MACOSX_DEPLOYMENT_TARGET = 14.0
+
+DEVELOPMENT_TEAM = 2WH7TUH8N5
+ENABLE_HARDENED_RUNTIME = YES
+DEAD_CODE_STRIPPING = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES

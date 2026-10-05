@@ -1,0 +1,27 @@
+{
+  "name": "@notch/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./metric": "./src/metric.ts",
+    "./manifest": "./src/manifest.ts",
+    "./plugin": "./src/plugin.ts"
+  },
+  "scripts": {
+    "emit": "node --experimental-strip-types scripts/emit-contracts.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo node_modules *.tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@notch/typescript-config": "workspace:*",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

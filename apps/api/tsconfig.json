@@ -1,0 +1,7 @@
+{
+  "extends": "@notch/typescript-config/workers.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"]
+  },
+  "include": ["src", "test", "scripts", "env.d.ts"]
+}

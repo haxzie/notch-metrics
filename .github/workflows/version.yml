@@ -1,0 +1,83 @@
+name: Version and publish
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: version
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The Mac build number is `git rev-list --count HEAD`, which is wrong
+          # and plausible at depth 1.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Version or publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # `pnpm run version` also regenerates apps/mac/Config/Version.xcconfig,
+          # so the Version Packages PR carries the Mac app's version with it.
+          version: pnpm run version
+          publish: pnpm run release
+          commit: "Version packages"
+          title: "Version packages"
+          # One release per npm package would make the release list unreadable,
+          # and the Mac release is created by release-mac.yml.
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Tag the Mac release
+        # Only once the Version PR has been merged — i.e. when this run had no
+        # changesets left to consume and therefore published instead.
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          # NOT GITHUB_TOKEN.
+          #
+          # A tag pushed with the automatic token raises no `push` event —
+          # GitHub's recursion guard — so release-mac.yml would simply never
+          # run, with nothing anywhere saying why. This is the single most
+          # likely way for a release to silently do nothing.
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./apps/mac/package.json').version")
+          tag="mac-v$version"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag already exists; nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Annotated. `--follow-tags` pushes annotated tags only and silently
+          # ignores lightweight ones, so `git tag "$tag"` here would look like
+          # it worked and leave the tag nowhere.
+          git tag -a "$tag" -m "Notch Metrics $version"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "$tag"
+          echo "pushed $tag — release-mac.yml takes it from here."

@@ -1,0 +1,37 @@
+{
+  "name": "@notch/mcp",
+  "version": "0.1.0",
+  "description": "Author custom Notch Metrics dashboard metrics from Claude Code or any MCP client.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "notch-metrics-mcp": "./dist/index.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "node build.mjs --watch",
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo node_modules dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@notch/metric-runtime": "workspace:*",
+    "@notch/schemas": "workspace:*",
+    "@notch/typescript-config": "workspace:*",
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

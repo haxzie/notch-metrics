@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "build": 412,
+  "tag": "mac-v0.2.0",
+  "publishedAt": "2026-10-05T12:00:00.000Z",
+  "platform": "darwin-arm64",
+  "minimumSystemVersion": "14.0",
+  "filename": "NotchMetrics-0.2.0-arm64.dmg",
+  "url": "https://assets.notchmetrics.com/desktop/0.2.0/NotchMetrics-0.2.0-arm64.dmg",
+  "size": 18234112,
+  "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "notes": "https://github.com/haxzie/notch-metrics/releases/tag/mac-v0.2.0",
+  "mandatory": false
+}

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,47}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "shortLabel": {
+      "type": "string",
+      "maxLength": 12
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 400
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "currency",
+        "count",
+        "ratio",
+        "duration",
+        "bytes"
+      ]
+    },
+    "currency": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 3
+    },
+    "format": {
+      "default": {
+        "decimals": 0,
+        "compact": true,
+        "prefix": "",
+        "suffix": ""
+      },
+      "type": "object",
+      "properties": {
+        "decimals": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "compact": {
+          "default": true,
+          "type": "boolean"
+        },
+        "prefix": {
+          "default": "",
+          "type": "string",
+          "maxLength": 3
+        },
+        "suffix": {
+          "default": "",
+          "type": "string",
+          "maxLength": 4
+        }
+      },
+      "required": [
+        "decimals",
+        "compact",
+        "prefix",
+        "suffix"
+      ],
+      "additionalProperties": false
+    },
+    "granularities": {
+      "default": [
+        "day"
+      ],
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "hour",
+          "day",
+          "week",
+          "month"
+        ]
+      }
+    },
+    "supportsSeries": {
+      "default": true,
+      "type": "boolean"
+    },
+    "refreshIntervalSeconds": {
+      "default": 300,
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "secrets": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "help": {
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "required"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowedHosts": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+      }
+    },
+    "timeoutMs": {
+      "default": 8000,
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 20000
+    },
+    "entry": {
+      "type": "string",
+      "const": "metric.mjs"
+    },
+    "author": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "shortLabel",
+    "description",
+    "unit",
+    "format",
+    "granularities",
+    "supportsSeries",
+    "refreshIntervalSeconds",
+    "secrets",
+    "allowedHosts",
+    "timeoutMs",
+    "entry",
+    "createdAt",
+    "updatedAt"
+  ],
+  "additionalProperties": false
+}

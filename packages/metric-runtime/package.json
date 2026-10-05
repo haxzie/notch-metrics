@@ -1,0 +1,28 @@
+{
+  "name": "@notch/metric-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "notch-metric-runner": "./src/cli.ts"
+  },
+  "scripts": {
+    "build:binary": "bun build --compile --target=bun-darwin-arm64 src/cli.ts --outfile bin/notch-metric-runner",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo node_modules bin *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@notch/schemas": "workspace:*",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@notch/typescript-config": "workspace:*",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

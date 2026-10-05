@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+.next
+.open-next
+.turbo
+.wrangler
+dist
+out
+build
+node_modules
+contracts/jsonschema
+apps/mac/**/*.xcodeproj
+CHANGELOG.md

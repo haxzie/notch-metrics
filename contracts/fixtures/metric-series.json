@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "series": {
+    "integrationId": "int_4f2a9c",
+    "metric": "mrr",
+    "unit": "currency",
+    "currency": "USD",
+    "value": 1284500,
+    "previousValue": 1190000,
+    "delta": {
+      "absolute": 94500,
+      "percent": 7.94
+    },
+    "points": [
+      {
+        "t": "2026-09-05T00:00:00.000Z",
+        "v": 1190000
+      },
+      {
+        "t": "2026-09-20T00:00:00.000Z",
+        "v": 1236000
+      },
+      {
+        "t": "2026-10-05T00:00:00.000Z",
+        "v": 1284500
+      }
+    ],
+    "granularity": "day",
+    "range": "30d",
+    "from": "2026-09-05T00:00:00.000Z",
+    "to": "2026-10-05T12:00:00.000Z",
+    "format": {
+      "decimals": 0,
+      "compact": true,
+      "prefix": "",
+      "suffix": ""
+    },
+    "generatedAt": "2026-10-05T12:00:00.000Z",
+    "stale": false
+  }
+}

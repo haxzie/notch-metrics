@@ -1,0 +1,91 @@
+import type { ProviderManifest } from "@notch/schemas";
+
+export const manifest: ProviderManifest = {
+  id: "stripe",
+  name: "Stripe",
+  tagline: "Revenue, MRR and subscribers straight from your Stripe account.",
+  docsUrl: "https://dashboard.stripe.com/apikeys",
+  iconPath: "/providers/stripe.svg",
+  accentColor: "#635BFF",
+  authMode: "api_key",
+  fields: [
+    {
+      key: "secret_key",
+      label: "Secret key",
+      type: "secret",
+      required: true,
+      placeholder: "rk_live_…",
+      // Pushing restricted keys is the cheapest reduction of the blast radius
+      // in the whole product: a read-only key cannot move money if we leak it.
+      help: "A restricted key with read access to Charges and Subscriptions is enough, and is safer than a full secret key.",
+      pattern: "^(sk|rk)_(live|test)_[A-Za-z0-9]+$",
+    },
+  ],
+  metrics: [
+    {
+      id: "mrr",
+      label: "Monthly recurring revenue",
+      shortLabel: "MRR",
+      unit: "currency",
+      granularities: ["day", "week", "month"],
+      supportsSeries: false,
+      supportsCompare: false,
+      methodology:
+        "Active subscriptions right now, each item normalised to a monthly amount (annual ÷ 12, weekly × 52/12) and reduced by any percentage coupon. A snapshot, not a sum over the window.",
+    },
+    {
+      id: "revenue",
+      label: "Revenue",
+      shortLabel: "Revenue",
+      unit: "currency",
+      granularities: ["hour", "day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology:
+        "Gross charges from balance transactions in the window, before Stripe fees. Refunds are reported separately rather than netted off.",
+    },
+    {
+      id: "active_subscribers",
+      label: "Active subscribers",
+      shortLabel: "Active",
+      unit: "count",
+      granularities: ["day", "week", "month"],
+      supportsSeries: false,
+      supportsCompare: false,
+      methodology: "Subscriptions in Stripe status `active` right now. Trials are not counted.",
+    },
+    {
+      id: "new_subscribers",
+      label: "New subscribers",
+      shortLabel: "New",
+      unit: "count",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology: "Subscriptions created in the window, bucketed by creation time.",
+    },
+    {
+      id: "churned_subscribers",
+      label: "Churned subscribers",
+      shortLabel: "Churn",
+      unit: "count",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology: "Subscriptions cancelled in the window, bucketed by cancellation time.",
+    },
+    {
+      id: "refunds",
+      label: "Refunds",
+      shortLabel: "Refunds",
+      unit: "currency",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology: "Refund balance transactions in the window, as a positive amount.",
+    },
+  ],
+  allowedHosts: ["api.stripe.com"],
+  status: "stable",
+  minAppVersion: "0.1.0",
+};

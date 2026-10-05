@@ -1,0 +1,70 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
+import { createAuth } from "./lib/auth.ts";
+import { withDb, type AppContext } from "./middleware.ts";
+import { billing } from "./routes/billing.ts";
+import { desktop } from "./routes/desktop.ts";
+import { integrations } from "./routes/integrations.ts";
+import { me } from "./routes/me.ts";
+import { metrics } from "./routes/metrics.ts";
+import { providers } from "./routes/providers.ts";
+import { updates } from "./routes/updates.ts";
+import { widgets } from "./routes/widgets.ts";
+import { dodoWebhook } from "./routes/webhooks/dodo.ts";
+import { scheduled } from "./cron.ts";
+import { logError } from "./lib/redact.ts";
+import type { Env } from "./env.ts";
+
+const app = new Hono<AppContext>();
+
+app.use("*", withDb);
+
+app.use(
+  "*",
+  cors({
+    // Echoed, never `*`. A browser refuses to send credentials to a wildcard
+    // origin, so `*` would sign out every dashboard user with no error that
+    // points at CORS.
+    origin: (origin, c) => {
+      const allowed = [c.env.APP_URL, "http://localhost:3000"];
+      return allowed.includes(origin) ? origin : allowed[0]!;
+    },
+    credentials: true,
+    allowHeaders: ["content-type", "authorization", "if-none-match"],
+    exposeHeaders: ["etag", "retry-after"],
+  }),
+);
+
+app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
+
+app.route("/v1/me", me);
+app.route("/v1/desktop", desktop);
+app.route("/v1/providers", providers);
+app.route("/v1/integrations", integrations);
+app.route("/v1/metrics", metrics);
+app.route("/v1/widgets", widgets);
+app.route("/v1/billing", billing);
+app.route("/v1/updates", updates);
+app.route("/v1/webhooks/dodo", dodoWebhook);
+
+app.get("/health", (c) => c.json({ ok: true }));
+
+app.notFound((c) => c.json({ code: "NOT_FOUND", message: "No such endpoint." }, 404));
+
+app.onError((error, c) => {
+  if (error instanceof HTTPException) {
+    return c.json({ code: "ERROR", message: error.message }, error.status);
+  }
+  logError("unhandled", error);
+  // Generic on purpose. A thrown message here routinely names a missing secret
+  // — `required()` is built to do exactly that — and that is for the logs.
+  return c.json({ code: "ERROR", message: "Something went wrong." }, 500);
+});
+
+export default {
+  fetch: app.fetch,
+  scheduled: (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(scheduled(env));
+  },
+} satisfies ExportedHandler<Env>;

@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "series": {
+    "integrationId": "int_4f2a9c",
+    "metric": "mrr",
+    "unit": "currency",
+    "currency": "USD",
+    "value": 1284500,
+    "previousValue": null,
+    "delta": null,
+    "points": [],
+    "granularity": "day",
+    "range": "30d",
+    "from": "2026-09-05T00:00:00.000Z",
+    "to": "2026-10-05T12:00:00.000Z",
+    "format": {
+      "decimals": 0,
+      "compact": true,
+      "prefix": "",
+      "suffix": ""
+    },
+    "generatedAt": "2026-10-05T12:00:00.000Z",
+    "stale": true
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "version": "2026-10-05.1",
+  "providers": [
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "tagline": "Revenue, MRR and subscribers from your Stripe account.",
+      "docsUrl": "https://dashboard.stripe.com/apikeys",
+      "iconPath": "/providers/stripe.svg",
+      "accentColor": "#635BFF",
+      "authMode": "api_key",
+      "fields": [
+        {
+          "key": "secret_key",
+          "label": "Secret key",
+          "type": "secret",
+          "required": true,
+          "placeholder": "rk_live_…",
+          "help": "A restricted key with read access to Charges and Subscriptions is enough.",
+          "pattern": "^(sk|rk)_(live|test)_[A-Za-z0-9]+$"
+        }
+      ],
+      "metrics": [
+        {
+          "id": "mrr",
+          "label": "Monthly recurring revenue",
+          "shortLabel": "MRR",
+          "unit": "currency",
+          "granularities": ["day", "week", "month"],
+          "supportsSeries": false,
+          "supportsCompare": true,
+          "methodology": "Active subscriptions at the end of the window, each normalised to a monthly amount and reduced by any percentage coupon."
+        }
+      ],
+      "allowedHosts": ["api.stripe.com"],
+      "status": "stable",
+      "minAppVersion": "0.1.0"
+    }
+  ]
+}

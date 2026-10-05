@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "type": "string"
+        },
+        "image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "preferredCurrency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+        "image",
+        "timezone",
+        "preferredCurrency",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "billing": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "type": "string",
+          "enum": [
+            "trial",
+            "pro",
+            "expired"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "trialing",
+            "active",
+            "past_due",
+            "cancelled",
+            "expired"
+          ]
+        },
+        "trialEndsAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currentPeriodEnd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "graceUntil": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cancelAtPeriodEnd": {
+          "type": "boolean"
+        },
+        "hasCustomer": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "plan",
+        "status",
+        "trialEndsAt",
+        "currentPeriodEnd",
+        "graceUntil",
+        "cancelAtPeriodEnd",
+        "hasCustomer"
+      ],
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "integrations": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "widgets": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "integrations",
+        "widgets"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "user",
+    "billing",
+    "counts"
+  ],
+  "additionalProperties": false
+}

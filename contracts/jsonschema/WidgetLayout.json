@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "widgets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "provider_metric",
+              "custom_metric",
+              "divider"
+            ]
+          },
+          "integrationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "mrr",
+                  "revenue",
+                  "active_subscribers",
+                  "new_subscribers",
+                  "churned_subscribers",
+                  "refunds"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customMetricId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{1,47}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 60
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size": {
+            "default": "2x1",
+            "type": "string",
+            "enum": [
+              "1x1",
+              "2x1",
+              "2x2",
+              "4x2"
+            ]
+          },
+          "col": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "granularity": {
+            "default": "day",
+            "type": "string",
+            "enum": [
+              "hour",
+              "day",
+              "week",
+              "month"
+            ]
+          },
+          "range": {
+            "default": "30d",
+            "type": "string",
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d",
+              "12m"
+            ]
+          },
+          "chart": {
+            "default": "sparkline",
+            "type": "string",
+            "enum": [
+              "none",
+              "sparkline",
+              "bars"
+            ]
+          },
+          "visible": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "integrationId",
+          "metric",
+          "customMetricId",
+          "title",
+          "size",
+          "col",
+          "row",
+          "position",
+          "granularity",
+          "range",
+          "chart",
+          "visible"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "revision",
+    "widgets"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,50 @@
+{
+  "name": "notch-metrics",
+  "version": "0.0.0",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE.md",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "prepare": "node scripts/setup-env.mjs",
+    "dev": "dotenv -e .env -- turbo run dev",
+    "dev:api": "dotenv -e .env -- turbo run dev --filter=@notch/api",
+    "dev:web": "dotenv -e .env -- turbo run dev --filter=@notch/web",
+    "build": "dotenv -e .env -- turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "contracts": "pnpm --filter @notch/schemas emit",
+    "runner": "pnpm --filter @notch/metric-runtime build:binary",
+    "db:generate": "pnpm --filter @notch/db generate",
+    "db:migrate": "pnpm --filter @notch/api migrate",
+    "db:migrate:remote": "pnpm --filter @notch/api migrate:remote",
+    "db:reset": "pnpm --filter @notch/api reset",
+    "mac:gen": "scripts/mac.sh gen",
+    "mac:build": "scripts/build-mac.sh",
+    "mac:run": "scripts/mac.sh run",
+    "mac:test": "scripts/mac.sh test",
+    "mac:dmg": "scripts/make-dmg.sh",
+    "mac:ship": "scripts/build-mac.sh && scripts/install-local.sh",
+    "mac:version": "node scripts/sync-mac-version.mjs",
+    "cf:bootstrap": "scripts/bootstrap-cloudflare.sh",
+    "changeset": "changeset",
+    "version": "changeset version && node scripts/sync-mac-version.mjs && pnpm install --lockfile-only && pnpm format",
+    "release": "changeset publish",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,css,yml,yaml}\""
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.8",
+    "@types/node": "^22.10.2",
+    "dotenv-cli": "^8.0.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}
