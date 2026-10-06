@@ -48,8 +48,14 @@ public struct WidgetTile: View {
                 .lineLimit(1)
                 .padding(.top, 2)
 
-            Spacer(minLength: 4)
+            // A Spacer either side rather than one above: the number sits in
+            // the middle of whatever height is left under the label, which
+            // keeps it on the same line across tiles of different heights.
+            // Pinned to the bottom, a 2x2 and a 2x1 side by side had their
+            // figures at different heights and the row read as misaligned.
+            Spacer(minLength: 2)
             value
+            Spacer(minLength: 2)
         }
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
@@ -119,7 +125,7 @@ public struct WidgetTile: View {
         case .value(let series):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(MetricFormatter.display(series))
+                    Text(MetricFormatter.display(series, override: widget.format))
                         .font(.system(size: valueFontSize, weight: .regular, design: .rounded))
                         .foregroundStyle(
                             series.stale ? NotchTheme.secondaryText : NotchTheme.primaryText

@@ -205,7 +205,7 @@ private struct MetricRow: View {
                                 ? NotchTheme.positive : NotchTheme.negative)
                 }
 
-                Text(MetricFormatter.display(series))
+                Text(MetricFormatter.display(series, override: widget.format))
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(
                         series.stale ? NotchTheme.secondaryText : NotchTheme.primaryText

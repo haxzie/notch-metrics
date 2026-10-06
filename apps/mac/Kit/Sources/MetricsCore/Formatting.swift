@@ -3,33 +3,48 @@ import Foundation
 /// Renders a metric for a tile that is sometimes 56 points wide.
 public enum MetricFormatter {
     /// Currency values arrive in minor units; everything else is a plain number.
-    public static func display(_ series: MetricSeries, compact: Bool? = nil) -> String {
-        let useCompact = compact ?? series.format?.compact ?? true
+    ///
+    /// `override` is the widget's own format and wins over the series, which
+    /// in turn wins over the defaults. The adapter knows whether it fetched
+    /// money; only the tile knows whether it has room for all the digits.
+    public static func display(
+        _ series: MetricSeries, override: WidgetFormat? = nil, compact: Bool? = nil
+    ) -> String {
+        let style = override?.style ?? series.unit
+        let useCompact = compact ?? override?.compact ?? series.format?.compact ?? true
+        let decimals = override?.decimals
 
-        switch series.unit {
+        let body: String
+        switch style {
         case .currency:
             let major = series.value / 100
-            return currency(major, code: series.currency ?? "USD", compact: useCompact)
+            body = currency(
+                major, code: series.currency ?? "USD", compact: useCompact, decimals: decimals)
         case .count:
-            return useCompact ? abbreviated(series.value) : integer(series.value)
+            body = useCompact ? abbreviated(series.value) : integer(series.value, decimals: decimals)
         case .ratio:
-            return String(format: "%.1f%%", series.value * 100)
+            body = String(format: "%.\(decimals ?? 1)f%%", series.value * 100)
         case .duration:
-            return duration(series.value)
+            body = duration(series.value)
         case .bytes:
-            return bytes(series.value)
+            body = bytes(series.value)
         }
+
+        return (override?.prefix ?? "") + body + (override?.suffix ?? "")
     }
 
-    public static func currency(_ amount: Double, code: String, compact: Bool) -> String {
+    public static func currency(
+        _ amount: Double, code: String, compact: Bool, decimals: Int? = nil
+    ) -> String {
         let symbol = symbols[code] ?? "\(code) "
-        // Compacted above four figures, because "$1,284,500" does not fit a
-        // 2x1 tile and truncating it mid-number is worse than rounding it.
-        if compact, abs(amount) >= 10_000 { return symbol + abbreviated(amount) }
+        // Compacted from four figures, matching `count`. The two thresholds
+        // used to differ — 10,000 here and 1,000 there — so $9,800 rendered
+        // in full beside 9.8k of anything else, on tiles the same width.
+        if compact, abs(amount) >= 1_000 { return symbol + abbreviated(amount) }
 
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = abs(amount) >= 1_000 ? 0 : 2
+        formatter.maximumFractionDigits = decimals ?? (abs(amount) >= 1_000 ? 0 : 2)
         formatter.minimumFractionDigits = 0
         // Explicit, because NumberFormatter defaults to half-*even* — so
         // $1,284.50 would render as $1,284. Banker's rounding is right for
@@ -62,10 +77,10 @@ public enum MetricFormatter {
             : String(format: "%.1f", rounded)
     }
 
-    public static func integer(_ value: Double) -> String {
+    public static func integer(_ value: Double, decimals: Int? = nil) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 0
+        formatter.maximumFractionDigits = decimals ?? 0
         return formatter.string(from: NSNumber(value: value)) ?? "\(Int(value))"
     }
 

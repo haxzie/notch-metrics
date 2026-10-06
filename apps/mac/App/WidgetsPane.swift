@@ -333,6 +333,7 @@ private struct WidgetBuilderView: View {
 
     @State private var connectionId: String?
     @State private var size: WidgetSize = .wide
+    @State private var compact = true
     @State private var preview: TileState = .loading
     @State private var added = false
 
@@ -361,6 +362,16 @@ private struct WidgetBuilderView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+
+                // The adapter knows it fetched money; only the tile knows
+                // whether 1,243,901 fits. Shown as the rendered result rather
+                // than as "compact", because the choice is between two things
+                // you can see.
+                Picker("Numbers", selection: $compact) {
+                    Text("Short — 1.2M").tag(true)
+                    Text("Full — 1,243,901").tag(false)
+                }
+                .pickerStyle(.inline)
             }
 
             Section("Connection") {
@@ -436,7 +447,8 @@ private struct WidgetBuilderView: View {
             position: 0,
             granularity: metric.granularities.first ?? .day,
             range: .month,
-            chart: metric.supportsSeries ? .sparkline : .none)
+            chart: metric.supportsSeries ? .sparkline : .none,
+            format: WidgetFormat(compact: compact))
     }
 
     private func refreshPreview() async {

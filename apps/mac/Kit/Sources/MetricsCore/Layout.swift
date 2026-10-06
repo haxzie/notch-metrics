@@ -105,6 +105,8 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     public var granularity: Granularity
     public var range: TimeRange
     public var chart: ChartKind
+    /// How the number reads. Nil means "whatever the series says".
+    public var format: WidgetFormat?
     public var visible: Bool
 
     public init(
@@ -113,7 +115,8 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         integrationId: String? = nil, metric: String? = nil, customMetricId: String? = nil,
         title: String? = nil, size: WidgetSize = .wide, col: Int = 0, row: Int = 0,
         position: Int = 0, granularity: Granularity = .day, range: TimeRange = .month,
-        chart: ChartKind = .sparkline, visible: Bool = true
+        chart: ChartKind = .sparkline, format: WidgetFormat? = nil,
+        visible: Bool = true
     ) {
         self.id = id
         self.kind = kind
@@ -129,12 +132,13 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         self.granularity = granularity
         self.range = range
         self.chart = chart
+        self.format = format
         self.visible = visible
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, appId, integrationId, metric, customMetricId, title, size
-        case col, row, position, granularity, range, chart, visible
+        case col, row, position, granularity, range, chart, format, visible
     }
 
     public init(from decoder: any Decoder) throws {
@@ -152,6 +156,9 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         granularity = try c.decodeIfPresent(Granularity.self, forKey: .granularity) ?? .day
         range = try c.decodeIfPresent(TimeRange.self, forKey: .range) ?? .month
         chart = try c.decodeIfPresent(ChartKind.self, forKey: .chart) ?? .sparkline
+        // Absent in every layout.json written before formats existed, and nil
+        // means "use the series", so those widgets render exactly as they did.
+        format = try c.decodeIfPresent(WidgetFormat.self, forKey: .format)
         visible = try c.decodeIfPresent(Bool.self, forKey: .visible) ?? true
 
         // Users have a layout.json from before apps existed. Rather than
