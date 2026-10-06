@@ -79,7 +79,7 @@ public struct WidgetTile: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(NotchTheme.tileFill)
+                .fill(isEditing ? NotchTheme.tileFillEditing : NotchTheme.tileFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -213,30 +213,31 @@ public struct WidgetTile: View {
 
 
 
-    private var cornerRadius: CGFloat { widget.size == .small ? 12 : 16 }
-    private var horizontalPadding: CGFloat { widget.size == .small ? 11 : 14 }
-    private var verticalPadding: CGFloat { widget.size == .small ? 9 : 13 }
-    private var symbolSize: CGFloat { widget.size == .small ? 10 : 12 }
+    /// The smallest span: one cell, room for a mark and a number.
+    private var isTiny: Bool { widget.size.cols == 1 && widget.size.rows == 1 }
+
+    private var cornerRadius: CGFloat { isTiny ? 12 : 16 }
+    private var horizontalPadding: CGFloat { isTiny ? 11 : 14 }
+    private var verticalPadding: CGFloat { isTiny ? 9 : 13 }
+    private var symbolSize: CGFloat { isTiny ? 10 : 12 }
     /// Slightly larger than the old glyph: a mark inside a rounded tile needs
     /// the extra point or two to stay readable once its own corners are cut.
-    private var markSize: CGFloat { widget.size == .small ? 13 : 15 }
-    private var labelSize: CGFloat { widget.size == .small ? 10 : 12 }
+    private var markSize: CGFloat { isTiny ? 13 : 15 }
+    private var labelSize: CGFloat { isTiny ? 10 : 12 }
 
+    /// Scales with the span rather than switching on four presets, now that
+    /// every size between 1x1 and the full grid can exist.
+    ///
+    /// Driven by width and height together: a 6x1 is wide but short, and
+    /// sizing its figure off the width alone overflows the tile vertically.
     private var valueFontSize: CGFloat {
-        switch widget.size {
-        case .small: 18
-        case .wide: 24
-        case .square: 34
-        case .hero: 44
-        }
+        let byWidth = 14 + CGFloat(widget.size.cols) * 5.5
+        let byHeight = 10 + CGFloat(widget.size.rows) * 17
+        return min(min(byWidth, byHeight), 48)
     }
 
     private var chartHeight: CGFloat {
-        switch widget.size {
-        case .small: 0
-        case .wide: 18
-        case .square: 26
-        case .hero: 54
-        }
+        guard widget.size.rows > 1 || widget.size.cols > 1 else { return 0 }
+        return min(CGFloat(widget.size.rows) * 24 - 6, 60)
     }
 }

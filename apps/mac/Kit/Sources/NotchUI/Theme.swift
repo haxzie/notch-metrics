@@ -24,6 +24,12 @@ public enum NotchTheme {
     /// Tile fill and borders. Hairlines, because at this size a 1pt border at
     /// any real opacity reads as a box rather than an edge.
     public static let tileFill = Color.white.opacity(0.055)
+    /// Nearly opaque, for edit mode only.
+    ///
+    /// The normal fill is 5.5% white, which is right over the panel's glass
+    /// and wrong over the dot grid — every tile became a window onto the dots
+    /// and the grid read as being *on* the cards rather than behind them.
+    public static let tileFillEditing = Color(red: 0.10, green: 0.09, blue: 0.12).opacity(0.93)
     public static let tileStroke = Color.white.opacity(0.09)
     public static let panelStroke = Color.white.opacity(0.14)
 
@@ -227,33 +233,40 @@ public struct NotchLogo: View {
 /// compete with the tile borders and the panel starts to look like a
 /// spreadsheet. Dots read as "there is a grid here" and disappear behind the
 /// content.
+/// Graph paper for edit mode.
+///
+/// A fixed pitch, not one dot per cell corner. At cell pitch there were six
+/// dots across the whole notch, which reads as four stray specks rather than
+/// a grid; the point of showing it is that tiles visibly snap to something.
 public struct DottedGrid: View {
-    public let cellSize: CGSize
-    public let spacing: CGFloat
+    public let pitch: CGFloat
+    public let opacity: Double
 
-    public init(cellSize: CGSize, spacing: CGFloat) {
-        self.cellSize = cellSize
-        self.spacing = spacing
+    public init(pitch: CGFloat = 11, opacity: Double = 0.1) {
+        self.pitch = pitch
+        self.opacity = opacity
     }
 
     public var body: some View {
         Canvas { context, size in
-            let strideX = cellSize.width + spacing
-            let strideY = cellSize.height + spacing
-            guard strideX > 1, strideY > 1 else { return }
+            guard pitch > 1 else { return }
+            let radius: CGFloat = 0.9
+            let dot = Color.white.opacity(opacity)
 
-            let radius: CGFloat = 1
-            var y = 0.0
-            while y <= size.height + 0.5 {
-                var x = 0.0
-                while x <= size.width + 0.5 {
+            // Inset by half a pitch so the first row of dots is not cut in
+            // half by the edge of the backdrop.
+            var y = pitch / 2
+            while y <= size.height {
+                var x = pitch / 2
+                while x <= size.width {
                     context.fill(
                         Path(ellipseIn: CGRect(
-                            x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)),
-                        with: .color(NotchTheme.editDot))
-                    x += strideX
+                            x: x - radius, y: y - radius,
+                            width: radius * 2, height: radius * 2)),
+                        with: .color(dot))
+                    x += pitch
                 }
-                y += strideY
+                y += pitch
             }
         }
         .allowsHitTesting(false)

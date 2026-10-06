@@ -10,29 +10,68 @@ import Foundation
 /// A closed set rather than free integers, so a resize snaps to something the
 /// packer can reason about and a drag cannot produce a shape nothing else
 /// knows how to lay out.
-public enum WidgetSize: String, Codable, Sendable, CaseIterable, Hashable {
-    /// A sixth of the width. A number, no chart.
-    case small = "1x1"
-    /// A third of the width — three across, which is the default arrangement.
-    case wide = "2x1"
-    /// A third of the width, full height. Logo, label, headline figure.
-    case square = "2x2"
-    /// The full width of the grid, both rows. One large chart.
-    case hero = "6x2"
+/// How many cells a widget spans.
+///
+/// A span, not a closed set. It used to be an enum of four presets, which is
+/// why resizing was a button that cycled through them — there was nothing
+/// else it could do. Handles on the corners and edges need every size between
+/// 1x1 and the full grid to exist.
+///
+/// The wire encoding is unchanged: still `"<cols>x<rows>"`, so a `layout.json`
+/// or a `PUT /v1/widgets` written by any previous build decodes as it did.
+/// Only the set of accepted values is wider.
+public struct WidgetSize: Codable, Sendable, Hashable, RawRepresentable, CustomStringConvertible {
+    public let cols: Int
+    public let rows: Int
 
-    public var cols: Int {
-        switch self {
-        case .small: 1
-        case .wide, .square: 2
-        case .hero: 6
-        }
+    public static let maxCols = NotchLayout.columns
+    public static let maxRows = 4
+
+    public init(cols: Int, rows: Int) {
+        self.cols = min(max(1, cols), Self.maxCols)
+        self.rows = min(max(1, rows), Self.maxRows)
     }
 
-    public var rows: Int {
-        switch self {
-        case .small, .wide: 1
-        case .square, .hero: 2
-        }
+    // MARK: Presets, kept so existing call sites and tests still read well.
+
+    /// A sixth of the width. A number, no chart.
+    public static let small = WidgetSize(cols: 1, rows: 1)
+    /// A third of the width — three across, which is the default arrangement.
+    public static let wide = WidgetSize(cols: 2, rows: 1)
+    /// A third of the width, full height. Logo, label, headline figure.
+    public static let square = WidgetSize(cols: 2, rows: 2)
+    /// The full width of the grid, both rows. One large chart.
+    public static let hero = WidgetSize(cols: 6, rows: 2)
+
+    /// What the size picker offers. Every span is reachable by dragging a
+    /// handle; these are the ones worth one click.
+    public static let presets: [WidgetSize] = [.small, .wide, .square, .hero]
+
+    // MARK: Wire format
+
+    public var rawValue: String { "\(cols)x\(rows)" }
+    public var description: String { rawValue }
+
+    public init?(rawValue: String) {
+        let parts = rawValue.split(separator: "x")
+        guard parts.count == 2,
+              let cols = Int(parts[0]), let rows = Int(parts[1]),
+              cols >= 1, rows >= 1
+        else { return nil }
+        self.init(cols: cols, rows: rows)
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        // Falls back rather than throwing, for the same reason every enum on
+        // this wire has an unknown case: one unfamiliar value must not fail
+        // the decode of a whole layout.
+        self = WidgetSize(rawValue: raw) ?? .wide
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 

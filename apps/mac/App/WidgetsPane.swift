@@ -356,8 +356,10 @@ private struct WidgetBuilderView: View {
                 }
                 .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
 
+                // The presets only. Every span in between is reachable by
+                // dragging a handle on the tile itself.
                 Picker("Size", selection: $size) {
-                    ForEach(WidgetSize.allCases, id: \.self) { option in
+                    ForEach(WidgetSize.presets, id: \.self) { option in
                         Text(option.rawValue).tag(option)
                     }
                 }

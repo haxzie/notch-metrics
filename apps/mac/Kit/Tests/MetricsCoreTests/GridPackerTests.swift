@@ -236,3 +236,106 @@ struct FormattingTests {
         #expect(MetricFormatter.delta(MetricDelta(absolute: 5, percent: nil)) == nil)
     }
 }
+
+@Suite struct WidgetSpanTests {
+    @Test("the wire encoding is unchanged")
+    func roundTripsThroughStrings() throws {
+        #expect(WidgetSize.wide.rawValue == "2x1")
+        #expect(WidgetSize(rawValue: "2x2") == .square)
+        #expect(WidgetSize(rawValue: "6x2") == .hero)
+        // Spans the old enum could not express.
+        #expect(WidgetSize(rawValue: "3x1")?.cols == 3)
+        #expect(WidgetSize(rawValue: "4x3")?.rows == 3)
+    }
+
+    @Test("an unparseable size falls back rather than failing the layout")
+    func unknownDecodesToDefault() throws {
+        let decoded = try JSONDecoder().decode(WidgetSize.self, from: Data("\"nonsense\"".utf8))
+        #expect(decoded == .wide)
+    }
+
+    @Test("a span is clamped to the grid")
+    func clamped() {
+        #expect(WidgetSize(cols: 99, rows: 99) == WidgetSize(cols: 6, rows: 4))
+        #expect(WidgetSize(cols: 0, rows: -3) == WidgetSize(cols: 1, rows: 1))
+    }
+}
+
+@Suite struct NoOverlapTests {
+    private func layout(_ widgets: [NotchWidget], rows: Int = 2) -> NotchLayout {
+        NotchLayout(rows: rows, widgets: widgets)
+    }
+
+    private func widget(_ id: String, _ size: WidgetSize, col: Int, row: Int) -> NotchWidget {
+        NotchWidget(id: id, appId: "stripe", metric: "mrr", size: size, col: col, row: row)
+    }
+
+    /// Every cell is claimed at most once.
+    private func overlaps(_ layout: NotchLayout) -> Bool {
+        var seen: Set<GridCell> = []
+        for w in layout.widgets where w.visible {
+            guard let cells = GridPacker.cells(for: w, at: (w.col, w.row), rows: layout.rows)
+            else { return true }
+            for cell in cells {
+                if seen.contains(cell) { return true }
+                seen.insert(cell)
+            }
+        }
+        return false
+    }
+
+    @Test("a resize that would overlap a neighbour is refused")
+    func resizeCannotOverlap() {
+        let base = layout([
+            widget("a", .wide, col: 0, row: 0),
+            widget("b", .wide, col: 2, row: 0),
+        ])
+        // Growing `a` to four columns would run straight through `b`.
+        #expect(GridPacker.canResize("a", to: WidgetSize(cols: 4, rows: 1), in: base) == false)
+        #expect(GridPacker.canResize("a", to: WidgetSize(cols: 2, rows: 2), in: base))
+    }
+
+    @Test("a resize past the edge of the grid is refused")
+    func resizeCannotLeaveTheGrid() {
+        let base = layout([widget("a", .wide, col: 4, row: 0)])
+        #expect(GridPacker.canResize("a", to: WidgetSize(cols: 4, rows: 1), in: base) == false)
+        #expect(GridPacker.canResize("a", to: WidgetSize(cols: 2, rows: 1), in: base))
+    }
+
+    @Test("every arrangement the packer produces is overlap-free")
+    func packingNeverOverlaps() {
+        // Deliberately contradictory input: three widgets all claiming the
+        // same corner, which is what an old layout.json or a second Mac
+        // produces.
+        let messy = layout([
+            widget("a", .square, col: 0, row: 0),
+            widget("b", .square, col: 0, row: 0),
+            widget("c", .wide, col: 0, row: 0),
+        ])
+        #expect(overlaps(GridPacker.repack(messy)) == false)
+    }
+
+    @Test("moving a widget onto another leaves no overlap")
+    func placeNeverOverlaps() throws {
+        let base = layout([
+            widget("a", .wide, col: 0, row: 0),
+            widget("b", .wide, col: 2, row: 0),
+            widget("c", .wide, col: 4, row: 0),
+        ])
+        let moved = try #require(GridPacker.place("c", at: (0, 0), in: base))
+        #expect(overlaps(moved) == false)
+        #expect(moved.widgets.count == 3)
+    }
+
+    @Test("an arbitrary span packs without overlapping")
+    func oddSpansPack() {
+        let odd = layout(
+            [
+                widget("a", WidgetSize(cols: 3, rows: 1), col: 0, row: 0),
+                widget("b", WidgetSize(cols: 3, rows: 1), col: 3, row: 0),
+                widget("c", WidgetSize(cols: 5, rows: 1), col: 0, row: 1),
+            ],
+            rows: 2)
+        #expect(overlaps(GridPacker.repack(odd)) == false)
+    }
+}

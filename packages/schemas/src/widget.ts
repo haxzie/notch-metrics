@@ -15,11 +15,24 @@ export type ChartKind = z.infer<typeof ChartKind>;
  * each — which is the layout the design calls for and the one a headline
  * figure like "$55,678" actually fits in.
  *
- * A closed enum rather than free integers so the packer has a finite set of
- * shapes to reason about and a resize can snap rather than clamp.
+ * `"<cols>x<rows>"`, any span that fits the grid.
+ *
+ * This used to be a closed enum of four presets, which is why resizing a
+ * widget was a button that cycled through them — there was nothing else it
+ * could do. Dragging a handle needs every size in between to exist. The
+ * encoding is unchanged, so an old `layout.json` or a `PUT /v1/widgets` from
+ * a previous build still parses; only the accepted set is wider.
  */
-export const WidgetSize = z.enum(["1x1", "2x1", "2x2", "6x2"]);
+export const WidgetSize = z.string().regex(/^[1-6]x[1-4]$/, "A widget size looks like 2x1.");
 export type WidgetSize = z.infer<typeof WidgetSize>;
+
+/** The presets the UI offers in one click. Every span is reachable by drag. */
+export const WIDGET_SIZE_PRESETS = ["1x1", "2x1", "2x2", "6x2"] as const;
+
+export function widgetSizeCells(size: WidgetSize): { cols: number; rows: number } {
+  const [cols, rows] = size.split("x").map(Number);
+  return { cols: cols ?? 2, rows: rows ?? 1 };
+}
 
 export const GRID_COLUMNS = 6;
 
@@ -33,13 +46,6 @@ export const GRID_COLUMNS = 6;
 export const GRID_DEFAULT_ROWS = 2;
 export const GRID_MIN_ROWS = 1;
 export const GRID_MAX_ROWS = 4;
-
-export const WIDGET_SIZE_CELLS: Record<WidgetSize, { cols: number; rows: number }> = {
-  "1x1": { cols: 1, rows: 1 },
-  "2x1": { cols: 2, rows: 1 },
-  "2x2": { cols: 2, rows: 2 },
-  "6x2": { cols: 6, rows: 2 },
-};
 
 /**
  * Grid of tiles, or a list of rows grouped by app.

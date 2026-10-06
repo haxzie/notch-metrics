@@ -141,16 +141,11 @@ public struct NotchContentView: View {
             Color.clear.frame(width: geometry.hasNotch ? geometry.notchRect.width : 0)
             Spacer(minLength: 0)
 
-            if model.isEditing {
-                Text(
-                    model.displayed.display == .grid
-                        ? "Drag to move · click the corner to resize"
-                        : "Hover a row to remove it"
-                )
-                .font(.system(size: 10))
-                .foregroundStyle(NotchTheme.tertiaryText)
-                .transition(.opacity)
-            } else if hiddenCount > 0 {
+            // No edit-mode hint here. The header's right half sits under the
+            // camera housing on a notched display, so the text was half
+            // hidden on exactly the machines this app is for — and the
+            // selection outline and handles say what to do without words.
+            if hiddenCount > 0 {
                 // The grid ran out of room. Saying so — and offering the view
                 // that has room — beats silently showing fewer numbers than
                 // the user added.
@@ -337,6 +332,7 @@ public struct NotchWidgetCanvas: View {
     /// restarts the displacement animation ~120 times a second, which is the
     /// other half of the jitter.
     @State private var lastCell: GridCell?
+    @State private var selectedID: String?
 
     public init(
         model: NotchLayoutModel,
@@ -351,12 +347,29 @@ public struct NotchWidgetCanvas: View {
     public var body: some View {
         GeometryReader { proxy in
             let grid = GridGeometry(available: proxy.size, rows: model.displayed.rows)
-            let layout = model.displayed
+            let layout = model.displayedWithResize
 
             ZStack(alignment: .topLeading) {
                 if model.isEditing {
-                    DottedGrid(cellSize: grid.cellSize, spacing: grid.spacing)
-                        .frame(width: grid.contentSize.width, height: grid.contentSize.height)
+                    // A darker surface behind the tiles, so edit mode reads as
+                    // a different place rather than the same panel with specks
+                    // on it. Inset outwards so the dots run past the tiles
+                    // rather than stopping flush against the outermost one.
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.black.opacity(0.28))
+                        .overlay(
+                            DottedGrid(pitch: 11, opacity: 0.1)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        )
+                        .frame(
+                            width: grid.contentSize.width + 16,
+                            height: grid.contentSize.height + 16)
+                        .offset(x: -8, y: -8)
+                        .transition(.opacity)
                 }
 
                 // A notch with nothing in it has to say so. There used to be
@@ -389,6 +402,24 @@ public struct NotchWidgetCanvas: View {
                         isEditing: model.isEditing
                     )
                     .frame(width: frame.width, height: frame.height)
+                    // Inside the animation below, deliberately. Applied after
+                    // `.animation` the outline is outside its scope, so it
+                    // jumps to the destination frame while the tile is still
+                    // gliding there — selection and tile visibly out of step
+                    // for the length of every move.
+                    .overlay {
+                        if model.isEditing, selectedID == widget.id {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(NotchTheme.editHighlight, lineWidth: 1.5)
+                                ResizeHandles(
+                                    onChanged: { anchor, point in
+                                        resize(widget, anchor: anchor, to: point, grid: grid)
+                                    },
+                                    onEnded: { model.endResize(commit: true) })
+                            }
+                        }
+                    }
                     .offset(x: x, y: y)
                     .scaleEffect(isDragging ? 1.04 : 1)
                     .shadow(color: .black.opacity(isDragging ? 0.4 : 0), radius: 12, y: 4)
@@ -398,8 +429,9 @@ public struct NotchWidgetCanvas: View {
                     // layout animation, or it lags behind the cursor by the
                     // spring's duration.
                     .animation(isDragging ? nil : .snappy(duration: 0.2), value: frame)
-                    .overlay(alignment: .bottomTrailing) {
-                        if model.isEditing { resizeHandle(for: widget) }
+                    .onTapGesture {
+                        guard model.isEditing else { return }
+                        selectedID = selectedID == widget.id ? nil : widget.id
                     }
                     .gesture(dragGesture(for: widget, grid: grid, frame: frame))
                     .simultaneousGesture(
@@ -425,6 +457,33 @@ public struct NotchWidgetCanvas: View {
 
     static func canvasHeight(rows: Int) -> CGFloat {
         CGFloat(rows) * rowHeight + CGFloat(max(0, rows - 1)) * rowSpacing
+    }
+
+    /// Turns a handle drag into a target rectangle in grid cells.
+    ///
+    /// The opposite edge is the anchor and never moves, which is what makes a
+    /// resize aimable: dragging the left handle changes the left edge only,
+    /// and the right edge stays exactly where the eye expects it.
+    private func resize(
+        _ widget: NotchWidget, anchor: ResizeAnchor, to point: CGPoint, grid: GridGeometry
+    ) {
+        if model.resizingID != widget.id { model.beginResize(widget.id) }
+
+        let current = model.displayedWithResize.widgets.first { $0.id == widget.id } ?? widget
+        let cell = grid.cellIndex(at: point)
+
+        var left = current.col
+        var top = current.row
+        var right = current.col + current.size.cols - 1
+        var bottom = current.row + current.size.rows - 1
+
+        if anchor.movesLeading { left = min(cell.col, right) }
+        if anchor.movesTrailing { right = max(cell.col, left) }
+        if anchor.movesTop { top = min(cell.row, bottom) }
+        if anchor.movesBottom { bottom = max(cell.row, top) }
+
+        model.resizeMoved(
+            to: (col: left, row: top, cols: right - left + 1, rows: bottom - top + 1))
     }
 
     private func dragGesture(
@@ -466,26 +525,6 @@ public struct NotchWidgetCanvas: View {
             }
     }
 
-    private func resizeHandle(for widget: NotchWidget) -> some View {
-        Button {
-            if let next = model.nextSize(for: widget.id, growing: true) {
-                model.resize(widget.id, to: next)
-            } else if let smaller = model.nextSize(for: widget.id, growing: false) {
-                // Wraps back to the smallest that fits, so the handle always
-                // does something — a control that is sometimes inert reads as
-                // broken rather than as "no room".
-                model.resize(widget.id, to: smaller)
-            }
-        } label: {
-            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                .font(.system(size: 7, weight: .bold))
-                .padding(3)
-                .background(Circle().fill(Color.white.opacity(0.15)))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(NotchTheme.secondaryText)
-        .padding(3)
-    }
 }
 
 
@@ -504,5 +543,69 @@ private struct EmptyNotch: View {
                 .foregroundStyle(NotchTheme.tertiaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Which edge or corner a resize handle drags.
+enum ResizeAnchor: CaseIterable, Hashable {
+    case topLeading, top, topTrailing
+    case leading, trailing
+    case bottomLeading, bottom, bottomTrailing
+
+    var movesLeading: Bool { self == .topLeading || self == .leading || self == .bottomLeading }
+    var movesTrailing: Bool { self == .topTrailing || self == .trailing || self == .bottomTrailing }
+    var movesTop: Bool { self == .topLeading || self == .top || self == .topTrailing }
+    var movesBottom: Bool { self == .bottomLeading || self == .bottom || self == .bottomTrailing }
+
+    var alignment: Alignment {
+        switch self {
+        case .topLeading: .topLeading
+        case .top: .top
+        case .topTrailing: .topTrailing
+        case .leading: .leading
+        case .trailing: .trailing
+        case .bottomLeading: .bottomLeading
+        case .bottom: .bottom
+        case .bottomTrailing: .bottomTrailing
+        }
+    }
+
+    var cursor: NSCursor {
+        switch self {
+        case .leading, .trailing: .resizeLeftRight
+        case .top, .bottom: .resizeUpDown
+        default: .crosshair
+        }
+    }
+}
+
+/// The eight grab points on a selected tile.
+struct ResizeHandles: View {
+    let onChanged: (ResizeAnchor, CGPoint) -> Void
+    let onEnded: () -> Void
+
+    private let size: CGFloat = 9
+
+    var body: some View {
+        ForEach(ResizeAnchor.allCases, id: \.self) { anchor in
+            Circle()
+                .fill(Color.white)
+                .overlay(Circle().strokeBorder(NotchTheme.editHighlight, lineWidth: 1.5))
+                .frame(width: size, height: size)
+                .shadow(color: .black.opacity(0.35), radius: 2)
+                // Half outside the tile, so the handle straddles the edge it
+                // controls rather than covering the content inside it.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor.alignment)
+                .padding(-size / 2)
+                .contentShape(Rectangle().inset(by: -4))
+                .onHover { inside in
+                    if inside { anchor.cursor.push() } else { NSCursor.pop() }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 1, coordinateSpace: .named("notch-grid"))
+                        .onChanged { onChanged(anchor, $0.location) }
+                        .onEnded { _ in onEnded() }
+                )
+        }
     }
 }

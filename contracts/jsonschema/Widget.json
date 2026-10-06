@@ -106,12 +106,7 @@
     "size": {
       "default": "2x1",
       "type": "string",
-      "enum": [
-        "1x1",
-        "2x1",
-        "2x2",
-        "6x2"
-      ]
+      "pattern": "^[1-6]x[1-4]$"
     },
     "col": {
       "type": "integer",

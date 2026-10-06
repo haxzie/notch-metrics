@@ -50,6 +50,21 @@ public struct GridGeometry: Equatable, Sendable {
     /// Rounded rather than floored, so a tile dropped slightly past the midline
     /// of a cell snaps forward — which is what the eye expects, and what
     /// flooring gets subtly wrong on every drag.
+    /// The cell a point is *inside*, floored and clamped.
+    ///
+    /// Distinct from `gridPoint`, which rounds because a dragged tile should
+    /// snap forward past the midline. A resize handle wants the cell the
+    /// pointer is actually over, inclusive — rounding there makes the last
+    /// column unreachable and the first one sticky.
+    public func cellIndex(at location: CGPoint) -> (col: Int, row: Int) {
+        let col = Int(((location.x - origin.x) / (cellSize.width + spacing)).rounded(.down))
+        let row = Int(((location.y - origin.y) / (cellSize.height + spacing)).rounded(.down))
+        return (
+            min(max(0, col), NotchLayout.columns - 1),
+            min(max(0, row), rows - 1)
+        )
+    }
+
     public func gridPoint(at location: CGPoint) -> (col: Int, row: Int) {
         let col = Int(((location.x - origin.x) / (cellSize.width + spacing)).rounded())
         let row = Int(((location.y - origin.y) / (cellSize.height + spacing)).rounded())
@@ -174,15 +189,84 @@ public final class NotchLayoutModel {
         persist(layout)
     }
 
-    /// The next larger size that actually fits, for the resize handle to snap to.
-    public func nextSize(for id: String, growing: Bool) -> WidgetSize? {
-        guard let widget = layout.widgets.first(where: { $0.id == id }) else { return nil }
-        let order: [WidgetSize] = [.small, .wide, .square, .hero]
-        guard let index = order.firstIndex(of: widget.size) else { return nil }
-        let candidates = growing
-            ? Array(order[(index + 1)...])
-            : Array(order[..<index].reversed())
-        return candidates.first { GridPacker.canResize(id, to: $0, in: layout) }
+    // MARK: - Resizing by handle
+
+    /// The widget being resized, and what it looked like before.
+    public private(set) var resizingID: String?
+    private var resizeOriginal: (col: Int, row: Int, size: WidgetSize)?
+
+    public private(set) var resizePreview: NotchLayout?
+
+    /// What the grid should draw: the in-progress resize, then the in-progress
+    /// drag, then the committed layout.
+    public var displayedWithResize: NotchLayout { resizePreview ?? displayed }
+
+    public func beginResize(_ id: String) {
+        guard let widget = layout.widgets.first(where: { $0.id == id }) else { return }
+        resizingID = id
+        resizeOriginal = (widget.col, widget.row, widget.size)
+        resizePreview = layout
+    }
+
+    /// Applies a resize expressed in grid cells.
+    ///
+    /// Takes the whole target rectangle rather than a delta, because dragging
+    /// a top or left handle moves the origin as well as the span, and
+    /// expressing that as two separate mutations lets the tile flicker
+    /// through an invalid intermediate.
+    ///
+    /// A target that would overlap or leave the grid is ignored rather than
+    /// clamped to something else: the tile simply stops at the last legal
+    /// size, which is how every resize in every other app behaves.
+    @discardableResult
+    public func resizeMoved(to rect: (col: Int, row: Int, cols: Int, rows: Int)) -> Bool {
+        guard let id = resizingID,
+              let original = resizeOriginal,
+              let base = resizePreview ?? Optional(layout)
+        else { return false }
+
+        let size = WidgetSize(cols: rect.cols, rows: rect.rows)
+        guard rect.col >= 0, rect.row >= 0,
+              rect.col + size.cols <= NotchLayout.columns,
+              rect.row + size.rows <= base.rows
+        else { return false }
+
+        var candidate = layout
+        guard let index = candidate.widgets.firstIndex(where: { $0.id == id }) else { return false }
+        candidate.widgets[index].size = size
+        candidate.widgets[index].col = rect.col
+        candidate.widgets[index].row = rect.row
+
+        // Everything else has to still fit without being moved. A resize that
+        // shoves its neighbours around is impossible to aim, which is most of
+        // why the old one felt like it was fighting back.
+        let others = candidate.widgets.filter { $0.id != id && $0.visible }
+        var taken: Set<GridCell> = []
+        for widget in others {
+            guard let cells = GridPacker.cells(
+                for: widget, at: (widget.col, widget.row), rows: candidate.rows)
+            else { return false }
+            taken.formUnion(cells)
+        }
+        guard let wanted = GridPacker.cells(
+            for: candidate.widgets[index], at: (rect.col, rect.row), rows: candidate.rows),
+            taken.isDisjoint(with: Set(wanted))
+        else { return false }
+
+        _ = original
+        resizePreview = GridPacker.normalised(candidate)
+        return true
+    }
+
+    public func endResize(commit: Bool) {
+        defer {
+            resizingID = nil
+            resizeOriginal = nil
+            resizePreview = nil
+        }
+        guard commit, let preview = resizePreview else { return }
+        layout = preview
+        persist(layout)
     }
 
     public func remove(_ id: String) {
