@@ -12,6 +12,18 @@ function LoginForm() {
   const raw = params.get("next") ?? "/app";
   const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/app";
 
+  /**
+   * Absolute, and deliberately so.
+   *
+   * Better Auth resolves a relative `callbackURL` against *its own* base URL,
+   * which is the API — so handing it "/desktop/auth?challenge=…" sent people
+   * to api…/desktop/auth, a route only the website has, and the Worker
+   * answered with its own "No such endpoint" JSON. The path is still
+   * validated as same-origin above; this only names the origin.
+   */
+  const callbackURL =
+    typeof window === "undefined" ? next : new URL(next, window.location.origin).toString();
+
   if (!isPending && session) {
     if (typeof window !== "undefined") window.location.replace(next);
     return <p className="text-white/60">Taking you back…</p>;
@@ -25,7 +37,7 @@ function LoginForm() {
       </p>
       <button
         type="button"
-        onClick={() => void signIn.social({ provider: "google", callbackURL: next })}
+        onClick={() => void signIn.social({ provider: "google", callbackURL })}
         className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"
       >
         <GoogleMark />
