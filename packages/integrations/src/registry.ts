@@ -65,13 +65,33 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
 };
 
 /**
- * The ETag for `GET /v1/providers`, and the thing clients compare.
+ * A fingerprint of every manifest, used as the ETag for the catalogue routes.
  *
- * Bump it in the same commit that changes any manifest. A stale value means an
- * app that has cached the old list never learns about the new provider, which
- * is a silent failure rather than a loud one.
+ * Derived rather than hand-maintained. It used to be a date string with a
+ * comment saying "bump it in the same commit that changes any manifest", and
+ * that is exactly what went wrong: two connectors were promoted from
+ * `coming_soon` to `stable` without touching it, so every client that
+ * revalidated got a 304 and kept showing them as unavailable. Forever — a
+ * cache that never expires because the server keeps agreeing with it.
+ *
+ * Content-derived means the only way to get a stale ETag is to change
+ * nothing.
  */
-export const REGISTRY_VERSION = "2026-10-06.1";
+export function fingerprintManifests(all: ProviderManifest[]): string {
+  // FNV-1a. Not a security hash — this only has to change when the bytes do,
+  // and it has to run on every catalogue request inside a Worker.
+  const text = JSON.stringify(all);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36).padStart(7, "0");
+}
+
+export const REGISTRY_VERSION: string = fingerprintManifests(
+  Object.values(REGISTRY).map((adapter) => adapter.manifest),
+);
 
 export function getAdapter(id: string): ProviderAdapter {
   const adapter = (REGISTRY as Record<string, ProviderAdapter | undefined>)[id];

@@ -12,7 +12,9 @@
     "prefix": "",
     "suffix": ""
   },
-  "granularities": ["day"],
+  "granularities": [
+    "day"
+  ],
   "supportsSeries": false,
   "refreshIntervalSeconds": 900,
   "secrets": [
@@ -23,7 +25,9 @@
       "required": true
     }
   ],
-  "allowedHosts": ["api.github.com"],
+  "allowedHosts": [
+    "api.github.com"
+  ],
   "timeoutMs": 8000,
   "entry": "metric.mjs",
   "author": "claude-code",

@@ -98,6 +98,23 @@ public struct AuthCoordinator: Sendable {
         )
     }
 
+    /// The full browser URL to open, challenge and state included.
+    ///
+    /// Owned here rather than assembled by the caller. The Settings pane used
+    /// to open `/desktop/auth` with no query at all, so the page could only
+    /// answer "this link is missing information" — and nothing about the
+    /// call site looked wrong. A caller that cannot forget the parameters
+    /// cannot reintroduce that.
+    public func signInURL(appBase: URL) throws -> URL {
+        let (query, _) = try begin()
+        var components = URLComponents(
+            url: appBase.appendingPathComponent("desktop/auth"),
+            resolvingAgainstBaseURL: false)
+        components?.queryItems = query
+        guard let url = components?.url else { throw AuthError.noPendingSignIn }
+        return url
+    }
+
     /// Validates `notchmetrics://auth/callback?code=…&state=…`.
     public func complete(callback url: URL) throws -> (code: String, verifier: String) {
         guard let data = try? Data(contentsOf: pendingURL),

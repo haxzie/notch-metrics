@@ -1,3 +1,4 @@
+import MetricsAPI
 import MetricsCore
 import NotchUI
 import PluginRuntime
@@ -238,6 +239,7 @@ private struct PluginRow: View {
 
 struct AccountPane: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var signInError: String?
 
     var body: some View {
         Form {
@@ -250,15 +252,36 @@ struct AccountPane: View {
                     }
                 } else {
                     LabeledContent("Status", value: "Signed out")
-                    Button("Sign in…") {
-                        NSWorkspace.shared.open(
-                            AppEnvironment.appURL.appendingPathComponent("desktop/auth"))
+                    Button("Sign in…") { beginSignIn() }
+                        .buttonStyle(.borderedProminent)
+                    if let signInError {
+                        Text(signInError)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Mints the PKCE challenge *before* opening the browser.
+    ///
+    /// Opening `/desktop/auth` bare is what this used to do, and the page can
+    /// only answer "this link is missing information" — the challenge and
+    /// state are the whole request. Nothing about the button looked wrong,
+    /// which is why it survived.
+    private func beginSignIn() {
+        do {
+            let url = try AuthCoordinator().signInURL(appBase: AppEnvironment.appURL)
+            signInError = nil
+            NSWorkspace.shared.open(url)
+        } catch {
+            // Writing the pending challenge is what fails here, and silently
+            // opening the browser anyway would strand the user on the same
+            // unhelpful page.
+            signInError = "Could not start sign-in. Check that Notch Metrics can write to Application Support."
+        }
     }
 }
 

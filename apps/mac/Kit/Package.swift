@@ -29,6 +29,7 @@ let package = Package(
 
         .testTarget(name: "MetricsCoreTests", dependencies: ["MetricsCore"]),
         .testTarget(name: "NotchUITests", dependencies: ["NotchUI"]),
+        .testTarget(name: "MetricsAPITests", dependencies: ["MetricsAPI"]),
         // Decodes the committed contracts/fixtures/*.json. This is what fails,
         // by name, when the Worker's wire shape drifts from these structs.
         //
