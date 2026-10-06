@@ -169,3 +169,100 @@ describe("the connector catalogue", () => {
     expect(response.headers.get("cache-control")).toContain("private");
   });
 });
+
+describe("managing a connection from the desktop app", () => {
+  it("renames and disconnects with a device token", async () => {
+    // The app is where people manage connections; sending them to a browser
+    // to delete one is how a dead credential sits there failing for months.
+    const u = await makeUser();
+    const token = randomToken();
+    await db()
+      .insert(deviceToken)
+      .values({
+        id: id("dev"),
+        userId: u.id,
+        tokenHash: await sha256Base64Url(token),
+        label: "Mac",
+      });
+    const integrationId = id("int");
+    await db().insert(integration).values({
+      id: integrationId,
+      userId: u.id,
+      provider: "stripe",
+      label: "Stripe",
+      credentialCiphertext: "x",
+      credentialIv: "x",
+      credentialWrappedDek: "x",
+      keyVersion: 1,
+      credentialHint: "sk_test_…1234",
+      credentialFingerprint: "fp",
+      enabledMetrics: [],
+      availableMetrics: [],
+    });
+
+    const renamed = await worker.fetch(
+      new Request(`http://localhost:8787/v1/integrations/${integrationId}`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ label: "Stripe — Acme" }),
+      }),
+      env,
+      ctx,
+    );
+    expect(renamed.status).toBe(200);
+    expect((await renamed.json()) as { label: string }).toMatchObject({ label: "Stripe — Acme" });
+
+    const removed = await worker.fetch(
+      new Request(`http://localhost:8787/v1/integrations/${integrationId}`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      env,
+      ctx,
+    );
+    expect(removed.status).toBe(200);
+    expect(await db().select().from(integration)).toHaveLength(0);
+  });
+
+  it("still refuses to replace credentials without a browser session", async () => {
+    // That is the one route taking a raw provider key, and the app never
+    // handles one — the connect-link flow exists so it does not have to.
+    const u = await makeUser();
+    const token = randomToken();
+    await db()
+      .insert(deviceToken)
+      .values({
+        id: id("dev"),
+        userId: u.id,
+        tokenHash: await sha256Base64Url(token),
+        label: "Mac",
+      });
+    const integrationId = id("int");
+    await db().insert(integration).values({
+      id: integrationId,
+      userId: u.id,
+      provider: "stripe",
+      label: "Stripe",
+      credentialCiphertext: "x",
+      credentialIv: "x",
+      credentialWrappedDek: "x",
+      keyVersion: 1,
+      credentialHint: "sk_test_…1234",
+      credentialFingerprint: "fp",
+      enabledMetrics: [],
+      availableMetrics: [],
+    });
+
+    const response = await worker.fetch(
+      new Request(`http://localhost:8787/v1/integrations/${integrationId}`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ credentials: { secret_key: "sk_test_51Abcdefghijklmnop" } }),
+      }),
+      env,
+      ctx,
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json()) as { code: string }).toMatchObject({ code: "SESSION_REQUIRED" });
+  });
+});

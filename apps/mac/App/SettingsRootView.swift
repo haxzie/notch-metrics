@@ -2,14 +2,20 @@ import MetricsCore
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
-    case general, integrations, widgets, customMetrics, account, updates, about
+    case general, connections, apps, widgets, customMetrics, account, updates, about
+
+    /// `notchmetrics://settings/integrations` is in the wild — in the website,
+    /// in the connect flow's return URL — and kept working when the pane was
+    /// renamed to Apps.
+    static let aliases: [String: SettingsPane] = ["integrations": .apps]
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: "General"
-        case .integrations: "Integrations"
+        case .connections: "Connections"
+        case .apps: "Apps"
         case .widgets: "Widgets"
         case .customMetrics: "Custom Metrics"
         case .account: "Account"
@@ -21,7 +27,8 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .general: "gearshape"
-        case .integrations: "square.stack.3d.up"
+        case .connections: "link"
+        case .apps: "square.grid.2x2"
         case .widgets: "rectangle.grid.2x2"
         case .customMetrics: "curlybraces"
         case .account: "person.crop.circle"
@@ -34,7 +41,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     /// are, and the app itself.
     static let sections: [(String?, [SettingsPane])] = [
         (nil, [.general]),
-        ("Data", [.integrations, .widgets, .customMetrics]),
+        ("Data", [.connections, .apps, .widgets, .customMetrics]),
         ("App", [.account, .updates, .about]),
     ]
 }
@@ -79,7 +86,8 @@ struct SettingsRootView: View {
     private var detail: some View {
         switch env.settingsPane {
         case .general: GeneralPane()
-        case .integrations: IntegrationsPane()
+        case .connections: ConnectionsPane()
+        case .apps: AppsPane()
         case .widgets: WidgetsPane()
         case .customMetrics: CustomMetricsPane()
         case .account: AccountPane()

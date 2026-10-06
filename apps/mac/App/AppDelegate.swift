@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // The browser finished a connect flow. Land on Integrations
                 // so the newly connected account is visible rather than
                 // leaving the user to go looking for it.
-                env.settingsPane = .integrations
+                env.settingsPane = .connections
                 openSettings()
             case "settings":
                 // `notchmetrics://settings/integrations` lands on that pane.
@@ -54,7 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // General rather than doing nothing, because a link that
                 // silently no-ops is worse than one that lands nearby.
                 let wanted = url.pathComponents.first { $0 != "/" }
-                if let wanted, let pane = SettingsPane(rawValue: wanted) {
+                if let wanted,
+                   let pane = SettingsPane(rawValue: wanted) ?? SettingsPane.aliases[wanted] {
                     env.settingsPane = pane
                 }
                 openSettings()

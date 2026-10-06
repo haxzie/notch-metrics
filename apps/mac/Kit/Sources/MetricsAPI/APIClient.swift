@@ -57,6 +57,19 @@ public actor APIClient {
         try await send(path: path, method: "POST", query: [], body: body, as: type)
     }
 
+    public func delete<T: Decodable & Sendable>(
+        _ path: String, as type: T.Type
+    ) async throws(APIError) -> T {
+        try await send(
+            path: path, method: "DELETE", query: [], body: Optional<Never>.none, as: type)
+    }
+
+    public func patch<Body: Encodable & Sendable, T: Decodable & Sendable>(
+        _ path: String, body: Body, as type: T.Type
+    ) async throws(APIError) -> T {
+        try await send(path: path, method: "PATCH", query: [], body: body, as: type)
+    }
+
     private func send<Body: Encodable & Sendable, T: Decodable & Sendable>(
         path: String, method: String, query: [URLQueryItem], body: Body?, as _: T.Type,
         isRetry: Bool = false
@@ -160,6 +173,23 @@ extension APIClient {
     public func connectStatus(for connectorId: String) async throws(APIError) -> ConnectStatus {
         try await get("v1/connect/\(connectorId)/status", as: ConnectStatus.self)
     }
+
+    /// The user's connected accounts.
+    public func connections() async throws(APIError) -> [Integration] {
+        try await get("v1/integrations", as: [Integration].self)
+    }
+
+    public func rename(connection id: String, to label: String) async throws(APIError) -> Integration {
+        try await patch("v1/integrations/\(id)", body: ["label": label], as: Integration.self)
+    }
+
+    public func disconnect(_ id: String) async throws(APIError) -> OKResponse {
+        try await delete("v1/integrations/\(id)", as: OKResponse.self)
+    }
+}
+
+public struct OKResponse: Decodable, Sendable {
+    public let ok: Bool
 }
 
 public struct EmptyBody: Encodable, Sendable {

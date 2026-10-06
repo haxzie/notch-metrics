@@ -9,7 +9,7 @@ import SwiftUI
 /// Rendered entirely from `GET /v1/connectors` rather than from anything
 /// compiled in — which is the property that lets a connector ship without a
 /// Mac release.
-struct IntegrationsPane: View {
+struct AppsPane: View {
     @Environment(AppEnvironment.self) private var env
     @State private var model = ConnectorsModel()
 

@@ -156,9 +156,9 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
 
     return {
       // The API exposes no account or business name, so the mode is the only
-      // thing that distinguishes two connections in a list. Saying "live" or
-      // "test" is more use than repeating "Dodo Payments" twice.
-      accountLabel: creds.mode === "test" ? "Dodo Payments (test)" : "Dodo Payments",
+      // thing that distinguishes two connections. The detail only — the
+      // provider's name is added by `connectionName`.
+      accountLabel: creds.mode === "test" ? "Test" : null,
       currency: first?.currency?.toUpperCase() ?? null,
       availableMetrics: available,
     };

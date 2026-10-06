@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { getAdapter } from "@notch/integrations";
+import { connectionName, getAdapter } from "@notch/integrations";
 import { IntegrationCreate, IntegrationUpdate } from "@notch/schemas";
 import { integration as integrationTable } from "@notch/db";
 import { authenticate, rateLimited, sessionOnly, type AppContext } from "../middleware.ts";
@@ -125,6 +125,13 @@ integrations.post("/", sessionOnly, rateLimited({ limit: 20, windowSeconds: 3600
     return c.json({ code: "ALREADY_CONNECTED", message: "That key is already connected." }, 409);
   }
 
+  const existingLabels = (
+    await db
+      .select({ label: integrationTable.label })
+      .from(integrationTable)
+      .where(eq(integrationTable.userId, userId))
+  ).map((r) => r.label);
+
   const rowId = id("int");
   const sealed = await sealCredentials(
     c.env,
@@ -136,7 +143,13 @@ integrations.post("/", sessionOnly, rateLimited({ limit: 20, windowSeconds: 3600
     id: rowId,
     userId,
     provider: body.data.provider,
-    label: body.data.label ?? verified.accountLabel ?? adapter.manifest.name,
+    label:
+      body.data.label ??
+      connectionName({
+        manifest: adapter.manifest,
+        accountLabel: verified.accountLabel,
+        taken: existingLabels,
+      }),
     credentialCiphertext: sealed.ciphertext,
     credentialIv: sealed.iv,
     credentialWrappedDek: sealed.wrappedDek,
@@ -158,7 +171,17 @@ integrations.post("/", sessionOnly, rateLimited({ limit: 20, windowSeconds: 3600
     : c.json({ code: "ERROR", message: "Could not save." }, 500);
 });
 
-integrations.patch("/:id", sessionOnly, async (c) => {
+// Renaming and disconnecting are reachable with a device token, unlike
+// creating. The desktop app is where people manage their connections, and
+// sending them to a browser to delete one is the kind of friction that makes
+// a stale credential sit there failing for months.
+//
+// Creating stays session-only: that is the one route that accepts raw
+// provider credentials, and the app deliberately never handles those — the
+// connect-link flow exists so a native window never asks for a Stripe key.
+// A stolen device token can therefore destroy a connection but never read or
+// create one, and `DELETE /v1/me/devices/:id` revokes it.
+integrations.patch("/:id", async (c) => {
   const row = await owned(c.get("db"), c.get("identity").userId, c.req.param("id"));
   // 404, not 403. A 403 confirms that somebody else's integration id exists.
   if (!row) return c.json({ code: "NOT_FOUND", message: "No such integration." }, 404);
@@ -172,6 +195,15 @@ integrations.patch("/:id", sessionOnly, async (c) => {
   if (body.data.disabled !== undefined) patch.status = body.data.disabled ? "disabled" : "ok";
 
   if (body.data.credentials) {
+    // The one part of this route that still needs a browser session.
+    // Replacing credentials is creating a connection by another name, and
+    // the app has no business carrying a provider key.
+    if (c.get("identity").kind !== "session") {
+      return c.json(
+        { code: "SESSION_REQUIRED", message: "Replacing credentials must be done on the web." },
+        403,
+      );
+    }
     const adapter = getAdapter(row.provider);
     const credentials = adapter.credentialSchema.safeParse(body.data.credentials);
     if (!credentials.success) {
@@ -203,7 +235,7 @@ integrations.patch("/:id", sessionOnly, async (c) => {
   return updated ? c.json(toPublic(updated)) : c.json({ code: "ERROR", message: "Gone." }, 500);
 });
 
-integrations.delete("/:id", sessionOnly, async (c) => {
+integrations.delete("/:id", async (c) => {
   const row = await owned(c.get("db"), c.get("identity").userId, c.req.param("id"));
   if (!row) return c.json({ code: "NOT_FOUND", message: "No such integration." }, 404);
   await c.get("db").delete(integrationTable).where(eq(integrationTable.id, row.id));

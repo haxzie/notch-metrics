@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, isNull } from "drizzle-orm";
-import { getAdapter } from "@notch/integrations";
+import { connectionName, getAdapter } from "@notch/integrations";
 import { connectLink, integration as integrationTable } from "@notch/db";
 import { type AppContext, rateLimitedByIp } from "../middleware.ts";
 import { fingerprint, sealCredentials } from "../lib/crypto.ts";
@@ -145,11 +145,25 @@ link.post("/:token/submit", rateLimitedByIp(20, 600), async (c) => {
     );
   }
 
+  // Named from what verify() learned, disambiguated against this user's
+  // existing connections — two Stripe accounts with no business name set
+  // would otherwise both read "Stripe".
+  const existingLabels = (
+    await db
+      .select({ label: integrationTable.label })
+      .from(integrationTable)
+      .where(eq(integrationTable.userId, row.userId))
+  ).map((r) => r.label);
+
   await db.insert(integrationTable).values({
     id: integrationId,
     userId: row.userId,
     provider: row.connectorId,
-    label: verified.accountLabel ?? adapter.manifest.name,
+    label: connectionName({
+      manifest: adapter.manifest,
+      accountLabel: verified.accountLabel,
+      taken: existingLabels,
+    }),
     credentialCiphertext: sealed.ciphertext,
     credentialIv: sealed.iv,
     credentialWrappedDek: sealed.wrappedDek,
