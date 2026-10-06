@@ -8,8 +8,21 @@
 # `openssl rand -base64 32`
 BETTER_AUTH_SECRET=
 
-# Redirect URI to register: http://localhost:8787/api/auth/callback/google
-# Leave both empty to run without Google sign-in.
+# Authorised redirect URIs to register on the Google OAuth client:
+#
+#   http://localhost:8787/api/auth/callback/google
+#   https://api.notchmetrics.com/api/auth/callback/google
+#
+# Both point at the *API*, not the website: Better Auth derives the callback
+# from API_URL + basePath, so a redirect URI built from the site's origin is
+# rejected by Google as a mismatch. The port is why wrangler.jsonc pins
+# dev.port to 8787 — a wrangler that walked to 8788 sends Google's callback
+# to whatever else is holding 8787.
+#
+# No "Authorised JavaScript origin" is needed; the exchange is server-side.
+#
+# Leave both empty to run without Google sign-in — email sign-in is enabled
+# automatically when API_URL is not production.
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
