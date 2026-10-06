@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://amplitude.com/docs/apis/authentication",
   iconPath: "/providers/amplitude.svg",
   accentColor: "#1E61F0",
+  keywords: ["product analytics", "events", "behaviour", "cohorts"],
   authMode: "api_key",
   fields: [
     {

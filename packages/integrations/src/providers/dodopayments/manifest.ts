@@ -8,6 +8,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://app.dodopayments.com/developer/api-keys",
   iconPath: "/providers/dodopayments.svg",
   accentColor: "#111111",
+  keywords: ["payments", "billing", "merchant of record", "subscriptions", "dodo"],
   authMode: "api_key",
   fields: [
     {

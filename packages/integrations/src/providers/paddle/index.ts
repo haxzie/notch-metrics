@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://vendors.paddle.com/authentication-v2",
   iconPath: "/providers/paddle.svg",
   accentColor: "#FDDD35",
+  keywords: ["payments", "billing", "merchant of record", "subscriptions"],
   authMode: "api_key",
   fields: [
     {

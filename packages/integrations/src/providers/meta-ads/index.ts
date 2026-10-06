@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://developers.facebook.com/docs/marketing-apis",
   iconPath: "/providers/meta-ads.svg",
   accentColor: "#0866FF",
+  keywords: ["advertising", "facebook", "instagram", "campaigns", "social"],
   authMode: "oauth2",
   oauth: {
     scopeSummary: ["Read your ad accounts and their performance"],

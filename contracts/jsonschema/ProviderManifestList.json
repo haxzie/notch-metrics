@@ -59,6 +59,12 @@
             "type": "string",
             "pattern": "^#[0-9a-fA-F]{6}$"
           },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "authMode": {
             "type": "string",
             "enum": [
@@ -237,6 +243,12 @@
                 },
                 "supportsCompare": {
                   "type": "boolean"
+                },
+                "keywords": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "help": {
                   "type": "string"

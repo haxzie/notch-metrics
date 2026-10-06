@@ -13,6 +13,7 @@ export const manifest: ProviderManifest = {
   // The brand black. The catalogue renders the mark on a light tile rather
   // than white on this, which is how GitHub itself shows the logo.
   accentColor: "#181717",
+  keywords: ["repo", "repository", "open source", "code", "issues"],
   authMode: "api_key",
   fields: [
     {

@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://developers.google.com/google-ads/api/docs/start",
   iconPath: "/providers/google-ads.svg",
   accentColor: "#4285F4",
+  keywords: ["advertising", "ppc", "adwords", "google", "campaigns"],
   authMode: "oauth2",
   oauth: {
     scopeSummary: ["Read your Google Ads campaigns and performance"],

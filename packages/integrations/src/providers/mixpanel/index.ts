@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://developer.mixpanel.com/reference/service-accounts",
   iconPath: "/providers/mixpanel.svg",
   accentColor: "#7856FF",
+  keywords: ["product analytics", "events", "funnels"],
   authMode: "api_key",
   fields: [
     {

@@ -23,9 +23,6 @@ const CACHE_CONTROL = "public, max-age=300, s-maxage=3600";
 
 connectors.get("/", async (c) => {
   const etag = `W/"${REGISTRY_VERSION}"`;
-  if (c.req.header("if-none-match") === etag) {
-    return c.body(null, 304, { etag, "cache-control": CACHE_CONTROL });
-  }
 
   // Connected accounts are folded in when the caller is signed in, so the app
   // can render "Connected · Acme Inc" against a row without a second request
@@ -34,6 +31,18 @@ connectors.get("/", async (c) => {
   // Resolved by hand rather than through `authenticate`, because this route
   // has to answer for anonymous callers too.
   const identity = await identityFromBearer(c.get("db"), c.req.header("authorization") ?? null);
+
+  // Revalidation is answered only for anonymous callers, and deliberately
+  // after identity is known.
+  //
+  // The ETag is a fingerprint of the manifests, which are identical for
+  // everyone — so a signed-in client holding a cached *anonymous* response
+  // would revalidate, be told 304, and keep a body with no connections in it.
+  // Permanently: the manifests do not change when somebody connects an
+  // account. Every app read "not connected" however many were.
+  if (!identity && c.req.header("if-none-match") === etag) {
+    return c.body(null, 304, { etag, "cache-control": CACHE_CONTROL });
+  }
 
   const connected = new Map<string, { id: string; label: string; status: string }[]>();
   if (identity) {
@@ -46,7 +55,7 @@ connectors.get("/", async (c) => {
       const list = connected.get(row.provider) ?? [];
       list.push({
         id: row.id,
-        label: row.accountLabel ?? row.label,
+        label: row.label,
         status: row.status,
       });
       connected.set(row.provider, list);

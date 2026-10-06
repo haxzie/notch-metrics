@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://posthog.com/docs/api#personal-api-keys",
   iconPath: "/providers/posthog.svg",
   accentColor: "#F54E00",
+  keywords: ["product analytics", "events", "funnels", "sessions"],
   authMode: "api_key",
   fields: [
     {

@@ -50,6 +50,10 @@ public struct ProviderManifest: Codable, Sendable, Identifiable, Hashable {
     public let docsUrl: String
     public let iconPath: String
     public let accentColor: String
+    /// Search synonyms. Optional on the wire: a non-optional array would
+    /// make an older server's response fail to decode entirely, which is the
+    /// failure this codebase goes out of its way to avoid.
+    public let keywords: [String]?
     public let authMode: String
     /// Present only when `authMode` is "oauth2".
     public let oauth: ConnectorOAuth?
@@ -108,6 +112,10 @@ public struct MetricDescriptor: Codable, Sendable, Hashable, Identifiable {
     public let granularities: [Granularity]
     public let supportsSeries: Bool
     public let supportsCompare: Bool
+    /// Search synonyms. Optional on the wire: a non-optional array would
+    /// make an older server's response fail to decode entirely, which is the
+    /// failure this codebase goes out of its way to avoid.
+    public let keywords: [String]?
     public let help: String?
     /// Always present. "MRR" is somebody's definition and this is ours.
     public let methodology: String
@@ -195,6 +203,10 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
     public let tagline: String
     public let docsUrl: String
     public let accentColor: String
+    /// Search synonyms. Optional on the wire: a non-optional array would
+    /// make an older server's response fail to decode entirely, which is the
+    /// failure this codebase goes out of its way to avoid.
+    public let keywords: [String]?
     public let authMode: String
     public let oauth: ConnectorOAuth?
     public let fields: [AuthField]

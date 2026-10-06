@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://ahrefs.com/api/documentation",
   iconPath: "/providers/ahrefs.svg",
   accentColor: "#FF8C00",
+  keywords: ["seo", "backlinks", "keywords", "domain rating"],
   authMode: "api_key",
   fields: [
     {

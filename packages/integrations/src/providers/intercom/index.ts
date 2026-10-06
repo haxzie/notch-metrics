@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://developers.intercom.com/docs/build-an-integration/learn-more/authentication",
   iconPath: "/providers/intercom.svg",
   accentColor: "#1F8DED",
+  keywords: ["support", "chat", "inbox", "conversations", "helpdesk"],
   authMode: "oauth2",
   oauth: {
     scopeSummary: ["Read your conversations and contacts"],

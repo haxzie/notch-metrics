@@ -174,6 +174,26 @@ extension APIClient {
         try await get("v1/connect/\(connectorId)/status", as: ConnectStatus.self)
     }
 
+    /// One metric, for the widget preview.
+    ///
+    /// The real number through the real adapter — a preview built from
+    /// invented data cannot show that a connection returns nothing, or that
+    /// the account is in a different currency, which is exactly what somebody
+    /// is checking before they commit a tile to the notch.
+    public func metric(
+        integrationId: String, metric: String, granularity: String, range: String
+    ) async throws(APIError) -> MetricResult {
+        try await get(
+            "v1/metrics/query",
+            query: [
+                URLQueryItem(name: "integrationId", value: integrationId),
+                URLQueryItem(name: "metric", value: metric),
+                URLQueryItem(name: "granularity", value: granularity),
+                URLQueryItem(name: "range", value: range),
+            ],
+            as: MetricResult.self)
+    }
+
     /// The user's connected accounts.
     public func connections() async throws(APIError) -> [Integration] {
         try await get("v1/integrations", as: [Integration].self)

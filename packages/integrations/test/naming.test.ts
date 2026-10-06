@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { connectionName } from "../src/naming.ts";
-import { getAdapter } from "../src/registry.ts";
+import { getAdapter, manifests } from "../src/registry.ts";
 
 const stripe = getAdapter("stripe").manifest;
 const dodo = getAdapter("dodopayments").manifest;
@@ -47,6 +47,32 @@ describe("naming a new connection", () => {
       const name = connectionName({ manifest: getAdapter(id).manifest });
       expect(name.length).toBeGreaterThan(0);
       expect(name).not.toContain("—");
+    }
+  });
+});
+
+describe("search keywords", () => {
+  it("gives every metric the shared synonyms for its id", () => {
+    // Written once centrally, not repeated in seventeen manifests where they
+    // would drift.
+    const stripe = getAdapter("stripe").manifest;
+    const mrr = stripe.metrics.find((m) => m.id === "mrr");
+    expect(mrr?.keywords).toContain("recurring");
+    expect(mrr?.keywords).toContain("subscription");
+  });
+
+  it("gives every app its own keywords", () => {
+    for (const manifest of manifests()) {
+      expect(manifest.keywords?.length ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it("never repeats a keyword on a metric", () => {
+    for (const manifest of manifests()) {
+      for (const metric of manifest.metrics) {
+        const words = metric.keywords ?? [];
+        expect(new Set(words).size).toBe(words.length);
+      }
     }
   });
 });

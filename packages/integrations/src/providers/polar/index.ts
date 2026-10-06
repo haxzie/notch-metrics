@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://polar.sh/settings",
   iconPath: "/providers/polar.svg",
   accentColor: "#0062FF",
+  keywords: ["payments", "billing", "open source", "storefront"],
   authMode: "api_key",
   fields: [
     {

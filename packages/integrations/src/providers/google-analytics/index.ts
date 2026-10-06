@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://analytics.google.com/analytics/web/",
   iconPath: "/providers/google-analytics.svg",
   accentColor: "#E8710A",
+  keywords: ["ga4", "web analytics", "traffic", "google", "visitors"],
   // The only provider here that cannot work with a pasted key: GA4's Data API
   // is OAuth-only, so connecting one needs the authorisation flow that
   // `authMode` exists to signal. The settings UI branches on this.

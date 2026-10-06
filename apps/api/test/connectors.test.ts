@@ -150,7 +150,10 @@ describe("the connector catalogue", () => {
       body.categories.flatMap((c) => c.connectors).find((x) => x.id === "stripe"),
     );
     expect(stripe.connections).toHaveLength(1);
-    expect(scalar(stripe.connections[0]).label).toBe("Acme Inc");
+    // The connection's *name*, not the raw account detail that went into it.
+    // Showing accountLabel here made the catalogue disagree with the
+    // Connections pane about what the same connection is called.
+    expect(scalar(stripe.connections[0]).label).toBe("Acme");
   });
 
   it("does not cache a signed-in response publicly", async () => {
@@ -264,5 +267,70 @@ describe("managing a connection from the desktop app", () => {
     );
     expect(response.status).toBe(403);
     expect((await response.json()) as { code: string }).toMatchObject({ code: "SESSION_REQUIRED" });
+  });
+});
+
+describe("catalogue caching", () => {
+  it("does not answer 304 to a signed-in caller holding the anonymous body", async () => {
+    // The ETag fingerprints the manifests, which are the same for everybody.
+    // Answering 304 before resolving identity meant a signed-in app that had
+    // cached the anonymous response kept it forever — every app reading
+    // "not connected" however many were, because connecting an account does
+    // not change a manifest.
+    const u = await makeUser();
+    const token = randomToken();
+    await db()
+      .insert(deviceToken)
+      .values({
+        id: id("dev"),
+        userId: u.id,
+        tokenHash: await sha256Base64Url(token),
+        label: "Mac",
+      });
+    await db()
+      .insert(integration)
+      .values({
+        id: id("int"),
+        userId: u.id,
+        provider: "stripe",
+        label: "Stripe — Acme",
+        credentialCiphertext: "x",
+        credentialIv: "x",
+        credentialWrappedDek: "x",
+        keyVersion: 1,
+        credentialHint: "sk_test_…1234",
+        credentialFingerprint: "fp",
+        enabledMetrics: [],
+        availableMetrics: [],
+      });
+
+    const anonymous = await get("/v1/connectors");
+    const etag = scalar(anonymous.headers.get("etag") ?? undefined, "etag");
+
+    const revalidated = await worker.fetch(
+      new Request("http://localhost:8787/v1/connectors", {
+        headers: { authorization: `Bearer ${token}`, "if-none-match": etag },
+      }),
+      env,
+      ctx,
+    );
+
+    expect(revalidated.status).toBe(200);
+    const body = await revalidated.json<Catalogue>();
+    const stripe = scalar(
+      body.categories.flatMap((c) => c.connectors).find((c) => c.id === "stripe"),
+    );
+    expect(stripe.connections.map((x) => x.label)).toEqual(["Stripe — Acme"]);
+  });
+
+  it("still answers 304 to an anonymous caller", async () => {
+    const first = await get("/v1/connectors");
+    const etag = scalar(first.headers.get("etag") ?? undefined, "etag");
+    const again = await worker.fetch(
+      new Request("http://localhost:8787/v1/connectors", { headers: { "if-none-match": etag } }),
+      env,
+      ctx,
+    );
+    expect(again.status).toBe(304);
   });
 });

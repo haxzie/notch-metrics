@@ -8,6 +8,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://app.lemonsqueezy.com/settings/api",
   iconPath: "/providers/lemonsqueezy.svg",
   accentColor: "#FFC233",
+  keywords: ["payments", "billing", "merchant of record", "store", "lemon"],
   authMode: "api_key",
   fields: [
     {

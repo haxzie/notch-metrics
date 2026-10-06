@@ -36,6 +36,14 @@ export const MetricDescriptor = z.object({
   /** False means a number with no sparkline — MRR at `month` granularity, say. */
   supportsSeries: z.boolean(),
   supportsCompare: z.boolean(),
+  /**
+   * Extra words that should find this metric in search.
+   *
+   * Nobody types "active_subscribers" — they type "customers", or "churn",
+   * or "how many people pay me". Defaulted rather than required so a new
+   * metric is searchable by its label on day one and gets synonyms later.
+   */
+  keywords: z.array(z.string()).optional(),
   help: z.string().optional(),
   /**
    * How this number is derived, in one sentence, shown in a tooltip.
@@ -77,6 +85,9 @@ export const ProviderManifest = z.object({
    *  manifest rather than with the app. */
   iconPath: z.string(),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  /** What someone might call this app other than its name — "payments",
+   *  "billing", "analytics". Searched alongside the name. */
+  keywords: z.array(z.string()).optional(),
   authMode: z.enum(["api_key", "oauth2"]),
   /** Present only when `authMode` is `oauth2`. */
   oauth: OAuthDescriptor.optional(),

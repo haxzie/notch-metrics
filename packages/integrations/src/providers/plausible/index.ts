@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://plausible.io/docs/stats-api",
   iconPath: "/providers/plausible.svg",
   accentColor: "#5850EC",
+  keywords: ["web analytics", "privacy", "traffic", "visitors"],
   authMode: "api_key",
   fields: [
     {

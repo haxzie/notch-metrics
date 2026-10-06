@@ -8,6 +8,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://dashboard.stripe.com/apikeys",
   iconPath: "/providers/stripe.svg",
   accentColor: "#635BFF",
+  keywords: ["payments", "billing", "checkout", "subscriptions", "revenue"],
   authMode: "api_key",
   fields: [
     {

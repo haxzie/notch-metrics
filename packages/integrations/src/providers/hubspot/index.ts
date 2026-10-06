@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://developers.hubspot.com/docs/api/oauth-quickstart-guide",
   iconPath: "/providers/hubspot.svg",
   accentColor: "#FF7A59",
+  keywords: ["crm", "sales", "deals", "contacts", "pipeline"],
   authMode: "oauth2",
   oauth: {
     scopeSummary: ["Read your contacts", "Read your deals and pipelines"],

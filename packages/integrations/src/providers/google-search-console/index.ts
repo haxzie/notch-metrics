@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   docsUrl: "https://search.google.com/search-console",
   iconPath: "/providers/google-search-console.svg",
   accentColor: "#4285F4",
+  keywords: ["gsc", "seo", "search", "google", "rankings", "queries"],
   authMode: "oauth2",
   oauth: {
     scopeSummary: ["Read your Search Console performance data"],

@@ -1,3 +1,4 @@
+import { METRIC_KEYWORDS } from "@notch/schemas";
 import type { ConnectorCategory, ProviderId, ProviderManifest } from "@notch/schemas";
 import type { ProviderAdapter } from "./types.ts";
 
@@ -93,14 +94,46 @@ export const REGISTRY_VERSION: string = fingerprintManifests(
   Object.values(REGISTRY).map((adapter) => adapter.manifest),
 );
 
+/**
+ * Folds the shared metric synonyms into a manifest's own.
+ *
+ * Done here rather than in each manifest so "recurring revenue" is written
+ * once and every provider offering `mrr` gets it. A manifest can still add
+ * its own; both sets are searched.
+ */
+function withKeywords(manifest: ProviderManifest): ProviderManifest {
+  return {
+    ...manifest,
+    keywords: manifest.keywords ?? [],
+    metrics: manifest.metrics.map((metric) => ({
+      ...metric,
+      keywords: [...new Set([...(METRIC_KEYWORDS[metric.id] ?? []), ...(metric.keywords ?? [])])],
+    })) as ProviderManifest["metrics"],
+  };
+}
+
+/**
+ * The registry with shared keywords folded in, built once.
+ *
+ * Enriching inside `manifests()` alone was a trap: `getAdapter(id).manifest`
+ * returned the raw manifest, so the catalogue had keywords and every other
+ * consumer silently did not. One table, so the two cannot disagree.
+ */
+const ENRICHED: Record<string, ProviderAdapter> = Object.fromEntries(
+  Object.entries(REGISTRY).map(([id, adapter]) => [
+    id,
+    { ...adapter, manifest: withKeywords(adapter.manifest) } as ProviderAdapter,
+  ]),
+);
+
 export function getAdapter(id: string): ProviderAdapter {
-  const adapter = (REGISTRY as Record<string, ProviderAdapter | undefined>)[id];
+  const adapter = ENRICHED[id];
   if (!adapter) throw new Error(`unknown provider: ${id}`);
   return adapter;
 }
 
 export function manifests(): ProviderManifest[] {
-  return Object.values(REGISTRY).map((adapter) => adapter.manifest);
+  return Object.values(ENRICHED).map((adapter) => adapter.manifest);
 }
 
 /**
