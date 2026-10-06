@@ -59,6 +59,15 @@ public actor AuthStore: TokenProviding {
 
     public func store(token: String) throws {
         try secrets.set(token, for: .deviceToken)
+
+        // Read it straight back. A write that reports success but does not
+        // persist leaves the app signed in until it quits and signed out
+        // afterwards, with nothing to explain why — and the in-memory cache
+        // below is exactly what would hide it. Better to fail the sign-in now
+        // and say so.
+        let readBack = try secrets.string(for: .deviceToken)
+        guard readBack == token else { throw SecretStoreError.notPersisted }
+
         cached = token
     }
 

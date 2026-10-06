@@ -24,6 +24,8 @@ public enum SecretStoreError: Error, Equatable {
     /// the same Mac. Surfaced as its own case so the UI can say "sign in
     /// again" instead of crashing on an opaque OSStatus.
     case identityChanged
+    /// The write reported success but the value did not come back.
+    case notPersisted
     case unexpected(OSStatus)
 }
 
@@ -45,11 +47,18 @@ public struct KeychainSecretStore: SecretStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key.account,
-            // The modern keychain. Without it items land in the legacy file
-            // keychain, which has its own ACL prompts and a different
-            // migration story.
-            kSecUseDataProtectionKeychain as String: true,
         ]
+        // Deliberately *not* kSecUseDataProtectionKeychain.
+        //
+        // The data-protection keychain requires a keychain-access-group
+        // entitlement, which comes from a provisioning profile. This app is
+        // non-sandboxed Developer ID with no profile, so every write returned
+        // -34018 (errSecMissingEntitlement) — meaning the Keychain never
+        // worked at all, and sign-in silently dropped its token every time.
+        //
+        // Turning it back on requires adding the entitlement first; check
+        // with a signed build, because an unsigned one fails the same way for
+        // a different reason.
     }
 
     public func string(for key: SecretKey) throws -> String? {
@@ -127,7 +136,6 @@ public struct KeychainSecretStore: SecretStore {
         var request: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecUseDataProtectionKeychain as String: true,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll,
         ]

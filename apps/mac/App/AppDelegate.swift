@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import MetricsAPI
 import MetricsCore
 import SwiftUI
@@ -63,18 +64,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// `os.Logger` rather than NSLog: this is readable afterwards with
+    /// `log show --predicate 'subsystem == "com.notchmetrics.app"'`, which
+    /// matters for a flow whose failures all happen while no window is open.
+    private static let log = Logger(subsystem: AppPaths.bundleIdentifier, category: "auth")
+
     private func handleAuthCallback(_ url: URL) async {
         let coordinator = AuthCoordinator()
+        Self.log.info("callback received")
         do {
             let (code, verifier) = try coordinator.complete(callback: url)
+            Self.log.info("pending matched, exchanging code")
             let label = Host.current().localizedName ?? "Mac"
             let response: DesktopTokenResponse = try await env.api.post(
                 "v1/desktop/token",
                 body: ["code": code, "verifier": verifier, "label": label],
                 as: DesktopTokenResponse.self)
+            Self.log.info("token received, storing")
             try await env.auth.store(token: response.token)
             await env.start()
-            env.noteAuthError(nil)
+            Self.log.info("signed in: \(self.env.isSignedIn, privacy: .public)")
+            env.signInFinished(error: nil)
         } catch AuthError.noPendingSignIn where env.isSignedIn {
             // The web page's effect runs twice under React strict mode, so a
             // second callback arrives with a code we no longer have a
@@ -84,8 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Surfaced in Settings rather than as a modal. An alert thrown up
             // by an accessory app appears over whatever the user was doing,
             // with no window to attach itself to.
-            NSLog("[auth] sign-in failed: \(error)")
-            env.noteAuthError(Self.describe(error))
+            Self.log.error("sign-in failed: \(String(describing: error), privacy: .public)")
+            env.signInFinished(error: Self.describe(error))
         }
     }
 
@@ -95,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case SecretStoreError.identityChanged:
             return "macOS would not let the app save your sign-in to the Keychain. "
                 + "This happens after the app is re-signed; try signing in once more."
+        case SecretStoreError.notPersisted:
+            return "The Keychain accepted your sign-in but did not keep it. "
+                + "Open Keychain Access, delete any \"Notch Metrics\" item, and try again."
         case let SecretStoreError.unexpected(status):
             return "The Keychain refused to save your sign-in (OSStatus \(status))."
         case AuthError.stateMismatch:

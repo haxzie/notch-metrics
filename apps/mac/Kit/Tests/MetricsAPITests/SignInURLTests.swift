@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import MetricsAPI
+import MetricsCore
 
 @Suite struct SignInURLTests {
     private func coordinator() -> (AuthCoordinator, URL) {
@@ -52,5 +53,32 @@ import Testing
         let first = try auth.signInURL(appBase: appBase)
         let second = try auth.signInURL(appBase: appBase)
         #expect(first.query != second.query)
+    }
+}
+
+@Suite struct TokenStorageTests {
+    /// A store whose writes vanish — the failure mode the read-back catches.
+    private final class AmnesiacStore: SecretStore, @unchecked Sendable {
+        func string(for key: SecretKey) throws -> String? { nil }
+        func set(_ value: String?, for key: SecretKey) throws {}
+        func deleteAll(matching prefix: String) throws {}
+    }
+
+    @Test("a token that does not come back is a failed sign-in, not a silent one")
+    func rejectsAWriteThatDoesNotPersist() async throws {
+        let auth = AuthStore(secrets: AmnesiacStore())
+        await #expect(throws: SecretStoreError.notPersisted) {
+            try await auth.store(token: "a-device-token")
+        }
+        // And it must not report itself signed in on the strength of a cache
+        // the next launch will not have.
+        #expect(await auth.isSignedIn == false)
+    }
+
+    @Test("a working store signs in")
+    func storesAndReportsSignedIn() async throws {
+        let auth = AuthStore(secrets: InMemorySecretStore())
+        try await auth.store(token: "a-device-token")
+        #expect(await auth.isSignedIn)
     }
 }

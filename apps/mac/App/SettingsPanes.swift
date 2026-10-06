@@ -252,10 +252,24 @@ struct AccountPane: View {
                     }
                 } else {
                     LabeledContent("Status", value: "Signed out")
-                    Button("Sign in…") { beginSignIn() }
-                        .buttonStyle(.borderedProminent)
-                    if let signInError = signInError ?? env.authError {
-                        Text(signInError)
+                    LabeledContent("Sign in") {
+                        HStack(spacing: 8) {
+                            if case .waiting = env.signIn {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Waiting for browser approval…")
+                                    .foregroundStyle(.secondary)
+                                Button("Cancel") { env.signInFinished(error: nil) }
+                                    .buttonStyle(.link)
+                            } else {
+                                Button("Sign in…") { beginSignIn() }
+                                    .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+
+                    if let message = failureMessage {
+                        Label(message, systemImage: "exclamationmark.triangle")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -271,10 +285,19 @@ struct AccountPane: View {
     /// only answer "this link is missing information" — the challenge and
     /// state are the whole request. Nothing about the button looked wrong,
     /// which is why it survived.
+    /// The local failure from building the link, or the one the callback
+    /// reported. Both land in the same place so there is one thing to read.
+    private var failureMessage: String? {
+        if let signInError { return signInError }
+        if case let .failed(message) = env.signIn { return message }
+        return nil
+    }
+
     private func beginSignIn() {
         do {
             let url = try AuthCoordinator().signInURL(appBase: AppEnvironment.appURL)
             signInError = nil
+            env.signInStarted()
             NSWorkspace.shared.open(url)
         } catch {
             // Writing the pending challenge is what fails here, and silently

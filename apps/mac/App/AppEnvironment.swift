@@ -22,14 +22,34 @@ final class AppEnvironment {
     private(set) var states: [String: TileState] = [:]
     private(set) var isSignedIn = false
 
-    /// Why the last sign-in attempt failed, for the Account pane.
+    /// Where a sign-in attempt has got to.
     ///
-    /// This used to go to NSLog only, which meant a failed exchange left the
-    /// button saying "Sign in" with no explanation anywhere the user could
-    /// reach — indistinguishable from the click not registering.
-    private(set) var authError: String?
+    /// The button used to look identical before the click, during the browser
+    /// round trip, and after a failure that only reached NSLog — so "nothing
+    /// happened" and "it failed" were the same picture.
+    enum SignInState: Equatable {
+        case idle
+        /// The browser is open and we are waiting for the callback.
+        case waiting
+        case failed(String)
+    }
 
-    func noteAuthError(_ message: String?) { authError = message }
+    private(set) var signIn: SignInState = .idle
+
+    func signInStarted() {
+        signIn = .waiting
+        // The browser may never come back — the tab gets closed, the user
+        // changes their mind. Without this the spinner is forever.
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(180))
+            guard let self, case .waiting = self.signIn, !self.isSignedIn else { return }
+            self.signIn = .failed("Timed out waiting for the browser. Try again.")
+        }
+    }
+
+    func signInFinished(error: String?) {
+        signIn = error.map(SignInState.failed) ?? .idle
+    }
 
     /// Which settings pane to show. Driven by `notchmetrics://settings/<pane>`
     /// so a link — from the website, from a notification, from the notch —
