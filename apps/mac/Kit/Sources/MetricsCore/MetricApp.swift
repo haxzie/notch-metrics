@@ -80,9 +80,8 @@ public enum AppCatalog {
         MetricApp(
             id: "intercom", name: "Intercom", symbol: "message.fill", accentHex: "1F8DED"),
         MetricApp(
-            id: "apollo", name: "Apollo", symbol: "paperplane.fill", accentHex: "3B47D2"),
-        MetricApp(
-            id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right", accentHex: "F0F6FC"),
+            id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right",
+            accentHex: "F0F6FC"),
         MetricApp(
             id: "linear", name: "Linear", symbol: "square.stack.3d.up.fill", accentHex: "5E6AD2"),
         MetricApp(

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { createExecutionContext } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { ConnectorCategory, ProviderId } from "@notch/schemas";
 import { deviceToken, integration, user } from "@notch/db";
 import worker from "../src/index.ts";
 import { id, randomToken, sha256Base64Url } from "../src/lib/ids.ts";
@@ -51,15 +52,25 @@ describe("the connector catalogue", () => {
     expect(response.headers.get("cache-control")).toContain("public");
   });
 
-  it("returns the four categories in a deliberate order", async () => {
+  it("returns every category in a deliberate order", async () => {
     const body = await (await get("/v1/connectors")).json<Catalogue>();
-    expect(body.categories.map((c) => c.id)).toEqual(["revenue", "analytics", "marketing", "crm"]);
+    expect(body.categories.map((c) => c.id)).toEqual([
+      "revenue",
+      "analytics",
+      "marketing",
+      "crm",
+      "developer",
+    ]);
     expect(body.categories.map((c) => c.label)).toEqual([
       "Revenue",
       "Product analytics",
       "Marketing & SEO",
       "CRM",
+      "Developer",
     ]);
+    // Money first is the deliberate part. The rest is grouping; this asserts
+    // none of them went missing, which is the failure that actually happens.
+    expect(body.categories).toHaveLength(ConnectorCategory.options.length);
   });
 
   it("puts working connectors before coming-soon ones", async () => {
@@ -74,7 +85,10 @@ describe("the connector catalogue", () => {
   it("describes every connector well enough to render a connect page", async () => {
     const body = await (await get("/v1/connectors")).json<Catalogue>();
     const all = body.categories.flatMap((c) => c.connectors);
-    expect(all.length).toBeGreaterThanOrEqual(17);
+    // Every registered connector must appear. A hardcoded number here hid a
+    // real bug once: a new category was dropped from the grouping and its
+    // connectors silently disappeared from the catalogue.
+    expect(all.map((c) => c.id).sort()).toEqual(ProviderId.options.slice().sort());
 
     for (const connector of all) {
       expect(connector.name, connector.id).toBeTruthy();

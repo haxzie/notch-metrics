@@ -26,7 +26,7 @@
         "meta-ads",
         "hubspot",
         "intercom",
-        "apollo"
+        "github"
       ]
     },
     "label": {
@@ -93,6 +93,10 @@
           "organic_keywords",
           "ad_spend",
           "ad_conversions",
+          "stars",
+          "forks",
+          "open_issues",
+          "open_pull_requests",
           "contacts",
           "new_contacts",
           "open_deals",
@@ -132,6 +136,10 @@
           "organic_keywords",
           "ad_spend",
           "ad_conversions",
+          "stars",
+          "forks",
+          "open_issues",
+          "open_pull_requests",
           "contacts",
           "new_contacts",
           "open_deals",

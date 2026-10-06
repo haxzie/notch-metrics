@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { FULL_COLOUR_MARKS } from "@/lib/connector-marks.generated";
 
 /**
- * A connector's brand mark on a tile of its own colour.
+ * A connector's brand mark on a tile.
  *
- * Mirrors `ConnectorIcon` in the Mac app, including the luminance floor —
- * brand colours are picked against a white page and several of them vanish
- * into this one.
+ * Mirrors `ConnectorIcon` in the Mac app: a full-colour official mark sits on
+ * a near-white tile at its own colours, a monochrome simple-icons glyph sits
+ * white on the brand's colour. The brand colour also takes a luminance floor,
+ * because those are picked against a white page and several vanish into this
+ * one.
  */
 export function ConnectorMark({
   id,
@@ -23,11 +26,21 @@ export function ConnectorMark({
   // Four connectors have no vendored mark. They fall back to a lettermark
   // rather than a broken image, so the row still looks deliberate.
   const [hasMark, setHasMark] = useState(true);
+  const fullColour = FULL_COLOUR_MARKS.has(id);
+  const glyph = Math.round(size * (fullColour ? 0.62 : 0.54));
 
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-[26%] ring-1 ring-white/10"
-      style={{ width: size, height: size, backgroundColor: liftForDarkUI(accentColor) }}
+      className={`inline-flex shrink-0 items-center justify-center rounded-[26%] ring-1 ${
+        fullColour ? "ring-white/25" : "ring-white/10"
+      }`}
+      style={{
+        width: size,
+        height: size,
+        // Not pure white: a hard #fff square is brighter than anything else
+        // on a dark page and a list of them reads as headlights.
+        backgroundColor: fullColour ? "#f5f5f5" : liftForDarkUI(accentColor),
+      }}
       title={name}
     >
       {hasMark ? (
@@ -35,8 +48,8 @@ export function ConnectorMark({
         <img
           src={`/connectors/${id}.svg`}
           alt=""
-          width={Math.round(size * 0.54)}
-          height={Math.round(size * 0.54)}
+          width={glyph}
+          height={glyph}
           onError={() => setHasMark(false)}
         />
       ) : (

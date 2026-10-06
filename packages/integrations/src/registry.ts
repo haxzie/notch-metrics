@@ -24,7 +24,7 @@ import { metaAds } from "./providers/meta-ads/index.ts";
 // CRM
 import { hubspot } from "./providers/hubspot/index.ts";
 import { intercom } from "./providers/intercom/index.ts";
-import { apollo } from "./providers/apollo/index.ts";
+import { github } from "./providers/github/index.ts";
 
 /**
  * Every provider the API knows about.
@@ -61,7 +61,7 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   "meta-ads": metaAds,
   hubspot,
   intercom,
-  apollo,
+  github,
 };
 
 /**
@@ -91,7 +91,20 @@ export function manifests(): ProviderManifest[] {
  * work yet.
  */
 export function catalogue(): { category: ConnectorCategory; connectors: ProviderManifest[] }[] {
-  const order: ConnectorCategory[] = ["revenue", "analytics", "marketing", "crm"];
+  // A `Record` rather than an array, so adding a `ConnectorCategory` fails to
+  // compile until it is given a position. As a plain list, a new category
+  // type-checked fine and its connectors silently vanished from the
+  // catalogue — which looks like a broken adapter, not a missing line here.
+  const position: Record<ConnectorCategory, number> = {
+    revenue: 0,
+    analytics: 1,
+    marketing: 2,
+    crm: 3,
+    developer: 4,
+  };
+  const order = (Object.keys(position) as ConnectorCategory[]).sort(
+    (a, b) => position[a] - position[b],
+  );
   const rank = (m: ProviderManifest) => (m.status === "stable" ? 0 : m.status === "beta" ? 1 : 2);
 
   return order.map((category) => ({

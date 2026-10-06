@@ -21,7 +21,7 @@
         "meta-ads",
         "hubspot",
         "intercom",
-        "apollo"
+        "github"
       ]
     },
     "name": {
@@ -33,7 +33,8 @@
         "revenue",
         "analytics",
         "marketing",
-        "crm"
+        "crm",
+        "developer"
       ]
     },
     "tagline": {
@@ -181,6 +182,10 @@
               "organic_keywords",
               "ad_spend",
               "ad_conversions",
+              "stars",
+              "forks",
+              "open_issues",
+              "open_pull_requests",
               "contacts",
               "new_contacts",
               "open_deals",
