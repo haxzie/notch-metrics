@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { liftForDarkUI } from "@/lib/brand-colour";
 
 /**
  * The other end of the desktop app's Connect button.
@@ -185,7 +186,7 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
           type="submit"
           disabled={submitting}
           className="rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: connector.accentColor }}
+          style={{ backgroundColor: liftForDarkUI(connector.accentColor) }}
         >
           {submitting ? "Verifying…" : `Connect ${connector.name}`}
         </button>

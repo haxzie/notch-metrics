@@ -77,8 +77,14 @@ describe("the connector catalogue", () => {
     // A category whose first three rows are all greyed out reads as a product
     // that does not work yet.
     const body = await (await get("/v1/connectors")).json<Catalogue>();
+
+    for (const group of body.categories) {
+      const rank = group.connectors.map((c) => (c.status === "coming_soon" ? 1 : 0));
+      // Sorted, i.e. no working connector appears after a greyed-out one.
+      expect(rank).toEqual(rank.slice().sort());
+    }
+
     const revenue = scalar(body.categories.find((c) => c.id === "revenue"));
-    expect(scalar(revenue.connectors[0]).id).toBe("stripe");
     expect(scalar(revenue.connectors[0]).status).toBe("stable");
   });
 

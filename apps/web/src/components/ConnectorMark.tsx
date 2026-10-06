@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FULL_COLOUR_MARKS } from "@/lib/connector-marks.generated";
+import { liftForDarkUI } from "@/lib/brand-colour";
 
 /**
  * A connector's brand mark on a tile.
@@ -64,25 +65,4 @@ export function ConnectorMark({
       <span className="sr-only">{name}</span>
     </span>
   );
-}
-
-/** Rec. 709 luma, same floor as the Mac app's `NotchTheme.tileFill`. */
-function liftForDarkUI(hex: string): string {
-  const value = Number.parseInt(hex.replace("#", ""), 16);
-  if (Number.isNaN(value)) return "#6b7280";
-
-  let r = (value >> 16) & 0xff;
-  let g = (value >> 8) & 0xff;
-  let b = value & 0xff;
-
-  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  if (luma >= 0.16) return hex;
-
-  // Scale toward white rather than shifting hue: what people recognise about
-  // a brand colour is the hue, not the brightness.
-  const lift = 0.28 / Math.max(luma, 0.04);
-  r = Math.min(255, Math.round(r * lift) + 28);
-  g = Math.min(255, Math.round(g * lift) + 28);
-  b = Math.min(255, Math.round(b * lift) + 28);
-  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
