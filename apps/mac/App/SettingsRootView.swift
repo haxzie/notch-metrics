@@ -2,12 +2,20 @@ import MetricsCore
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
-    case general, connections, apps, widgets, customMetrics, account, updates, about
+    case general, connections, apps, widgets, account, updates, about
 
     /// `notchmetrics://settings/integrations` is in the wild — in the website,
     /// in the connect flow's return URL — and kept working when the pane was
     /// renamed to Apps.
-    static let aliases: [String: SettingsPane] = ["integrations": .apps]
+    ///
+    /// `custom-metrics` is parked rather than removed: the plugin runtime and
+    /// the MCP server still exist, so a link to a pane that is not in the
+    /// sidebar should land somewhere sensible instead of nowhere.
+    static let aliases: [String: SettingsPane] = [
+        "integrations": .apps,
+        "customMetrics": .widgets,
+        "custom-metrics": .widgets,
+    ]
 
     var id: String { rawValue }
 
@@ -17,7 +25,6 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .connections: "Connections"
         case .apps: "Apps"
         case .widgets: "Widgets"
-        case .customMetrics: "Custom Metrics"
         case .account: "Account"
         case .updates: "Updates"
         case .about: "About"
@@ -32,7 +39,6 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         // A box, not another grid: Apps is `square.grid.2x2` and the two
         // sat next to each other in the sidebar looking near-identical.
         case .widgets: "square.on.square"
-        case .customMetrics: "curlybraces"
         case .account: "person.crop.circle"
         case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
@@ -46,7 +52,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         // change. General is down in App with the other
         // set-it-once-and-forget-it panes.
         (nil, [.widgets]),
-        ("Data", [.connections, .apps, .customMetrics]),
+        ("Data", [.connections, .apps]),
         ("App", [.account, .general, .updates, .about]),
     ]
 }
@@ -94,7 +100,6 @@ struct SettingsRootView: View {
         case .connections: ConnectionsPane()
         case .apps: AppsPane()
         case .widgets: WidgetsPane()
-        case .customMetrics: CustomMetricsPane()
         case .account: AccountPane()
         case .updates: UpdatesPane()
         case .about: AboutPane()

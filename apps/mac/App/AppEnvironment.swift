@@ -105,12 +105,10 @@ final class AppEnvironment {
 
         isSignedIn = await auth.isSignedIn
 
-        // Something is always on screen, even before the first fetch lands and
-        // even signed out. An empty notch with no explanation reads as broken.
-        if layoutModel.layout.widgets.isEmpty {
-            layoutModel.replace(with: Self.starterLayout())
-        }
-        // After the starter layout, which would otherwise reset the mode.
+        // No starter layout. It used to seed three Stripe tiles, which meant
+        // a new user's notch was full of an app they had never connected and
+        // every tile said "Connect Stripe". The empty state in NotchPanel
+        // says what to do instead.
         let wantsList = ProcessInfo.processInfo.environment["NOTCH_DEBUG_LIST"] == "1"
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" {
             layoutModel.replace(with: Self.demoLayout(display: wantsList ? .list : .grid))
@@ -122,6 +120,100 @@ final class AppEnvironment {
             ? Self.demoStates(for: layoutModel.layout)
             : Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
         notch.update(states: states)
+
+        startRefreshing()
+    }
+
+    // MARK: - Real numbers
+
+    private var refreshTask: Task<Void, Never>?
+
+    /// Keeps the notch's tiles filled from the API.
+    ///
+    /// One batch request for the whole layout rather than one per tile: eight
+    /// widgets usually point at two or three integrations, and fanning out
+    /// defeats the per-integration spacing that keeps us inside a provider's
+    /// rate limit.
+    func startRefreshing() {
+        guard ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] != "1" else { return }
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refresh()
+                // Five minutes. The notch is a glance, not a dashboard, and
+                // every poll costs the user's provider rate limit.
+                try? await Task.sleep(for: .seconds(300))
+            }
+        }
+    }
+
+    func stopRefreshing() {
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
+
+    /// Fetches once, now. Called on launch, on a timer, and after a widget is
+    /// added so a new tile fills in rather than sitting on "Loading".
+    func refresh() async {
+        guard isSignedIn else {
+            states = Self.placeholderStates(for: layoutModel.layout, signedIn: false)
+            notch.update(states: states)
+            return
+        }
+
+        let widgets = layoutModel.layout.widgets.filter {
+            $0.integrationId?.isEmpty == false && $0.metric?.isEmpty == false
+        }
+        guard !widgets.isEmpty else {
+            states = Self.placeholderStates(for: layoutModel.layout, signedIn: true)
+            notch.update(states: states)
+            return
+        }
+
+        // Last known values first, so a tile shows yesterday's number while
+        // the request is in flight rather than a skeleton.
+        var next = states
+        for widget in widgets where next[widget.id] == nil {
+            if let cached = await cache.load(widgetID: widget.id, range: widget.range) {
+                next[widget.id] = .value(cached)
+            } else {
+                next[widget.id] = .loading
+            }
+        }
+        states = next
+        notch.update(states: states)
+
+        do {
+            let results = try await api.batch(widgets.map(MetricQueryRequest.init(widget:)))
+            guard results.count == widgets.count else { return }
+
+            for (widget, result) in zip(widgets, results) {
+                switch result {
+                case .success(let series):
+                    next[widget.id] = .value(series)
+                    await cache.store(series, widgetID: widget.id, range: widget.range)
+                case .failure(let failure):
+                    // Keep a cached number on screen rather than replacing it
+                    // with an error: a stale figure with a mark against it
+                    // beats a blank tile while a provider is down.
+                    if case .value = next[widget.id] { continue }
+                    next[widget.id] = .failed(reason: failure.message)
+                }
+            }
+            states = next
+            notch.update(states: states)
+        } catch {
+            for widget in widgets where !isValue(next[widget.id]) {
+                next[widget.id] = .failed(reason: "Could not reach Notch Metrics")
+            }
+            states = next
+            notch.update(states: states)
+        }
+    }
+
+    private func isValue(_ state: TileState?) -> Bool {
+        if case .value = state { return true }
+        return false
     }
 
     func updateSettings(_ mutate: @escaping @Sendable (inout AppSettings) -> Void) {
@@ -135,10 +227,39 @@ final class AppEnvironment {
 
     // MARK: - Layout persistence
 
+    /// The three tiles the app used to seed itself with.
+    ///
+    /// Everyone who ran a build before the starter layout was removed has
+    /// these in their `layout.json`, pointing at a Stripe account they never
+    /// connected. They can never render anything, so they are dropped on load
+    /// rather than left for each person to delete three times.
+    nonisolated private static let seededPlaceholderIDs: Set<String> = [
+        "starter-revenue", "starter-mrr", "starter-subs",
+    ]
+
     nonisolated private static func loadLayout() -> NotchLayout {
         guard let data = try? Data(contentsOf: AppPaths.layout),
-              let layout = try? JSONDecoder().decode(NotchLayout.self, from: data)
+              var layout = try? JSONDecoder().decode(NotchLayout.self, from: data)
         else { return NotchLayout() }
+
+        // Keyed on the exact seeded ids, not on "has no integration": a widget
+        // whose connection was disconnected also has none, and that one is
+        // meant to survive as a reconnect prompt.
+        let kept = layout.widgets.filter { !seededPlaceholderIDs.contains($0.id) }
+        if kept.count != layout.widgets.count {
+            // Reset the coordinates before repacking. `repack` leaves a widget
+            // where it is when it still fits, so removing the tiles that
+            // occupied the top rows would otherwise leave the survivors
+            // stranded with an empty band above them.
+            layout.widgets = kept.map { widget in
+                var moved = widget
+                moved.col = 0
+                moved.row = 0
+                return moved
+            }
+            layout = GridPacker.repack(layout)
+            saveLayout(layout)
+        }
         return layout
     }
 
@@ -156,21 +277,6 @@ final class AppEnvironment {
     }
 
     /// What a brand-new install shows.
-    nonisolated private static func starterLayout() -> NotchLayout {
-        // Three 2x2 tiles fill the 6x2 grid exactly.
-        NotchLayout(widgets: [
-            NotchWidget(
-                id: "starter-revenue", kind: .providerMetric, appId: "stripe", metric: "revenue",
-                title: "Revenue", size: .square, col: 0, row: 0, position: 0, chart: .sparkline),
-            NotchWidget(
-                id: "starter-mrr", kind: .providerMetric, appId: "stripe", metric: "mrr",
-                title: "MRR", size: .square, col: 2, row: 0, position: 1, chart: .none),
-            NotchWidget(
-                id: "starter-subs", kind: .providerMetric, appId: "stripe",
-                metric: "active_subscribers",
-                title: "Subscribers", size: .square, col: 4, row: 0, position: 2, chart: .bars),
-        ])
-    }
 
     /// Widgets from three apps — enough to show what the list view is for.
     ///
@@ -265,9 +371,10 @@ final class AppEnvironment {
         for layout: NotchLayout, signedIn: Bool
     ) -> [String: TileState] {
         Dictionary(uniqueKeysWithValues: layout.widgets.map { widget in
-            (widget.id, signedIn
-                ? TileState.needsSetup("Connect Stripe")
-                : TileState.needsSetup("Sign in"))
+            guard signedIn else { return (widget.id, TileState.needsSetup("Sign in")) }
+            // Names the app the tile belongs to rather than a hardcoded one.
+            let app = AppCatalog.resolve(widget.appId)
+            return (widget.id, TileState.needsSetup("Connect \(app.name)"))
         })
     }
 }

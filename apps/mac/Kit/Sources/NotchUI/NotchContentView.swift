@@ -359,6 +359,15 @@ public struct NotchWidgetCanvas: View {
                         .frame(width: grid.contentSize.width, height: grid.contentSize.height)
                 }
 
+                // A notch with nothing in it has to say so. There used to be
+                // three seeded Stripe tiles here instead, which meant every
+                // new user's notch was full of an app they had never
+                // connected, each tile reading "Connect Stripe".
+                if layout.widgets.isEmpty {
+                    EmptyNotch()
+                        .frame(width: grid.contentSize.width, height: grid.contentSize.height)
+                }
+
                 // Filtered, because `repack` marks what it could not place as
                 // not visible rather than dropping it. Rendering those draws
                 // them all at the origin, on top of each other and of the
@@ -476,5 +485,24 @@ public struct NotchWidgetCanvas: View {
         .buttonStyle(.plain)
         .foregroundStyle(NotchTheme.secondaryText)
         .padding(3)
+    }
+}
+
+
+/// What the notch says before anything is in it.
+private struct EmptyNotch: View {
+    var body: some View {
+        VStack(spacing: 5) {
+            Image(systemName: "square.on.square.dashed")
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(NotchTheme.tertiaryText)
+            Text("No widgets yet")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NotchTheme.secondaryText)
+            Text("Add one from Settings → Widgets")
+                .font(.system(size: 10.5))
+                .foregroundStyle(NotchTheme.tertiaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -174,6 +174,19 @@ extension APIClient {
         try await get("v1/connect/\(connectorId)/status", as: ConnectStatus.self)
     }
 
+    /// Every widget's number in one round trip.
+    ///
+    /// Results are index-aligned with the requests and partial success is
+    /// normal: one broken provider must not blank a notch that has three
+    /// working tiles on it.
+    public func batch(_ requests: [MetricQueryRequest]) async throws(APIError) -> [MetricResult] {
+        guard !requests.isEmpty else { return [] }
+        let response = try await post(
+            "v1/metrics/batch", body: MetricBatchBody(requests: requests),
+            as: MetricBatchResponse.self)
+        return response.results
+    }
+
     /// One metric, for the widget preview.
     ///
     /// The real number through the real adapter — a preview built from

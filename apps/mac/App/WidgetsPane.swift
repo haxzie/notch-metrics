@@ -468,6 +468,9 @@ private struct WidgetBuilderView: View {
             return
         }
         added = true
+        // Otherwise the new tile sits on "Loading" until the five-minute
+        // timer comes round.
+        Task { await env.refresh() }
     }
 }
 

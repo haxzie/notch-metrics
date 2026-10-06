@@ -79,10 +79,10 @@ public struct WidgetTile: View {
 
     /// Which app the number came from, as a mark and a name.
     ///
-    /// A monochrome SF Symbol rather than the vendor's own logo: shipping
-    /// third-party marks means an asset pipeline, a licence question for each
-    /// one, and a release every time somebody rebrands. The provider
-    /// manifest's `iconPath` exists for when that becomes worth doing.
+    /// Still the SF Symbol here, unlike every other surface, which now uses
+    /// the vendored brand mark through `ConnectorIcon`. At the ~12pt this
+    /// renders at, a rounded brand tile inside an already-rounded widget tile
+    /// reads as clutter. Worth revisiting with a flat variant of the mark.
     private var source: some View {
         HStack(spacing: 4) {
             Image(systemName: app.symbol)
