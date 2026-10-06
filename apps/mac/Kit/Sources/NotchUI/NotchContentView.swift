@@ -156,12 +156,8 @@ public struct NotchContentView: View {
                     .transition(.opacity)
             }
 
-            headerButton(
-                model.isEditing ? "checkmark" : "pencil",
-                help: model.isEditing ? "Done" : "Edit layout",
-                active: model.isEditing,
-                action: toggleEditing)
-            headerButton("slider.horizontal.3", help: "Settings", action: onOpenSettings)
+            editButton
+            headerButton("gearshape", help: "Settings", action: onOpenSettings)
             headerButton("xmark", help: "Close", action: onClose)
         }
         // Filling the band before it is given a height, so the row's contents
@@ -180,6 +176,38 @@ public struct NotchContentView: View {
         // than from anything this view knows about.
         .padding(.top, 16)
         .frame(height: max(44, geometry.hasNotch ? geometry.notchRect.height + 12 : 44))
+    }
+
+    /// A labelled pill rather than a pencil.
+    ///
+    /// Edit mode rearranges and resizes every widget in the notch, which is
+    /// more than a glyph can promise — and a pencil beside a gear and a cross
+    /// reads as one more icon rather than the one control most people came
+    /// for.
+    private var editButton: some View {
+        Button(action: toggleEditing) {
+            HStack(spacing: 5) {
+                Image(systemName: model.isEditing ? "checkmark" : "square.grid.2x2")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text(model.isEditing ? "Done" : "Edit Widgets")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(
+                    model.isEditing
+                        ? NotchTheme.editHighlight.opacity(0.9)
+                        : Color.white.opacity(0.1)))
+            .overlay(
+                Capsule().strokeBorder(
+                    model.isEditing ? Color.clear : Color.white.opacity(0.1), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(model.isEditing ? Color.white : NotchTheme.secondaryText)
+        .help(model.isEditing ? "Finish editing" : "Rearrange and resize widgets")
+        .animation(.easeOut(duration: 0.14), value: model.isEditing)
     }
 
     private func headerButton(
