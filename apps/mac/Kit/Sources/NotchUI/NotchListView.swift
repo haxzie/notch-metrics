@@ -86,10 +86,7 @@ private struct AppHeader: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: app.symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(NotchTheme.accent(for: app))
-                .frame(width: 13)
+            ConnectorIcon(app: app, size: 14)
 
             Text(app.name)
                 .font(.system(size: 10.5, weight: .semibold))

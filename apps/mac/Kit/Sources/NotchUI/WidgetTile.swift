@@ -79,15 +79,15 @@ public struct WidgetTile: View {
 
     /// Which app the number came from, as a mark and a name.
     ///
-    /// Still the SF Symbol here, unlike every other surface, which now uses
-    /// the vendored brand mark through `ConnectorIcon`. At the ~12pt this
-    /// renders at, a rounded brand tile inside an already-rounded widget tile
-    /// reads as clutter. Worth revisiting with a flat variant of the mark.
+    /// The real brand mark, same as everywhere else.
+    ///
+    /// This used to be the SF Symbol, which for Dodo Payments meant a generic
+    /// bird tinted `#111111` — the wrong logo, and near-invisible against a
+    /// dark tile. A symbol is a reasonable fallback for a connector with no
+    /// vendored mark; it is not a substitute for one that has it.
     private var source: some View {
         HStack(spacing: 4) {
-            Image(systemName: app.symbol)
-                .font(.system(size: symbolSize, weight: .semibold))
-                .foregroundStyle(accent)
+            ConnectorIcon(app: app, size: markSize)
             if widget.size != .small {
                 Text(app.name)
                     .font(.system(size: symbolSize - 1, weight: .semibold))
@@ -192,6 +192,9 @@ public struct WidgetTile: View {
     private var horizontalPadding: CGFloat { widget.size == .small ? 11 : 14 }
     private var verticalPadding: CGFloat { widget.size == .small ? 9 : 13 }
     private var symbolSize: CGFloat { widget.size == .small ? 10 : 12 }
+    /// Slightly larger than the old glyph: a mark inside a rounded tile needs
+    /// the extra point or two to stay readable once its own corners are cut.
+    private var markSize: CGFloat { widget.size == .small ? 13 : 15 }
     private var labelSize: CGFloat { widget.size == .small ? 10 : 12 }
 
     private var valueFontSize: CGFloat {
