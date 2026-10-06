@@ -52,3 +52,33 @@ describe("wire enums", () => {
     expect(S.MetricErrorCode.safeParse("teapot").success).toBe(false);
   });
 });
+
+describe("pricing", () => {
+  it("states the two plans the website and the app both quote", () => {
+    expect(S.PLANS.pro.amount).toBe(1900);
+    expect(S.PLANS.pro.interval).toBe("month");
+    expect(S.PLANS.pro_annual.amount).toBe(7900);
+    expect(S.PLANS.pro_annual.interval).toBe("year");
+    // Minor units, like every other amount that crosses this wire.
+    expect(Number.isInteger(S.PLANS.pro.amount)).toBe(true);
+    expect(Number.isInteger(S.PLANS.pro_annual.amount)).toBe(true);
+  });
+
+  it("drops the decimals on a whole amount", () => {
+    expect(S.formatPrice(1900, "USD")).toBe("$19");
+    expect(S.formatPrice(7900, "USD")).toBe("$79");
+    // And keeps them when there is something to show, so a future
+    // $19.50 does not silently render as $20.
+    expect(S.formatPrice(1950, "USD")).toBe("$19.50");
+  });
+
+  it("quotes the annual saving against twelve monthly payments", () => {
+    expect(S.annualSavingPercent()).toBe(65);
+  });
+
+  it("only offers plans the checkout route accepts", () => {
+    for (const plan of Object.values(S.PLANS)) {
+      expect(S.CheckoutRequest.parse({ plan: plan.id }).plan).toBe(plan.id);
+    }
+  });
+});

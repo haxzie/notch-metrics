@@ -2,7 +2,12 @@
   "extends": "@notch/typescript-config/nextjs.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"] },
+    // Our own imports here carry no extension, because Next re-resolves them.
+    // But @notch/schemas is consumed as TypeScript source and its internal
+    // imports do carry `.ts`, so tsc has to accept them when it follows them
+    // in. Safe with `noEmit`; the bundler resolves the literal path.
+    "allowImportingTsExtensions": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules", ".open-next"]
