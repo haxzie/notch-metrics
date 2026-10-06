@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { FULL_COLOUR_MARKS } from "@/lib/connector-marks.generated";
+import { LIGHT_TILE_MARKS, OWN_COLOUR_MARKS } from "@/lib/connector-marks.generated";
 import { liftForDarkUI } from "@/lib/brand-colour";
 
 /**
  * A connector's brand mark on a tile.
  *
- * Mirrors `ConnectorIcon` in the Mac app: a full-colour official mark sits on
- * a near-white tile at its own colours, a monochrome simple-icons glyph sits
- * white on the brand's colour. The brand colour also takes a luminance floor,
- * because those are picked against a white page and several vanish into this
- * one.
+ * Mirrors `ConnectorIcon` in the Mac app: a mark drawn for a light background
+ * gets a near-white tile, everything else sits on the brand's own colour. The
+ * brand colour takes a luminance floor, because those are picked against a
+ * white page and several vanish into this one.
  */
 export function ConnectorMark({
   id,
@@ -27,20 +26,27 @@ export function ConnectorMark({
   // Four connectors have no vendored mark. They fall back to a lettermark
   // rather than a broken image, so the row still looks deliberate.
   const [hasMark, setHasMark] = useState(true);
-  const fullColour = FULL_COLOUR_MARKS.has(id);
-  const glyph = Math.round(size * (fullColour ? 0.62 : 0.54));
+  const lightTile = LIGHT_TILE_MARKS.has(id);
+  const glyph = Math.round(size * (lightTile ? 0.62 : 0.54));
 
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-[26%] ring-1 ${
-        fullColour ? "ring-white/25" : "ring-white/10"
+        lightTile ? "ring-white/25" : "ring-white/10"
       }`}
       style={{
         width: size,
         height: size,
         // Not pure white: a hard #fff square is brighter than anything else
         // on a dark page and a list of them reads as headlights.
-        backgroundColor: fullColour ? "#f5f5f5" : liftForDarkUI(accentColor),
+        // The luminance floor keeps a white glyph legible; a mark with its
+        // own colours does not need it, and lifting Dodo Payments' black to
+        // grey only washes the tile out behind its lime.
+        backgroundColor: lightTile
+          ? "#f5f5f5"
+          : OWN_COLOUR_MARKS.has(id)
+            ? accentColor
+            : liftForDarkUI(accentColor),
       }}
       title={name}
     >

@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { liftForDarkUI } from "@/lib/brand-colour";
+import { ConnectorMark } from "@/components/ConnectorMark";
 
 /**
  * The other end of the desktop app's Connect button.
@@ -123,7 +123,7 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
 
   if (load.phase === "done") {
     return (
-      <Shell accent={connector.accentColor}>
+      <Shell connector={connector}>
         <h1 className="text-xl font-semibold">{connector.name} is connected</h1>
         <p className="text-sm text-white/60">
           {load.label ? `Connected as ${load.label}. ` : ""}You can close this tab and go back to
@@ -134,7 +134,7 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
   }
 
   return (
-    <Shell accent={connector.accentColor}>
+    <Shell connector={connector}>
       <h1 className="text-xl font-semibold">Connect {connector.name}</h1>
       <p className="text-sm text-white/60">{connector.tagline}</p>
 
@@ -144,18 +144,37 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
             <span className="text-sm font-medium">{field.label}</span>
 
             {field.type === "select" ? (
-              <select
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                value={values[field.key] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-                required={field.required}
-              >
-                {field.options?.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              // `appearance-none` plus our own chevron: the platform arrow is
+              // drawn hard against the right edge and no amount of padding
+              // moves it.
+              <div className="relative">
+                <select
+                  className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-2 pl-3 pr-10 text-sm"
+                  value={values[field.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                  required={field.required}
+                >
+                  {field.options?.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <svg
+                  viewBox="0 0 16 16"
+                  aria-hidden
+                  className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-white/45"
+                >
+                  <path
+                    d="M4 6.5 8 10.5 12 6.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
             ) : (
               <input
                 // `secret` renders as a password field so a key is not left on
@@ -185,8 +204,9 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: liftForDarkUI(connector.accentColor) }}
+          // White rather than the brand colour: half of these brands are dark
+          // enough that the primary action read as a disabled grey block.
+          className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
         >
           {submitting ? "Verifying…" : `Connect ${connector.name}`}
         </button>
@@ -205,12 +225,58 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
   );
 }
 
-function Shell({ children, accent }: { children: React.ReactNode; accent?: string }) {
+function Shell({
+  children,
+  connector,
+}: {
+  children: React.ReactNode;
+  connector?: { id: string; name: string; accentColor: string };
+}) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.svg" alt="" width={36} height={36} style={accent ? { opacity: 0.9 } : {}} />
+      {connector ? (
+        <ConnectPair connector={connector} />
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src="/logo.svg" alt="" width={36} height={36} />
+      )}
       {children}
     </main>
+  );
+}
+
+/**
+ * The two apps being joined, as overlapping tiles.
+ *
+ * Says what the page is for before any of the words are read: this is *your*
+ * Notch Metrics talking to *that* service, rather than a bare credentials
+ * form that could have come from anywhere — which is the moment somebody
+ * decides whether to paste an API key.
+ */
+function ConnectPair({
+  connector,
+}: {
+  connector: { id: string; name: string; accentColor: string };
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-center">
+      <span
+        className="flex size-16 rotate-[-8deg] items-center justify-center rounded-[28%] bg-[#15101f] shadow-lg shadow-black/40 ring-1 ring-white/10"
+        aria-hidden
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" width={32} height={32} />
+      </span>
+      {/* Pulled left so the tiles overlap, and above in the stacking order so
+          the connector reads as the thing being added. */}
+      <span className="z-10 -ml-4 rotate-[8deg] rounded-[28%] shadow-lg shadow-black/40">
+        <ConnectorMark
+          id={connector.id}
+          name={connector.name}
+          accentColor={connector.accentColor}
+          size={64}
+        />
+      </span>
+    </div>
   );
 }
