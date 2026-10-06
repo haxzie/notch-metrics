@@ -60,9 +60,9 @@ public struct WidgetTile: View {
             // keeps it on the same line across tiles of different heights.
             // Pinned to the bottom, a 2x2 and a 2x1 side by side had their
             // figures at different heights and the row read as misaligned.
-            Spacer(minLength: 2)
+            Spacer(minLength: 0)
             value
-            Spacer(minLength: 2)
+            Spacer(minLength: 0)
 
             // Always the bottom edge, never under the number. The chart used
             // to live inside the value stack, so it floated with the figure
@@ -87,6 +87,10 @@ public struct WidgetTile: View {
                     highlighted ? NotchTheme.editHighlight : NotchTheme.tileStroke,
                     lineWidth: highlighted ? 2 : 1)
         )
+        // A backstop, not the fix. The sizes above are tuned to fit, but a
+        // long number or a future span should crop at the corner rather than
+        // paint over it.
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .onHover { hovering in
             // Tracked unconditionally rather than only in edit mode, so the
@@ -218,7 +222,11 @@ public struct WidgetTile: View {
 
     private var cornerRadius: CGFloat { isTiny ? 12 : 16 }
     private var horizontalPadding: CGFloat { isTiny ? 11 : 14 }
-    private var verticalPadding: CGFloat { isTiny ? 9 : 13 }
+    /// A one-row tile is 84pt tall and has to hold a mark, a label, a figure
+    /// and a chart. Thirteen points of padding top and bottom does not leave
+    /// room for all four, which is how the content came to overflow its own
+    /// rounded corners.
+    private var verticalPadding: CGFloat { widget.size.rows == 1 ? 8 : 13 }
     private var symbolSize: CGFloat { isTiny ? 10 : 12 }
     /// Slightly larger than the old glyph: a mark inside a rounded tile needs
     /// the extra point or two to stay readable once its own corners are cut.
@@ -232,12 +240,16 @@ public struct WidgetTile: View {
     /// sizing its figure off the width alone overflows the tile vertically.
     private var valueFontSize: CGFloat {
         let byWidth = 14 + CGFloat(widget.size.cols) * 5.5
-        let byHeight = 10 + CGFloat(widget.size.rows) * 17
+        // One row is the tight case and gets its own number rather than a
+        // formula that happens to be close: everything else above it is a
+        // fixed height, so what is left for the figure is known.
+        let byHeight: CGFloat = widget.size.rows == 1 ? 21 : 10 + CGFloat(widget.size.rows) * 17
         return min(min(byWidth, byHeight), 48)
     }
 
     private var chartHeight: CGFloat {
         guard widget.size.rows > 1 || widget.size.cols > 1 else { return 0 }
+        if widget.size.rows == 1 { return 12 }
         return min(CGFloat(widget.size.rows) * 24 - 6, 60)
     }
 }

@@ -370,6 +370,12 @@ public struct NotchWidgetCanvas: View {
                             height: grid.contentSize.height + 16)
                         .offset(x: -8, y: -8)
                         .transition(.opacity)
+                        // Behind the tiles in the ZStack, so a tap only
+                        // reaches it where no tile covers it. Clicking the
+                        // empty grid is the obvious way to dismiss a
+                        // selection and did nothing at all.
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectedID = nil }
                 }
 
                 // A notch with nothing in it has to say so. There used to be
@@ -431,6 +437,9 @@ public struct NotchWidgetCanvas: View {
                     .animation(isDragging ? nil : .snappy(duration: 0.2), value: frame)
                     .onTapGesture {
                         guard model.isEditing else { return }
+                        // Exactly one selection at a time: tapping a
+                        // different tile moves it rather than adding to it,
+                        // and tapping the selected one clears it.
                         selectedID = selectedID == widget.id ? nil : widget.id
                     }
                     .gesture(dragGesture(for: widget, grid: grid, frame: frame))
@@ -445,6 +454,9 @@ public struct NotchWidgetCanvas: View {
             }
             .animation(reduceMotion ? nil : .snappy(duration: 0.22), value: layout)
             .animation(.easeOut(duration: 0.16), value: model.isEditing)
+            .onChange(of: model.isEditing) { _, editing in
+                if !editing { selectedID = nil }
+            }
             .coordinateSpace(name: "notch-grid")
         }
         .frame(height: Self.canvasHeight(rows: model.displayed.rows))
