@@ -74,7 +74,6 @@ struct ConnectionsPane: View {
         .sheet(item: $renaming) { connection in
             RenameSheet(
                 name: $draftName,
-                connection: connection,
                 onCancel: { renaming = nil },
                 onSave: {
                     let newName = draftName
@@ -159,9 +158,10 @@ private struct ConnectionRow: View {
     }
 }
 
-private struct RenameSheet: View {
+/// Shared with the Widgets pane's Connections tab, which renames the same
+/// accounts from a different list.
+struct RenameSheet: View {
     @Binding var name: String
-    let connection: Integration
     let onCancel: () -> Void
     let onSave: () -> Void
 

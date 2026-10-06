@@ -122,13 +122,84 @@ private struct AppDetailView: View {
     @Bindable var model: WidgetCatalogueModel
     @Environment(AppEnvironment.self) private var env
 
+    enum Tab: String, CaseIterable { case widgets, connections }
+
+    @State private var tab: Tab = .widgets
+    @State private var renaming: ConnectorConnection?
+    @State private var draftName = ""
+    @State private var confirmingRemoval: ConnectorConnection?
+    @State private var problem: String?
+
     var body: some View {
-        TabView {
-            widgets.tabItem { Label("Widgets", systemImage: "square.on.square") }
-            connections.tabItem { Label("Connections", systemImage: "link") }
+        Group {
+            switch tab {
+            case .widgets: widgets
+            case .connections: connections
+            }
         }
-        .padding(.top, 8)
         .navigationTitle(app.name)
+        .toolbar {
+            // In the header rather than a segmented control floating above the
+            // content: the window already has a title bar doing nothing, and a
+            // second horizontal band under it wastes the height a 2x2 preview
+            // needs.
+            ToolbarItem(placement: .primaryAction) {
+                Picker("", selection: $tab) {
+                    Text("Widgets").tag(Tab.widgets)
+                    Text("Connections").tag(Tab.connections)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+        }
+        .sheet(item: $renaming) { connection in
+            RenameSheet(
+                name: $draftName,
+                onCancel: { renaming = nil },
+                onSave: {
+                    let newName = draftName
+                    renaming = nil
+                    Task { await rename(connection, to: newName) }
+                })
+        }
+        .alert(
+            "Disconnect \(confirmingRemoval?.label ?? "")?",
+            isPresented: Binding(
+                get: { confirmingRemoval != nil },
+                set: { if !$0 { confirmingRemoval = nil } }),
+            presenting: confirmingRemoval
+        ) { connection in
+            Button("Disconnect", role: .destructive) {
+                confirmingRemoval = nil
+                Task { await disconnect(connection) }
+            }
+            Button("Cancel", role: .cancel) { confirmingRemoval = nil }
+        } message: { _ in
+            Text(
+                "Its stored credentials are deleted. Widgets using it stay where they are and "
+                    + "show a reconnect prompt.")
+        }
+    }
+
+    private func rename(_ connection: ConnectorConnection, to label: String) async {
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        do {
+            _ = try await env.api.rename(connection: connection.id, to: trimmed)
+            await model.load(env: env)
+        } catch {
+            problem = "Could not rename that connection."
+        }
+    }
+
+    private func disconnect(_ connection: ConnectorConnection) async {
+        do {
+            _ = try await env.api.disconnect(connection.id)
+            await model.load(env: env)
+        } catch {
+            problem = "Could not disconnect that account."
+        }
     }
 
     /// Current, because connecting an account on the other tab has to change
@@ -174,12 +245,37 @@ private struct AppDetailView: View {
                                         .foregroundStyle(.orange)
                                 }
                             }
-                            Spacer()
+                            Spacer(minLength: 8)
+                            // Managed here as well as in the Connections pane:
+                            // somebody looking at an account in the context of
+                            // the app it belongs to should not have to go
+                            // somewhere else to rename or remove it.
+                            Menu {
+                                Button("Rename…") {
+                                    draftName = connection.label
+                                    renaming = connection
+                                }
+                                Divider()
+                                Button("Disconnect", role: .destructive) {
+                                    confirmingRemoval = connection
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                            }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
                         }
                     }
                 }
 
                 ConnectButton(app: live, model: model)
+
+                if let problem {
+                    Label(problem, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Connections")
             } footer: {
