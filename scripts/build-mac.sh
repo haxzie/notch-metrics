@@ -75,11 +75,22 @@ APP="$BUILD/export/NotchMetrics.app"
 
 # Checked on the artefact rather than on the intent. An environment variable
 # cannot see a URL compiled into a Swift string literal.
-echo "==> checking for development URLs in the binary"
-if strings -a "$APP/Contents/MacOS/NotchMetrics" \
-  | grep -nE 'https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)' ; then
-  echo "::error::a localhost URL is compiled into the binary"
-  exit 1
+#
+# NOTCH_ALLOW_LOCAL_URLS=1 is for installing a signed build against a local
+# Worker, which is the only backend that exists before Cloudflare is
+# provisioned. It is the same override check-release-env.mjs takes, so setting
+# it in CI would let a localhost build out as a release — set it on the
+# command line for a local install, never in a workflow.
+if [ "${NOTCH_ALLOW_LOCAL_URLS:-0}" = "1" ]; then
+  echo "==> skipping the development-URL check (NOTCH_ALLOW_LOCAL_URLS=1)"
+else
+  echo "==> checking for development URLs in the binary"
+  if strings -a "$APP/Contents/MacOS/NotchMetrics" \
+    | grep -nE 'https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)' ; then
+    echo "::error::a localhost URL is compiled into the binary."
+    echo "::error::For a local install against a local Worker: NOTCH_ALLOW_LOCAL_URLS=1 pnpm mac:ship"
+    exit 1
+  fi
 fi
 
 echo "==> $APP"
