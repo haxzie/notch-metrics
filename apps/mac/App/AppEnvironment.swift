@@ -22,6 +22,15 @@ final class AppEnvironment {
     private(set) var states: [String: TileState] = [:]
     private(set) var isSignedIn = false
 
+    /// Why the last sign-in attempt failed, for the Account pane.
+    ///
+    /// This used to go to NSLog only, which meant a failed exchange left the
+    /// button saying "Sign in" with no explanation anywhere the user could
+    /// reach — indistinguishable from the click not registering.
+    private(set) var authError: String?
+
+    func noteAuthError(_ message: String?) { authError = message }
+
     /// Which settings pane to show. Driven by `notchmetrics://settings/<pane>`
     /// so a link — from the website, from a notification, from the notch —
     /// can land on the right page rather than on General.

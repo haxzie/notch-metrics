@@ -66,10 +66,8 @@ public struct KeychainSecretStore: SecretStore {
             return String(data: data, encoding: .utf8)
         case errSecItemNotFound:
             return nil
-        case errSecInteractionNotAllowed, errSecAuthFailed:
-            throw SecretStoreError.identityChanged
         default:
-            throw SecretStoreError.unexpected(status)
+            throw mapped(status)
         }
     }
 
@@ -87,13 +85,42 @@ public struct KeychainSecretStore: SecretStore {
         insert[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
 
         let status = SecItemAdd(insert as CFDictionary, nil)
+        if status == errSecSuccess { return }
+
         if status == errSecDuplicateItem {
             let update = SecItemUpdate(
                 query(key) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-            guard update == errSecSuccess else { throw SecretStoreError.unexpected(update) }
-            return
+            if update == errSecSuccess { return }
+
+            // An item left by a differently-signed build of this app. Its ACL
+            // names the old identity, so it can be matched and deleted but not
+            // updated — which is why the update fails rather than the add.
+            //
+            // Deleting and re-adding is safe for everything we keep here: a
+            // device token and plugin secrets are all re-obtainable, and the
+            // alternative is an app that can never sign in again on this Mac
+            // without the user finding the item in Keychain Access.
+            if isIdentityFailure(update) {
+                SecItemDelete(query(key) as CFDictionary)
+                let retry = SecItemAdd(insert as CFDictionary, nil)
+                guard retry == errSecSuccess else { throw mapped(retry) }
+                return
+            }
+            throw mapped(update)
         }
-        guard status == errSecSuccess else { throw SecretStoreError.unexpected(status) }
+
+        throw mapped(status)
+    }
+
+    /// The statuses that mean "this item belongs to a different signature",
+    /// rather than "something is wrong with the request".
+    private func isIdentityFailure(_ status: OSStatus) -> Bool {
+        status == errSecInteractionNotAllowed || status == errSecAuthFailed
+            || status == errSecMissingEntitlement
+    }
+
+    private func mapped(_ status: OSStatus) -> SecretStoreError {
+        isIdentityFailure(status) ? .identityChanged : .unexpected(status)
     }
 
     public func deleteAll(matching prefix: String) throws {

@@ -254,7 +254,7 @@ struct AccountPane: View {
                     LabeledContent("Status", value: "Signed out")
                     Button("Sign in…") { beginSignIn() }
                         .buttonStyle(.borderedProminent)
-                    if let signInError {
+                    if let signInError = signInError ?? env.authError {
                         Text(signInError)
                             .font(.callout)
                             .foregroundStyle(.secondary)
