@@ -29,30 +29,41 @@ guard let source = NSImage(contentsOf: sourceURL) else {
 try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
 /// Draws the source masked to a squircle, inset inside a transparent canvas.
+///
+/// The bitmap is allocated at an explicit pixel size rather than captured from
+/// a focused `NSImage`. `NSBitmapImageRep(focusedViewRect:)` captures at the
+/// *current display's* backing scale, so on a Retina Mac every icon came out
+/// twice the requested size — and actool silently rejects the whole
+/// appiconset over it, leaving the app with the generic placeholder icon and
+/// no error anywhere except a warning in the build log.
 func render(side: Int) -> Data? {
+    guard let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+    else { return nil }
+    // One point per pixel, so the drawing below is in the units it claims.
+    rep.size = NSSize(width: side, height: side)
+
+    NSGraphicsContext.saveGraphicsState()
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.current?.imageInterpolation = .high
+
     let canvas = CGFloat(side)
-    // 824/1024 of the canvas, which is Apple's macOS icon grid.
+    // 824 of 1024, which is Apple's macOS icon grid: the artwork is inset
+    // inside a transparent canvas rather than filling it.
     let body = (canvas * 824 / 1024).rounded()
     let origin = ((canvas - body) / 2).rounded()
     let radius = body * 185 / 824
 
-    let image = NSImage(size: NSSize(width: canvas, height: canvas))
-    image.lockFocus()
-    defer { image.unlockFocus() }
-
-    NSGraphicsContext.current?.imageInterpolation = .high
-
     let rect = NSRect(x: origin, y: origin, width: body, height: body)
-    // `xRadius`/`yRadius` on NSBezierPath is a rounded rect rather than a true
+    // `xRadius`/`yRadius` is a rounded rect rather than a true
     // continuous-curvature squircle. At icon sizes the difference is a pixel
     // or two, and it avoids hand-rolling a superellipse.
-    let mask = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-    mask.addClip()
+    NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).addClip()
     source.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
 
-    guard let rep = NSBitmapImageRep(
-        focusedViewRect: NSRect(x: 0, y: 0, width: canvas, height: canvas))
-    else { return nil }
     return rep.representation(using: .png, properties: [:])
 }
 

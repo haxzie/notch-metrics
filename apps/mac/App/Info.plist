@@ -61,6 +61,13 @@
 		</dict>
 	</array>
 
+	<!-- Silences an xcodebuild warning on every build, and is what Finder and
+	     Launch Services use to categorise the app. "Productivity" rather than
+	     "Finance": the app displays numbers from other services, it does not
+	     handle money. -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSHumanReadableCopyright</key>
