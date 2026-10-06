@@ -118,6 +118,10 @@ public struct NotchContentView: View {
         case .grid:
             NotchWidgetCanvas(model: model, states: states, appOverrides: appOverrides)
                 .padding(.horizontal, 16)
+                // Clear of the header. Edit mode draws a backdrop a little
+                // larger than the grid, and without this its top edge and dots
+                // ran straight into the row of icons above.
+                .padding(.top, 10)
         case .list:
             NotchListView(model: model, states: states, appOverrides: appOverrides)
                 .padding(.horizontal, 10)
@@ -367,10 +371,13 @@ public struct NotchWidgetCanvas: View {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
                         )
+                        // Grown sideways and downwards only. Growing upwards
+                        // put it under the header's icons however much space
+                        // was left between them.
                         .frame(
                             width: grid.contentSize.width + 16,
-                            height: grid.contentSize.height + 16)
-                        .offset(x: -8, y: -8)
+                            height: grid.contentSize.height + 12)
+                        .offset(x: -8, y: -4)
                         .transition(.opacity)
                         // Behind the tiles in the ZStack, so a tap only
                         // reaches it where no tile covers it. Clicking the
@@ -644,6 +651,14 @@ enum ResizeAnchor: CaseIterable, Hashable {
 }
 
 /// The eight grab points on a selected tile.
+///
+/// The ordering of modifiers here is the whole thing, and getting it wrong is
+/// invisible: `.contentShape`, `.onHover` and `.gesture` must be attached to
+/// the dot itself, *before* the frame that positions it. Applied after, each
+/// handle's interactive area becomes the entire tile — all eight stacked on
+/// top of each other, with the last one in `allCases` quietly winning every
+/// hover and every drag. The symptom is the same diagonal cursor on all eight
+/// handles and a resize that answers to the wrong edge.
 struct ResizeHandles: View {
     let onChanged: (ResizeAnchor, CGPoint) -> Void
     let onEnded: () -> Void
@@ -651,6 +666,9 @@ struct ResizeHandles: View {
     @State private var hovered: ResizeAnchor?
 
     private let size: CGFloat = 9
+    /// Grown outwards for hit testing only. A 9pt target is too small to grab
+    /// reliably; the padding is undone again so it changes nothing visually.
+    private let grab: CGFloat = 6
 
     var body: some View {
         ForEach(ResizeAnchor.allCases, id: \.self) { anchor in
@@ -667,13 +685,14 @@ struct ResizeHandles: View {
                 .frame(width: isHovered ? size + 3 : size, height: isHovered ? size + 3 : size)
                 .shadow(color: .black.opacity(0.35), radius: 2)
                 .animation(.easeOut(duration: 0.12), value: isHovered)
-                // Half outside the tile, so the handle straddles the edge it
-                // controls rather than covering the content inside it.
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor.alignment)
-                .padding(-size / 2)
-                .contentShape(Rectangle().inset(by: -4))
+                .padding(grab)
+                .contentShape(Rectangle())
                 .onHover { inside in
-                    hovered = inside ? anchor : (hovered == anchor ? nil : hovered)
+                    if inside {
+                        hovered = anchor
+                    } else if hovered == anchor {
+                        hovered = nil
+                    }
                     anchor.applyCursor(inside)
                 }
                 .gesture(
@@ -681,10 +700,15 @@ struct ResizeHandles: View {
                         .onChanged { onChanged(anchor, $0.location) }
                         .onEnded { _ in onEnded() }
                 )
+                .padding(-grab)
+                // Positioned last, and half outside the tile, so the handle
+                // straddles the edge it controls rather than covering the
+                // content inside it.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor.alignment)
+                .padding(-size / 2)
         }
     }
 }
-
 
 /// When a handle drag is allowed to change the span.
 ///
