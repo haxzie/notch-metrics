@@ -165,21 +165,35 @@ private struct RenameSheet: View {
     let onCancel: () -> Void
     let onSave: () -> Void
 
+    private var isEmpty: Bool { name.trimmingCharacters(in: .whitespaces).isEmpty }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // The sheet is sized here rather than by its contents. Left to grow,
+        // it takes its width from the title and the button row, and a
+        // fixed-width field then sits short of the trailing edge — which is
+        // the gap, not padding.
+        VStack(alignment: .leading, spacing: 10) {
             Text("Rename connection").font(.headline)
+
             TextField("Name", text: $name)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
-            HStack {
+                .frame(maxWidth: .infinity)
+                // Return saves. A one-field sheet that makes you reach for
+                // the mouse is a one-field sheet nobody enjoys.
+                .onSubmit { if !isEmpty { onSave() } }
+
+            HStack(spacing: 8) {
                 Spacer()
                 Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                 Button("Save", action: onSave)
                     .buttonStyle(.borderedProminent)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isEmpty)
             }
         }
-        .padding(20)
+        .padding(16)
+        .frame(width: 300)
     }
 }
 

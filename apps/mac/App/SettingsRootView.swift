@@ -29,7 +29,9 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .connections: "link"
         case .apps: "square.grid.2x2"
-        case .widgets: "rectangle.grid.2x2"
+        // A box, not another grid: Apps is `square.grid.2x2` and the two
+        // sat next to each other in the sidebar looking near-identical.
+        case .widgets: "square.on.square"
         case .customMetrics: "curlybraces"
         case .account: "person.crop.circle"
         case .updates: "arrow.triangle.2.circlepath"
