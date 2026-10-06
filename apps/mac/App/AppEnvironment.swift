@@ -61,7 +61,7 @@ final class AppEnvironment {
     /// in /Applications rather than the one just built.
     var settingsPane: SettingsPane =
         ProcessInfo.processInfo.environment["NOTCH_DEBUG_PANE"]
-            .flatMap { SettingsPane(rawValue: $0) ?? SettingsPane.aliases[$0] } ?? .general
+            .flatMap { SettingsPane(rawValue: $0) ?? SettingsPane.aliases[$0] } ?? .widgets
 
     /// Read from Info.plist rather than hardcoded, so a build pointed at a
     /// local Worker and a release build run the same code path.

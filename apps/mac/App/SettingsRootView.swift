@@ -39,12 +39,15 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// Grouped the way System Settings groups things: what you set up, who you
-    /// are, and the app itself.
+    /// Grouped the way System Settings groups things: the thing you came to
+    /// change, then your data, then the app itself.
     static let sections: [(String?, [SettingsPane])] = [
-        (nil, [.general]),
-        ("Data", [.connections, .apps, .widgets, .customMetrics]),
-        ("App", [.account, .updates, .about]),
+        // Widgets first and ungrouped: it is what people open this window to
+        // change. General is down in App with the other
+        // set-it-once-and-forget-it panes.
+        (nil, [.widgets]),
+        ("Data", [.connections, .apps, .customMetrics]),
+        ("App", [.account, .general, .updates, .about]),
     ]
 }
 
