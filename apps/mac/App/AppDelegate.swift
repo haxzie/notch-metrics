@@ -41,7 +41,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch url.host {
             case "auth":
                 Task { await handleAuthCallback(url) }
+            case "connected":
+                // The browser finished a connect flow. Land on Integrations
+                // so the newly connected account is visible rather than
+                // leaving the user to go looking for it.
+                env.settingsPane = .integrations
+                openSettings()
             case "settings":
+                // `notchmetrics://settings/integrations` lands on that pane.
+                // The path is matched leniently — an unknown one opens
+                // General rather than doing nothing, because a link that
+                // silently no-ops is worse than one that lands nearby.
+                let wanted = url.pathComponents.first { $0 != "/" }
+                if let wanted, let pane = SettingsPane(rawValue: wanted) {
+                    env.settingsPane = pane
+                }
                 openSettings()
             default:
                 break

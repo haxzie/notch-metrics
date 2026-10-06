@@ -44,6 +44,46 @@ export const desktopAuthCode = sqliteTable(
   (t) => [index("desktop_auth_code_user_idx").on(t.userId)],
 );
 
+/**
+ * A pending connect flow: the app asked for a link, the browser has not
+ * finished with it yet.
+ *
+ * Short-lived and single-use. Only the hash is stored — the plaintext travels
+ * in a URL, and a leaked log or browser history should not be enough to
+ * resume somebody else's connection.
+ */
+export const connectLink = sqliteTable(
+  "connect_link",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    connectorId: text("connector_id").notNull(),
+    /** OAuth state, signed into the provider redirect and checked on return. */
+    oauthState: text("oauth_state"),
+    /**
+     * Tokens held between the OAuth callback and the user picking a property.
+     * Encrypted with the same envelope as a finished integration — this row
+     * is a credential for as long as it exists.
+     */
+    pendingCiphertext: text("pending_ciphertext"),
+    pendingIv: text("pending_iv"),
+    pendingWrappedDek: text("pending_wrapped_dek"),
+    pendingKeyVersion: integer("pending_key_version"),
+    /** Set once the flow finishes, so the app's poll can stop. */
+    integrationId: text("integration_id"),
+    completedAt: timestamp("completed_at"),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("connect_link_user_idx").on(t.userId),
+    index("connect_link_expiry_idx").on(t.expiresAt),
+  ],
+);
+
 export const integration = sqliteTable(
   "integration",
   {

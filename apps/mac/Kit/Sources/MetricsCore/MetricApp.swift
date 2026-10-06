@@ -35,20 +35,58 @@ public enum AppCatalog {
     /// and `resolve(_:overrides:)` prefers those — but the app has to render a
     /// cold launch with no network, and custom metrics name apps the server
     /// has never heard of.
+    /// What ships in the binary.
+    ///
+    /// The server's connector manifests carry a name and an accent colour too,
+    /// and `resolve(_:overrides:)` prefers those — but the app has to render a
+    /// cold launch with no network, and custom metrics name apps the server has
+    /// never heard of.
+    ///
+    /// Symbols rather than vendor logos: shipping third-party marks means an
+    /// asset pipeline, a licence question for each one, and a release every time
+    /// somebody rebrands. `ProviderManifest.iconPath` exists for when that trade
+    /// is worth making.
     public static let builtIn: [MetricApp] = [
-        MetricApp(id: "stripe", name: "Stripe", symbol: "creditcard.fill", accentHex: "635BFF"),
+        MetricApp(
+            id: "stripe", name: "Stripe", symbol: "creditcard.fill", accentHex: "635BFF"),
         MetricApp(
             id: "dodopayments", name: "Dodo Payments", symbol: "bird.fill", accentHex: "111111"),
         MetricApp(
             id: "lemonsqueezy", name: "Lemon Squeezy", symbol: "cart.fill", accentHex: "FFC233"),
-        MetricApp(id: "polar", name: "Polar", symbol: "snowflake", accentHex: "0062FF"),
         MetricApp(
-            id: "google-analytics", name: "Google Analytics", symbol: "chart.bar.xaxis",
-            accentHex: "E8710A"),
-        MetricApp(id: "plausible", name: "Plausible", symbol: "waveform.path.ecg", accentHex: "5850EC"),
-        MetricApp(id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right", accentHex: "F0F6FC"),
-        MetricApp(id: "linear", name: "Linear", symbol: "square.stack.3d.up.fill", accentHex: "5E6AD2"),
-        MetricApp(id: "posthog", name: "PostHog", symbol: "hedgehog.fill", accentHex: "F54E00"),
+            id: "polar", name: "Polar", symbol: "snowflake", accentHex: "0062FF"),
+        MetricApp(
+            id: "paddle", name: "Paddle", symbol: "banknote.fill", accentHex: "FDDD35"),
+        MetricApp(
+            id: "posthog", name: "PostHog", symbol: "chart.dots.scatter", accentHex: "F54E00"),
+        MetricApp(
+            id: "plausible", name: "Plausible", symbol: "chart.xyaxis.line", accentHex: "5850EC"),
+        MetricApp(
+            id: "mixpanel", name: "Mixpanel", symbol: "chart.bar.xaxis", accentHex: "7856FF"),
+        MetricApp(
+            id: "amplitude", name: "Amplitude", symbol: "waveform.path.ecg", accentHex: "1E61F0"),
+        MetricApp(
+            id: "google-analytics", name: "Google Analytics", symbol: "chart.bar.fill", accentHex: "E8710A"),
+        MetricApp(
+            id: "google-search-console", name: "Google Search Console", symbol: "magnifyingglass", accentHex: "4285F4"),
+        MetricApp(
+            id: "ahrefs", name: "Ahrefs", symbol: "link", accentHex: "FF8C00"),
+        MetricApp(
+            id: "google-ads", name: "Google Ads", symbol: "megaphone.fill", accentHex: "4285F4"),
+        MetricApp(
+            id: "meta-ads", name: "Meta Ads", symbol: "bubble.left.and.bubble.right.fill", accentHex: "0866FF"),
+        MetricApp(
+            id: "hubspot", name: "HubSpot", symbol: "person.crop.circle.badge.checkmark", accentHex: "FF7A59"),
+        MetricApp(
+            id: "intercom", name: "Intercom", symbol: "message.fill", accentHex: "1F8DED"),
+        MetricApp(
+            id: "apollo", name: "Apollo", symbol: "paperplane.fill", accentHex: "3B47D2"),
+        MetricApp(
+            id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right", accentHex: "F0F6FC"),
+        MetricApp(
+            id: "linear", name: "Linear", symbol: "square.stack.3d.up.fill", accentHex: "5E6AD2"),
+        MetricApp(
+            id: "plausible-selfhost", name: "Plausible (self-hosted)", symbol: "chart.xyaxis.line", accentHex: "5850EC"),
         MetricApp(id: customId, name: "Custom", symbol: "curlybraces", accentHex: "D819C2"),
     ]
 

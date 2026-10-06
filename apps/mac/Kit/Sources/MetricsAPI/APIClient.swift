@@ -47,20 +47,20 @@ public actor APIClient {
 
     public func get<T: Decodable & Sendable>(
         _ path: String, query: [URLQueryItem] = [], as type: T.Type
-    ) async throws -> T {
+    ) async throws(APIError) -> T {
         try await send(path: path, method: "GET", query: query, body: Optional<Never>.none, as: type)
     }
 
     public func post<Body: Encodable & Sendable, T: Decodable & Sendable>(
         _ path: String, body: Body, as type: T.Type
-    ) async throws -> T {
+    ) async throws(APIError) -> T {
         try await send(path: path, method: "POST", query: [], body: body, as: type)
     }
 
     private func send<Body: Encodable & Sendable, T: Decodable & Sendable>(
         path: String, method: String, query: [URLQueryItem], body: Body?, as _: T.Type,
         isRetry: Bool = false
-    ) async throws -> T {
+    ) async throws(APIError) -> T {
         var components = URLComponents(
             url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
@@ -69,12 +69,22 @@ public actor APIClient {
         request.httpMethod = method
         request.timeoutInterval = 20
 
-        if let token = try await tokens.validToken() {
+        // The catalogue is readable signed out, so a missing token is not an
+        // error here — the request simply goes without one and comes back
+        // without the user-specific parts.
+        if let token = try? await tokens.validToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
+            do {
+                request.httpBody = try JSONEncoder().encode(body)
+            } catch {
+                // Encoding our own request body cannot fail for any reason the
+                // caller can act on, so it is reported as a decoding fault
+                // rather than given a case of its own.
+                throw APIError.decoding(String(describing: error))
+            }
         }
 
         let data: Data
@@ -123,4 +133,50 @@ public actor APIClient {
                 status: http.statusCode, code: problem?.code, message: problem?.message)
         }
     }
+}
+
+// MARK: - Typed calls the app actually makes
+
+extension APIClient {
+    /// The connector catalogue.
+    ///
+    /// Readable signed out, so the integrations list renders before anybody
+    /// has an account — and folds in connected accounts when a token is
+    /// present, so a row can say "Connected" without a second request and a
+    /// flash of the wrong state.
+    public func catalogue() async throws(APIError) -> ConnectorCatalogue {
+        try await get("v1/connectors", as: ConnectorCatalogue.self)
+    }
+
+    /// Asks for a browser link to connect one integration.
+    ///
+    /// The app deliberately does not collect credentials itself: an OAuth
+    /// flow needs a real address bar, and a native window asking for a Stripe
+    /// key looks exactly like one a phishing app would show.
+    public func connectLink(for connectorId: String) async throws(APIError) -> ConnectLink {
+        try await post("v1/connect/\(connectorId)", body: EmptyBody(), as: ConnectLink.self)
+    }
+
+    public func connectStatus(for connectorId: String) async throws(APIError) -> ConnectStatus {
+        try await get("v1/connect/\(connectorId)/status", as: ConnectStatus.self)
+    }
+}
+
+public struct EmptyBody: Encodable, Sendable {
+    public init() {}
+}
+
+public struct ConnectLink: Decodable, Sendable {
+    public let url: URL
+    public let connectorId: String
+    public let expiresIn: Int
+}
+
+public struct ConnectStatus: Decodable, Sendable {
+    /// "none" | "pending" | "connected" | "expired"
+    public let state: String
+    public let integrationId: String?
+
+    public var isConnected: Bool { state == "connected" }
+    public var isPending: Bool { state == "pending" }
 }

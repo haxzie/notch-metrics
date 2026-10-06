@@ -22,6 +22,18 @@ final class AppEnvironment {
     private(set) var states: [String: TileState] = [:]
     private(set) var isSignedIn = false
 
+    /// Which settings pane to show. Driven by `notchmetrics://settings/<pane>`
+    /// so a link — from the website, from a notification, from the notch —
+    /// can land on the right page rather than on General.
+    ///
+    /// `NOTCH_DEBUG_PANE=integrations` opens straight to one. The URL scheme
+    /// cannot be used for this during development: LaunchServices routes
+    /// `notchmetrics://` to whichever copy is *registered*, which is the one
+    /// in /Applications rather than the one just built.
+    var settingsPane: SettingsPane =
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_PANE"]
+            .flatMap(SettingsPane.init(rawValue:)) ?? .general
+
     /// Read from Info.plist rather than hardcoded, so a build pointed at a
     /// local Worker and a release build run the same code path.
     static var apiURL: URL {

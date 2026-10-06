@@ -56,37 +56,6 @@ struct GeneralPane: View {
     }
 }
 
-struct IntegrationsPane: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        Form {
-            Section {
-                ContentUnavailableView {
-                    Label("No integrations yet", systemImage: "square.stack.3d.up")
-                } description: {
-                    Text(
-                        "Connect Stripe, Dodo Payments or Lemon Squeezy on the web to see your numbers in the notch."
-                    )
-                } actions: {
-                    Button("Open the web dashboard") {
-                        NSWorkspace.shared.open(
-                            AppEnvironment.appURL.appendingPathComponent("app/integrations"))
-                    }
-                }
-                .padding(.vertical, 20)
-            } footer: {
-                // Rendered from GET /v1/providers at runtime, which is the
-                // whole reason a new provider needs no app release.
-                Text("The list of available providers is fetched from the server, so new ones appear without updating this app.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
 struct WidgetsPane: View {
     @Environment(AppEnvironment.self) private var env
 

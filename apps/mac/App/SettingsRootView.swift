@@ -47,11 +47,11 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
 /// Apple adjusts their metrics.
 struct SettingsRootView: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var selection: SettingsPane = .general
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
+        @Bindable var env = env
+        return NavigationSplitView {
+            List(selection: $env.settingsPane) {
                 ForEach(Array(SettingsPane.sections.enumerated()), id: \.offset) { _, section in
                     if let title = section.0 {
                         Section(title) { rows(section.1) }
@@ -64,7 +64,7 @@ struct SettingsRootView: View {
             .navigationSplitViewColumnWidth(min: 200, ideal: 215, max: 260)
         } detail: {
             detail
-                .navigationTitle(selection.title)
+                .navigationTitle(env.settingsPane.title)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -77,7 +77,7 @@ struct SettingsRootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection {
+        switch env.settingsPane {
         case .general: GeneralPane()
         case .integrations: IntegrationsPane()
         case .widgets: WidgetsPane()
