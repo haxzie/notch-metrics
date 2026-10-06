@@ -1,3 +1,4 @@
+import AppKit
 import MetricsCore
 import SwiftUI
 
@@ -47,6 +48,43 @@ public enum NotchTheme {
     /// tiles should look like two Stripe tiles, not like tile one and tile two.
     public static func accent(for app: MetricApp) -> Color {
         Color(hex: app.accentHex) ?? gradientStart
+    }
+
+    /// The fill behind a connector's mark.
+    ///
+    /// Brand colours are chosen against a white page, so several of them
+    /// (PostHog, Apple, Notion) are near-black and vanish into this window.
+    /// Lifting anything below the floor keeps the tile a recognisable shape
+    /// without moving the hue, which is what people actually recognise.
+    public static func tileFill(for app: MetricApp) -> Color {
+        guard let nsColor = NSColor(hex: app.accentHex)?
+            .usingColorSpace(.sRGB) else { return gradientStart }
+
+        // Rec. 709 luma. Close enough for "is this going to disappear", and
+        // cheaper than a full perceptual conversion for a 30pt square.
+        let luma =
+            0.2126 * nsColor.redComponent
+            + 0.7152 * nsColor.greenComponent
+            + 0.0722 * nsColor.blueComponent
+
+        let floor = 0.16
+        guard luma < floor else { return Color(nsColor: nsColor) }
+
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        nsColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        // A fully desaturated brand (pure black) has no hue to preserve, so it
+        // becomes a neutral tile rather than an arbitrary colour.
+        return Color(
+            nsColor: NSColor(
+                hue: hue,
+                saturation: saturation,
+                brightness: max(brightness, 0.28),
+                alpha: alpha
+            )
+        )
     }
 
     /// Tints a tile from its index. Only for the case where no app is known.
@@ -186,6 +224,22 @@ public struct DottedGrid: View {
         }
         .allowsHitTesting(false)
         .transition(.opacity)
+    }
+}
+
+extension NSColor {
+    /// `RRGGBB`, in sRGB.
+    ///
+    /// The AppKit twin of `Color(hex:)`, needed because luminance and HSB
+    /// components are not reachable through SwiftUI's `Color`.
+    convenience init?(hex: String) {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard cleaned.count == 6, let value = UInt32(cleaned, radix: 16) else { return nil }
+        self.init(
+            srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1)
     }
 }
 

@@ -1,13 +1,19 @@
+import AppKit
 import MetricsCore
 import SwiftUI
 
-/// A connector's mark: its symbol on a tile of its own brand colour.
+/// A connector's mark: the vendor's logo, in white, on a tile of its brand
+/// colour.
 ///
-/// Not the vendor's logo. Shipping third-party marks means an asset pipeline,
-/// a licence question for each one, and a release every time somebody
-/// rebrands — and the app's whole point is that a connector can ship without
-/// a Mac release. The brand *colour* carries most of the recognition anyway,
-/// and it arrives from the server with the manifest.
+/// The marks are vendored from simple-icons by `scripts/sync-connector-icons.mjs`
+/// and committed into the asset catalogue rather than fetched from the assets
+/// host. A logo that arrives over the network makes the Integrations pane a
+/// column of grey boxes on a bad connection, and recognising a logo is the
+/// entire job of this view.
+///
+/// Four connectors have no mark in simple-icons and fall back to their SF
+/// Symbol. That is why the fallback renders in the same white-on-brand tile:
+/// the row should look deliberate, not broken.
 public struct ConnectorIcon: View {
     public let app: MetricApp
     public var size: CGFloat
@@ -20,22 +26,39 @@ public struct ConnectorIcon: View {
         self.isEnabled = isEnabled
     }
 
-    private var tint: Color { NotchTheme.accent(for: app) }
+    /// Looked up in the main bundle because the catalogue belongs to the app
+    /// target, not to this package.
+    private var mark: NSImage? { NSImage(named: "connector-\(app.id)") }
+
+    private var tile: Color { NotchTheme.tileFill(for: app) }
 
     public var body: some View {
         RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-            .fill(tint.opacity(isEnabled ? 0.16 : 0.08))
+            .fill(tile)
+            .overlay(glyph)
             .overlay(
-                Image(systemName: app.symbol)
-                    .font(.system(size: size * 0.46, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .opacity(isEnabled ? 1 : 0.45)
-            )
-            .overlay(
+                // A hairline so a tile whose brand colour is close to the
+                // window's own still has an edge.
                 RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                    .strokeBorder(tint.opacity(isEnabled ? 0.22 : 0.1), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             )
             .frame(width: size, height: size)
+            .opacity(isEnabled ? 1 : 0.45)
+            .saturation(isEnabled ? 1 : 0.4)
             .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        if let mark {
+            Image(nsImage: mark)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size * 0.54, height: size * 0.54)
+        } else {
+            Image(systemName: app.symbol)
+                .font(.system(size: size * 0.46, weight: .semibold))
+                .foregroundStyle(.white)
+        }
     }
 }
