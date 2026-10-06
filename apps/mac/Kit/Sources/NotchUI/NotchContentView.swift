@@ -333,6 +333,8 @@ public struct NotchWidgetCanvas: View {
     /// other half of the jitter.
     @State private var lastCell: GridCell?
     @State private var selectedID: String?
+    /// Where the pointer was when the span last changed, for hysteresis.
+    @State private var resizeAnchorCell: CGPoint?
 
     public init(
         model: NotchLayoutModel,
@@ -422,7 +424,10 @@ public struct NotchWidgetCanvas: View {
                                     onChanged: { anchor, point in
                                         resize(widget, anchor: anchor, to: point, grid: grid)
                                     },
-                                    onEnded: { model.endResize(commit: true) })
+                                    onEnded: {
+                                        model.endResize(commit: true)
+                                        resizeAnchorCell = nil
+                                    })
                             }
                         }
                     }
@@ -479,7 +484,21 @@ public struct NotchWidgetCanvas: View {
     private func resize(
         _ widget: NotchWidget, anchor: ResizeAnchor, to point: CGPoint, grid: GridGeometry
     ) {
-        if model.resizingID != widget.id { model.beginResize(widget.id) }
+        if model.resizingID != widget.id {
+            model.beginResize(widget.id)
+            resizeAnchorCell = point
+        }
+
+        // Hysteresis. Without it the span flips the instant the pointer
+        // crosses a cell boundary, so a hand drifting a couple of points
+        // sideways while pulling down would retarget the column — which is
+        // what made this feel like it was fighting back.
+        //
+        // Measured from where the span last changed, not from the gesture's
+        // start, so a long drag stays responsive.
+        guard ResizeGate.shouldReevaluate(
+            anchor: anchor, from: resizeAnchorCell ?? point, to: point)
+        else { return }
 
         let current = model.displayedWithResize.widgets.first { $0.id == widget.id } ?? widget
         let cell = grid.cellIndex(at: point)
@@ -494,8 +513,9 @@ public struct NotchWidgetCanvas: View {
         if anchor.movesTop { top = min(cell.row, bottom) }
         if anchor.movesBottom { bottom = max(cell.row, top) }
 
-        model.resizeMoved(
+        let changed = model.resizeMoved(
             to: (col: left, row: top, cols: right - left + 1, rows: bottom - top + 1))
+        if changed { resizeAnchorCell = point }
     }
 
     private func dragGesture(
@@ -503,6 +523,11 @@ public struct NotchWidgetCanvas: View {
     ) -> some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .named("notch-grid"))
             .onChanged { value in
+                // A handle drag must never also move the tile. The handles sit
+                // in an overlay above the tile, but SwiftUI will still deliver
+                // the drag to both, and the move was winning — which is why a
+                // resize looked like the widget scattering its neighbours.
+                guard model.resizingID == nil else { return }
                 if model.draggingID != widget.id {
                     model.beginDrag(widget.id)
                     dragOrigin = frame.origin
@@ -582,11 +607,38 @@ enum ResizeAnchor: CaseIterable, Hashable {
         }
     }
 
-    var cursor: NSCursor {
-        switch self {
-        case .leading, .trailing: .resizeLeftRight
-        case .top, .bottom: .resizeUpDown
-        default: .crosshair
+    /// Sets or clears the cursor for this handle.
+    ///
+    /// `set()` rather than `push()`/`pop()`: hover enter and exit are not
+    /// guaranteed to pair up when a drag ends outside the view, and an
+    /// unbalanced push leaves the resize cursor stuck over the whole notch.
+    ///
+    /// macOS 15 has real diagonal frame cursors; on 14 the nearest honest
+    /// thing is the crosshair, because the diagonals are not public API.
+    func applyCursor(_ active: Bool) {
+        guard active else {
+            NSCursor.arrow.set()
+            return
+        }
+        if #available(macOS 15.0, *) {
+            switch self {
+            case .leading: NSCursor.frameResize(position: .left, directions: .all).set()
+            case .trailing: NSCursor.frameResize(position: .right, directions: .all).set()
+            case .top: NSCursor.frameResize(position: .top, directions: .all).set()
+            case .bottom: NSCursor.frameResize(position: .bottom, directions: .all).set()
+            case .topLeading: NSCursor.frameResize(position: .topLeft, directions: .all).set()
+            case .topTrailing: NSCursor.frameResize(position: .topRight, directions: .all).set()
+            case .bottomLeading:
+                NSCursor.frameResize(position: .bottomLeft, directions: .all).set()
+            case .bottomTrailing:
+                NSCursor.frameResize(position: .bottomRight, directions: .all).set()
+            }
+        } else {
+            switch self {
+            case .leading, .trailing: NSCursor.resizeLeftRight.set()
+            case .top, .bottom: NSCursor.resizeUpDown.set()
+            default: NSCursor.crosshair.set()
+            }
         }
     }
 }
@@ -596,28 +648,68 @@ struct ResizeHandles: View {
     let onChanged: (ResizeAnchor, CGPoint) -> Void
     let onEnded: () -> Void
 
+    @State private var hovered: ResizeAnchor?
+
     private let size: CGFloat = 9
 
     var body: some View {
         ForEach(ResizeAnchor.allCases, id: \.self) { anchor in
+            let isHovered = hovered == anchor
             Circle()
-                .fill(Color.white)
-                .overlay(Circle().strokeBorder(NotchTheme.editHighlight, lineWidth: 1.5))
-                .frame(width: size, height: size)
+                // Filled with the selection blue under the pointer, so it is
+                // obvious which handle a drag will grab before committing to
+                // it. White otherwise, to read against any tile colour.
+                .fill(isHovered ? NotchTheme.editHighlight : Color.white)
+                .overlay(
+                    Circle().strokeBorder(
+                        isHovered ? Color.white : NotchTheme.editHighlight,
+                        lineWidth: 1.5))
+                .frame(width: isHovered ? size + 3 : size, height: isHovered ? size + 3 : size)
                 .shadow(color: .black.opacity(0.35), radius: 2)
+                .animation(.easeOut(duration: 0.12), value: isHovered)
                 // Half outside the tile, so the handle straddles the edge it
                 // controls rather than covering the content inside it.
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor.alignment)
                 .padding(-size / 2)
                 .contentShape(Rectangle().inset(by: -4))
                 .onHover { inside in
-                    if inside { anchor.cursor.push() } else { NSCursor.pop() }
+                    hovered = inside ? anchor : (hovered == anchor ? nil : hovered)
+                    anchor.applyCursor(inside)
                 }
                 .gesture(
                     DragGesture(minimumDistance: 1, coordinateSpace: .named("notch-grid"))
                         .onChanged { onChanged(anchor, $0.location) }
                         .onEnded { _ in onEnded() }
                 )
+        }
+    }
+}
+
+
+/// When a handle drag is allowed to change the span.
+///
+/// Pulled out of the view so it can be tested: the complaint it answers — a
+/// drag downwards retargeting the column because the hand wandered two points
+/// sideways — is not something a screenshot shows.
+enum ResizeGate {
+    /// Points the pointer must travel, on an axis the handle controls, before
+    /// the span is recomputed.
+    static let threshold: CGFloat = 10
+
+    static func shouldReevaluate(
+        anchor: ResizeAnchor, from: CGPoint, to: CGPoint, threshold: CGFloat = threshold
+    ) -> Bool {
+        let dx = abs(to.x - from.x)
+        let dy = abs(to.y - from.y)
+        let horizontal = anchor.movesLeading || anchor.movesTrailing
+        let vertical = anchor.movesTop || anchor.movesBottom
+
+        // An edge handle ignores the axis it does not control outright, so a
+        // vertical drag cannot change a column however far sideways it wanders.
+        switch (horizontal, vertical) {
+        case (true, false): return dx >= threshold
+        case (false, true): return dy >= threshold
+        default: return dx >= threshold || dy >= threshold
         }
     }
 }

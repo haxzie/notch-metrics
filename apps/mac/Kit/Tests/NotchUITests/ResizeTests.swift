@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 
 @testable import MetricsCore
@@ -124,5 +125,56 @@ struct ResizeTests {
         let after = model.layout.widgets.first { $0.id == "b" }
         #expect(after?.col == before?.col)
         #expect(after?.row == before?.row)
+    }
+}
+
+/// The gate that decides when a handle drag recomputes the span.
+@MainActor
+struct ResizeGateTests {
+    private let origin = CGPoint(x: 100, y: 100)
+
+    @Test("a vertical handle ignores sideways movement entirely")
+    func verticalIgnoresHorizontal() {
+        // The reported bug: pulling the bottom handle down while the hand
+        // drifts sideways retargeted the column.
+        let wandered = CGPoint(x: 160, y: 102)
+        #expect(ResizeGate.shouldReevaluate(anchor: .bottom, from: origin, to: wandered) == false)
+        #expect(ResizeGate.shouldReevaluate(anchor: .top, from: origin, to: wandered) == false)
+    }
+
+    @Test("a horizontal handle ignores vertical movement entirely")
+    func horizontalIgnoresVertical() {
+        let wandered = CGPoint(x: 102, y: 160)
+        #expect(ResizeGate.shouldReevaluate(anchor: .leading, from: origin, to: wandered) == false)
+        #expect(ResizeGate.shouldReevaluate(anchor: .trailing, from: origin, to: wandered) == false)
+    }
+
+    @Test("movement on the controlled axis passes once it clears the threshold")
+    func passesOnItsOwnAxis() {
+        #expect(
+            ResizeGate.shouldReevaluate(
+                anchor: .bottom, from: origin, to: CGPoint(x: 100, y: 100 + ResizeGate.threshold)))
+        #expect(
+            ResizeGate.shouldReevaluate(
+                anchor: .trailing, from: origin, to: CGPoint(x: 100 + ResizeGate.threshold, y: 100))
+        )
+    }
+
+    @Test("a tremor below the threshold changes nothing")
+    func ignoresTremor() {
+        let tremor = CGPoint(x: 103, y: 104)
+        for anchor in ResizeAnchor.allCases {
+            #expect(ResizeGate.shouldReevaluate(anchor: anchor, from: origin, to: tremor) == false)
+        }
+    }
+
+    @Test("a corner answers to either axis")
+    func cornersTakeBoth() {
+        #expect(
+            ResizeGate.shouldReevaluate(
+                anchor: .bottomTrailing, from: origin, to: CGPoint(x: 100, y: 120)))
+        #expect(
+            ResizeGate.shouldReevaluate(
+                anchor: .bottomTrailing, from: origin, to: CGPoint(x: 120, y: 100)))
     }
 }
