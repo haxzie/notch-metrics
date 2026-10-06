@@ -43,7 +43,7 @@ struct ContractTests {
         let notDecodedHere: Set<String> = ["provider-manifest-list", "integration", "plugin-manifest"]
         let decoded: Set<String> = [
             "metric-series", "metric-series-empty", "metric-series-no-currency",
-            "metric-error", "metric-batch", "widget-layout", "widget-layout-list",
+            "metric-error", "metric-batch", "widget-layout",
             "latest-json",
         ]
 
@@ -113,7 +113,6 @@ struct ContractTests {
         let layout = try JSONDecoder().decode(NotchLayout.self, from: Self.load("widget-layout"))
         #expect(layout.revision == 7)
         #expect(layout.rows == 2)
-        #expect(layout.display == .grid)
         #expect(layout.widgets.count == 2)
         #expect(layout.widgets[0].kind == .providerMetric)
         #expect(layout.widgets[0].size == .square)
@@ -123,25 +122,6 @@ struct ContractTests {
         #expect(layout.widgets[1].appId == "github")
     }
 
-    @Test("a list layout groups by app, including one this build has never seen")
-    func listLayout() throws {
-        let layout = try JSONDecoder().decode(
-            NotchLayout.self, from: Self.load("widget-layout-list"))
-        #expect(layout.display == .list)
-        #expect(layout.rows == 3)
-
-        let groups = layout.groupedByApp()
-        #expect(groups.map(\.app.id) == ["stripe", "google-analytics", "linear"])
-        #expect(groups.map(\.app.name) == ["Stripe", "Google Analytics", "Linear"])
-
-        // "linear" is not in this build's catalogue. It must render with a
-        // titlecased name and a fallback mark rather than being dropped —
-        // otherwise a server that learns about a new app silently removes a
-        // row from everybody's notch.
-        let unknown = try #require(groups.last)
-        #expect(!unknown.app.symbol.isEmpty)
-        #expect(unknown.widgets.count == 1)
-    }
 
     @Test("an unknown enum value falls back instead of failing the whole decode")
     func unknownEnumsFallBack() throws {

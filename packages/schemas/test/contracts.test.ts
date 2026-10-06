@@ -15,7 +15,6 @@ const BY_NAME: Record<string, z.ZodType> = {
   "provider-manifest-list": S.ProviderManifestList,
   integration: S.Integration,
   "widget-layout": S.WidgetLayout,
-  "widget-layout-list": S.WidgetLayout,
   "latest-json": S.LatestJson,
   "plugin-manifest": S.PluginManifest,
 };

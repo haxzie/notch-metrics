@@ -47,16 +47,6 @@ export const GRID_DEFAULT_ROWS = 2;
 export const GRID_MIN_ROWS = 1;
 export const GRID_MAX_ROWS = 4;
 
-/**
- * Grid of tiles, or a list of rows grouped by app.
- *
- * The list is not a lesser view: it is the one that fits a dozen numbers from
- * four apps into a notch, where the grid tops out at six tiles and starts
- * hiding things.
- */
-export const DisplayMode = z.enum(["grid", "list"]);
-export type DisplayMode = z.infer<typeof DisplayMode>;
-
 export const Widget = z.object({
   id: WidgetId,
   kind: WidgetKind,
@@ -108,7 +98,6 @@ export type Widget = z.infer<typeof Widget>;
 export const WidgetLayout = z.object({
   revision: z.number().int().min(0),
   rows: z.number().int().min(GRID_MIN_ROWS).max(GRID_MAX_ROWS).default(GRID_DEFAULT_ROWS),
-  display: DisplayMode.default("grid"),
   widgets: z.array(Widget),
 });
 export type WidgetLayout = z.infer<typeof WidgetLayout>;
@@ -117,7 +106,6 @@ export const WidgetLayoutConflict = z.object({
   code: z.literal("STALE_REVISION"),
   revision: z.number().int(),
   rows: z.number().int(),
-  display: DisplayMode,
   widgets: z.array(Widget),
 });
 export type WidgetLayoutConflict = z.infer<typeof WidgetLayoutConflict>;

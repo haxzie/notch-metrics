@@ -1,7 +1,6 @@
 {
   "revision": 7,
   "rows": 2,
-  "display": "grid",
   "widgets": [
     {
       "id": "wid_01",

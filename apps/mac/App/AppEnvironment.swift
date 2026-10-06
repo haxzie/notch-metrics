@@ -109,11 +109,8 @@ final class AppEnvironment {
         // a new user's notch was full of an app they had never connected and
         // every tile said "Connect Stripe". The empty state in NotchPanel
         // says what to do instead.
-        let wantsList = ProcessInfo.processInfo.environment["NOTCH_DEBUG_LIST"] == "1"
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" {
-            layoutModel.replace(with: Self.demoLayout(display: wantsList ? .list : .grid))
-        } else if wantsList {
-            layoutModel.setDisplay(.list)
+            layoutModel.replace(with: Self.demoLayout())
         }
 
         states = ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1"
@@ -282,10 +279,9 @@ final class AppEnvironment {
     ///
     /// All six are present in both modes. `repack` marks the ones that do not
     /// fit the grid as hidden, which is exactly the situation the list solves.
-    nonisolated private static func demoLayout(display: DisplayMode) -> NotchLayout {
+    nonisolated private static func demoLayout() -> NotchLayout {
         NotchLayout(
-            rows: display == .list ? 4 : 2,
-            display: display,
+            rows: 2,
             widgets: [
                 NotchWidget(
                     id: "starter-revenue", kind: .providerMetric, appId: "stripe",

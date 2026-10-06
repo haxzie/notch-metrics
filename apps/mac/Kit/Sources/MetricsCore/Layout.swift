@@ -91,35 +91,6 @@ public enum ChartKind: String, Codable, Sendable, Hashable {
 /// hiding things; the list fits a dozen numbers from four apps into the same
 /// space, which is what somebody with Stripe, Google Analytics and two custom
 /// metrics actually has.
-public enum DisplayMode: String, Codable, Sendable, Hashable, CaseIterable {
-    case grid, list
-
-    /// Unknown values fall back to the grid.
-    ///
-    /// Same rule as every other wire enum here: a server that starts sending a
-    /// mode this build predates must not make the whole layout fail to decode
-    /// and blank the notch.
-    public init(from decoder: any Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
-        self = DisplayMode(rawValue: raw) ?? .grid
-    }
-
-    public var label: String {
-        switch self {
-        case .grid: "Grid"
-        case .list: "List"
-        }
-    }
-
-    public var symbol: String {
-        switch self {
-        case .grid: "square.grid.2x2"
-        case .list: "list.bullet"
-        }
-    }
-
-    public var toggled: DisplayMode { self == .grid ? .list : .grid }
-}
 
 public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     public var id: String
@@ -235,23 +206,21 @@ public struct NotchLayout: Codable, Sendable, Hashable {
     /// token that stops a second Mac silently clobbering the backup.
     public var revision: Int
     public var rows: Int
-    public var display: DisplayMode
     public var widgets: [NotchWidget]
 
     public init(
         schemaVersion: Int = 1, revision: Int = 0,
-        rows: Int = NotchLayout.defaultRows, display: DisplayMode = .grid,
+        rows: Int = NotchLayout.defaultRows,
         widgets: [NotchWidget] = []
     ) {
         self.schemaVersion = schemaVersion
         self.revision = revision
         self.rows = rows.clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
-        self.display = display
         self.widgets = widgets
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, rows, display, widgets
+        case schemaVersion, revision, rows, widgets
     }
 
     public init(from decoder: any Decoder) throws {
@@ -262,29 +231,10 @@ public struct NotchLayout: Codable, Sendable, Hashable {
         // decodes rather than stranding the user with an empty notch.
         rows = (try c.decodeIfPresent(Int.self, forKey: .rows) ?? NotchLayout.defaultRows)
             .clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
-        display = try c.decodeIfPresent(DisplayMode.self, forKey: .display) ?? .grid
         widgets = try c.decodeIfPresent([NotchWidget].self, forKey: .widgets) ?? []
     }
 
-    /// The visible widgets, grouped by app, in the order the list draws them.
-    ///
-    /// Apps keep the order of their first widget rather than being sorted
-    /// alphabetically: the user arranged these, and re-sorting under them on
-    /// every render is the sort of tidiness nobody asked for.
-    public func groupedByApp(overrides: [String: MetricApp] = [:]) -> [(app: MetricApp, widgets: [NotchWidget])] {
-        var order: [String] = []
-        var byApp: [String: [NotchWidget]] = [:]
 
-        for widget in widgets.sorted(by: { $0.position < $1.position }) where widget.visible {
-            let app = widget.app(overrides: overrides)
-            if byApp[app.id] == nil { order.append(app.id) }
-            byApp[app.id, default: []].append(widget)
-        }
-
-        return order.map { id in
-            (AppCatalog.resolve(id, overrides: overrides), byApp[id] ?? [])
-        }
-    }
 }
 
 extension Comparable {
@@ -444,7 +394,7 @@ public enum GridPacker {
 
             let scratch = NotchLayout(
                 schemaVersion: layout.schemaVersion, revision: layout.revision,
-                rows: layout.rows, display: layout.display, widgets: settled)
+                rows: layout.rows, widgets: settled)
 
             if fits(widget, at: (widget.col, widget.row), in: scratch) {
                 settled.append(widget)

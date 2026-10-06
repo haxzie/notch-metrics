@@ -63,32 +63,31 @@ const widgetFixture = {
 };
 
 describe("layout round-trip", () => {
-  it("stores and returns the app, the row count and the display mode", async () => {
+  it("stores and returns the app and the row count", async () => {
     const { token } = await signedInUser();
 
     const put = await call("/v1/widgets", token, {
       method: "PUT",
-      body: JSON.stringify({ revision: 0, rows: 3, display: "list", widgets: [widgetFixture] }),
+      body: JSON.stringify({ revision: 0, rows: 3, widgets: [widgetFixture] }),
     });
     expect(put.status).toBe(200);
-    expect(await put.json()).toMatchObject({ revision: 1, rows: 3, display: "list" });
+    expect(await put.json()).toMatchObject({ revision: 1, rows: 3 });
 
     const got = await call("/v1/widgets", token);
-    const body = await got.json<{ rows: number; display: string; widgets: { appId: string }[] }>();
+    const body = await got.json<{ rows: number; widgets: { appId: string }[] }>();
     expect(body.rows).toBe(3);
-    expect(body.display).toBe("list");
     // The app has to survive the round trip, or a widget whose integration is
     // later disconnected has nothing left to say which app to reconnect.
     expect(scalar(body.widgets[0]).appId).toBe("google-analytics");
   });
 
-  it("defaults rows and display for a client that predates them", async () => {
+  it("defaults the row count for a client that predates it", async () => {
     const { token } = await signedInUser();
     const put = await call("/v1/widgets", token, {
       method: "PUT",
       body: JSON.stringify({ revision: 0, widgets: [] }),
     });
-    expect(await put.json()).toMatchObject({ rows: 2, display: "grid" });
+    expect(await put.json()).toMatchObject({ rows: 2 });
   });
 
   it("defaults appId rather than rejecting a widget without one", async () => {
@@ -108,22 +107,21 @@ describe("layout round-trip", () => {
     const { token } = await signedInUser();
     await call("/v1/widgets", token, {
       method: "PUT",
-      body: JSON.stringify({ revision: 0, rows: 4, display: "list", widgets: [widgetFixture] }),
+      body: JSON.stringify({ revision: 0, rows: 4, widgets: [widgetFixture] }),
     });
 
     // A second Mac that still thinks the revision is 0.
     const stale = await call("/v1/widgets", token, {
       method: "PUT",
-      body: JSON.stringify({ revision: 0, rows: 1, display: "grid", widgets: [] }),
+      body: JSON.stringify({ revision: 0, rows: 1, widgets: [] }),
     });
     expect(stale.status).toBe(409);
 
-    const body = await stale.json<{ code: string; rows: number; display: string }>();
+    const body = await stale.json<{ code: string; rows: number }>();
     expect(body.code).toBe("STALE_REVISION");
     // The loser needs the winning state back to merge against, which means it
     // has to include the fields it was about to overwrite.
     expect(body.rows).toBe(4);
-    expect(body.display).toBe("list");
   });
 
   it("refuses another user's layout without confirming it exists", async () => {

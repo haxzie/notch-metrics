@@ -141,14 +141,6 @@ public final class NotchLayoutModel {
     /// Leaves edit mode on the way: the two views have different affordances —
     /// the grid resizes tiles, the list removes rows — and staying in edit
     /// mode across the switch leaves handles on screen that do nothing.
-    public func setDisplay(_ display: DisplayMode) {
-        guard display != layout.display else { return }
-        layout.display = display
-        isEditing = false
-        preview = nil
-        draggingID = nil
-        persist(layout)
-    }
 
     /// Sets the number of grid rows, dropping the preview used while dragging.
     ///

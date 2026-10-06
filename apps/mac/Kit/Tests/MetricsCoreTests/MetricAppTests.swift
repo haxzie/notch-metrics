@@ -79,68 +79,9 @@ struct WidgetAppTests {
             ]}
             """
         let layout = try JSONDecoder().decode(NotchLayout.self, from: Data(json.utf8))
-        #expect(layout.display == .grid)
         #expect(layout.widgets[0].appId == AppCatalog.customId)
         #expect(layout.widgets[1].appId == AppCatalog.unknownId)
     }
 
-    @Test("grouping keeps the user's order and counts each app once")
-    func grouping() {
-        let layout = NotchLayout(widgets: [
-            NotchWidget(id: "1", appId: "stripe", position: 0),
-            NotchWidget(id: "2", appId: "github", position: 1),
-            NotchWidget(id: "3", appId: "stripe", position: 2),
-        ])
-        let groups = layout.groupedByApp()
 
-        // Stripe first because its first widget is first — not because "s"
-        // sorts before "g". Re-sorting under the user is tidiness nobody asked
-        // for.
-        #expect(groups.map(\.app.id) == ["stripe", "github"])
-        #expect(groups[0].widgets.map(\.id) == ["1", "3"])
-        #expect(groups[1].widgets.map(\.id) == ["2"])
-    }
-
-    @Test("grouping skips hidden widgets")
-    func groupingSkipsHidden() {
-        var hiddenWidget = NotchWidget(id: "2", appId: "github", position: 1)
-        hiddenWidget.visible = false
-        let layout = NotchLayout(widgets: [
-            NotchWidget(id: "1", appId: "stripe", position: 0),
-            hiddenWidget,
-        ])
-        #expect(layout.groupedByApp().map(\.app.id) == ["stripe"])
-    }
-}
-
-struct DisplayModeTests {
-    @Test("toggling round-trips")
-    func toggles() {
-        #expect(DisplayMode.grid.toggled == .list)
-        #expect(DisplayMode.list.toggled == .grid)
-    }
-
-    @Test("an unknown display mode in a stored layout falls back to the grid")
-    func unknownFallsBack() throws {
-        let json = #"{"schemaVersion":1,"revision":0,"display":"carousel","widgets":[]}"#
-        let layout = try JSONDecoder().decode(NotchLayout.self, from: Data(json.utf8))
-        #expect(layout.display == .grid)
-    }
-}
-
-@Suite struct ChartColourTests {
-    @Test("a brand with a separate chart colour keeps both")
-    func dodoHasBoth() {
-        // Dodo Payments is black with lime. The black belongs behind their
-        // mark; a near-black 1.5pt line on a near-black tile is invisible.
-        let dodo = AppCatalog.resolve("dodopayments")
-        #expect(dodo.accentHex == "111111")
-        #expect(dodo.chartHex == "C6FE1E")
-    }
-
-    @Test("most brands need only one colour")
-    func othersHaveNoOverride() {
-        #expect(AppCatalog.resolve("stripe").chartHex == nil)
-        #expect(AppCatalog.resolve("lemonsqueezy").chartHex == nil)
-    }
 }

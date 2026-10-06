@@ -22,7 +22,6 @@ widgets.use("*", authenticate);
 interface LayoutMeta {
   revision: number;
   rows: number;
-  display: "grid" | "list";
 }
 
 async function layoutMeta(db: Database, userId: string): Promise<LayoutMeta> {
@@ -34,7 +33,6 @@ async function layoutMeta(db: Database, userId: string): Promise<LayoutMeta> {
   return {
     revision: row?.revision ?? 0,
     rows: row?.rows ?? 2,
-    display: (row?.display === "list" ? "list" : "grid") as "grid" | "list",
   };
 }
 
@@ -117,14 +115,14 @@ widgets.put("/", async (c) => {
   }
 
   const next = meta.revision + 1;
-  const { rows, display } = body.data;
+  const { rows } = body.data;
   await db
     .insert(widgetRevision)
-    .values({ userId, revision: next, rows, display })
+    .values({ userId, revision: next, rows })
     .onConflictDoUpdate({
       target: widgetRevision.userId,
-      set: { revision: next, rows, display, updatedAt: new Date() },
+      set: { revision: next, rows, updatedAt: new Date() },
     });
 
-  return c.json({ revision: next, rows, display, widgets: body.data.widgets });
+  return c.json({ revision: next, rows, widgets: body.data.widgets });
 });

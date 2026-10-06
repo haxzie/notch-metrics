@@ -112,20 +112,13 @@ public struct NotchContentView: View {
         }
     }
 
-    @ViewBuilder
     private var content: some View {
-        switch model.displayed.display {
-        case .grid:
-            NotchWidgetCanvas(model: model, states: states, appOverrides: appOverrides)
-                .padding(.horizontal, 16)
-                // Clear of the header, with room for the edit backdrop's own
-                // inset on top of it — that is what this has to cover, not
-                // just the grid.
-                .padding(.top, NotchWidgetCanvas.editInset + 6)
-        case .list:
-            NotchListView(model: model, states: states, appOverrides: appOverrides)
-                .padding(.horizontal, 10)
-        }
+        NotchWidgetCanvas(model: model, states: states, appOverrides: appOverrides)
+            .padding(.horizontal, 16)
+            // Clear of the header, with room for the edit backdrop's own
+            // inset on top of it — that is what this has to cover, not just
+            // the grid.
+            .padding(.top, NotchWidgetCanvas.editInset + 6)
     }
 
     /// Brand on the left, controls on the right, the camera housing between.
@@ -150,30 +143,19 @@ public struct NotchContentView: View {
             // hidden on exactly the machines this app is for — and the
             // selection outline and handles say what to do without words.
             if hiddenCount > 0 {
-                // The grid ran out of room. Saying so — and offering the view
-                // that has room — beats silently showing fewer numbers than
-                // the user added.
-                Button {
-                    model.setDisplay(.list)
-                } label: {
-                    Text("+\(hiddenCount) more")
-                        .font(.system(size: 10, weight: .medium))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.white.opacity(0.1)))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(NotchTheme.secondaryText)
-                .help("Show them all in the list view")
-                .transition(.opacity)
+                // The grid ran out of room. Saying so beats silently showing
+                // fewer numbers than the user added; no longer a button,
+                // because the view it used to offer is gone.
+                Text("+\(hiddenCount) hidden")
+                    .font(.system(size: 10, weight: .medium))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.white.opacity(0.1)))
+                    .foregroundStyle(NotchTheme.secondaryText)
+                    .help("Drag the handle at the bottom to make the notch taller.")
+                    .transition(.opacity)
             }
 
-            headerButton(
-                model.displayed.display.toggled.symbol,
-                // Shows the mode it switches *to*, which is the only reading
-                // of a single-button toggle that does not need a legend.
-                help: "Switch to \(model.displayed.display.toggled.label.lowercased()) view",
-                action: { model.setDisplay(model.layout.display.toggled) })
             headerButton(
                 model.isEditing ? "checkmark" : "pencil",
                 help: model.isEditing ? "Done" : "Edit layout",
@@ -183,7 +165,10 @@ public struct NotchContentView: View {
             headerButton("xmark", help: "Close", action: onClose)
         }
         .padding(.horizontal, 16)
-        .frame(height: max(34, geometry.hasNotch ? geometry.notchRect.height + 6 : 34))
+        // Tall enough to leave real space above a 24pt button, not the five
+        // points that centring in a 34pt bar happened to give — which put the
+        // icons hard against the top edge of the panel.
+        .frame(height: max(44, geometry.hasNotch ? geometry.notchRect.height + 12 : 44))
     }
 
     private func headerButton(
@@ -205,7 +190,6 @@ public struct NotchContentView: View {
     /// Widgets the grid could not find room for. Always zero in list view,
     /// which has no fixed capacity.
     private var hiddenCount: Int {
-        guard model.displayed.display == .grid else { return 0 }
         return model.displayed.widgets.count { !$0.visible }
     }
 
@@ -287,15 +271,8 @@ public struct NotchContentView: View {
     /// screen below the last row of tiles.
     private var expandedSize: CGSize {
         let header = max(34, geometry.hasNotch ? geometry.notchRect.height + 6 : 34)
-        // The two modes are different shapes, so the panel cannot assume the
-        // grid's. A list of six rows in a four-row-tall notch was leaving a
-        // hand's width of empty glass under the last one.
-        let body =
-            switch model.displayed.display {
-            case .grid: NotchWidgetCanvas.canvasHeight(rows: model.displayed.rows)
-            case .list: NotchListView.height(for: model.displayed, overrides: appOverrides)
-            }
-        let content = body + Self.grabberHeight
+        let content = NotchWidgetCanvas.canvasHeight(rows: model.displayed.rows)
+            + Self.grabberHeight
         return CGSize(
             width: min(NotchPanel.maxSize.width, max(560, geometry.notchRect.width + 480)),
             height: min(NotchPanel.maxSize.height, header + content)
