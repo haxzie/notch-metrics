@@ -9,10 +9,10 @@ Two plans, both the same product tier. Prices live in `packages/schemas/src/bill
 as `PLANS`, in **integer minor units**, and the website, the billing pane and
 the desktop upsell all read them from there.
 
-| Plan    | `id`         | Price | Dodo var                            |
-| ------- | ------------ | ----- | ----------------------------------- |
-| Monthly | `pro`        | $19   | `DODOPAYMENT_PRO_PRODUCT_ID`        |
-| Yearly  | `pro_annual` | $79   | `DODOPAYMENT_PRO_ANNUAL_PRODUCT_ID` |
+| Plan    | `id`         | Price | Dodo var                         |
+| ------- | ------------ | ----- | -------------------------------- |
+| Monthly | `pro`        | $19   | `DODOPAYMENT_MONTHLY_PRODUCT_ID` |
+| Yearly  | `pro_annual` | $79   | `DODOPAYMENT_YEARLY_PRODUCT_ID`  |
 
 Seven-day trial, no card, then payment. There is no free tier.
 
@@ -73,14 +73,15 @@ Three properties worth not breaking:
 
 ## Symptom → cause
 
-| Symptom                                     | Cause                                                                                                                                                                         |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Checkout button returns **503**             | A product id var is empty. That is deliberate — a checkout against a missing id is a 404 on Dodo's side that reads to the user as a broken product.                           |
-| Every webhook **401**s                      | `DODOPAYMENT_WEBHOOK_SECRET` is the API key, or the body was re-serialised before verifying.                                                                                  |
-| Webhook returns `{ok: true, ignored: true}` | The event carried no `metadata.userId`. Only subscriptions created through our checkout have it — one created by hand in the dashboard never will.                            |
-| Paid, but still on `trial`                  | Check `webhook_event` for the delivery. No row means it never arrived: the endpoint URL or the event subscriptions are wrong.                                                 |
-| Access continues after cancelling           | Correct. `subscription.cancelled` sets the status but not the plan — access runs to `currentPeriodEnd`, because cutting it at the moment of cancellation is a refund request. |
-| Access continues after a failed payment     | Correct, for `GRACE_DAYS`. A card expiring on a Friday should not blank a dashboard over the weekend.                                                                         |
+| Symptom                                     | Cause                                                                                                                                                                                                                                                     |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checkout button returns **503**             | A product id var is empty. That is deliberate — a checkout against a missing id is a 404 on Dodo's side that reads to the user as a broken product.                                                                                                       |
+| Checkout 503s and the log says **422**      | Dodo rejected the payload, not the id. Its body names the offending field and `call()` now carries it into the error. `billing.country` is required on every subscription — omitting it gives a 422 whose message is only "a field has an invalid value". |
+| Every webhook **401**s                      | `DODOPAYMENT_WEBHOOK_SECRET` is the API key, or the body was re-serialised before verifying.                                                                                                                                                              |
+| Webhook returns `{ok: true, ignored: true}` | The event carried no `metadata.userId`. Only subscriptions created through our checkout have it — one created by hand in the dashboard never will.                                                                                                        |
+| Paid, but still on `trial`                  | Check `webhook_event` for the delivery. No row means it never arrived: the endpoint URL or the event subscriptions are wrong.                                                                                                                             |
+| Access continues after cancelling           | Correct. `subscription.cancelled` sets the status but not the plan — access runs to `currentPeriodEnd`, because cutting it at the moment of cancellation is a refund request.                                                                             |
+| Access continues after a failed payment     | Correct, for `GRACE_DAYS`. A card expiring on a Friday should not blank a dashboard over the weekend.                                                                                                                                                     |
 
 ## Testing locally
 

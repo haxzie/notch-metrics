@@ -62,8 +62,8 @@
     // ones: a named environment inherits nothing, so leaving them out there
     // would point live traffic at products that do not exist.
     "DODOPAYMENT_MODE": "test",
-    "DODOPAYMENT_PRO_PRODUCT_ID": "",
-    "DODOPAYMENT_PRO_ANNUAL_PRODUCT_ID": "",
+    "DODOPAYMENT_MONTHLY_PRODUCT_ID": "",
+    "DODOPAYMENT_YEARLY_PRODUCT_ID": "",
 
     "POSTHOG_HOST": "https://us.i.posthog.com"
   },
@@ -83,8 +83,8 @@
         "GITHUB_REPO": "haxzie/notch-metrics",
         "INTEGRATION_KEK_ACTIVE": "1",
         "DODOPAYMENT_MODE": "live",
-        "DODOPAYMENT_PRO_PRODUCT_ID": "",
-        "DODOPAYMENT_PRO_ANNUAL_PRODUCT_ID": "",
+        "DODOPAYMENT_MONTHLY_PRODUCT_ID": "",
+        "DODOPAYMENT_YEARLY_PRODUCT_ID": "",
         "POSTHOG_HOST": "https://us.i.posthog.com"
       },
       "triggers": { "crons": ["*/5 * * * *"] },

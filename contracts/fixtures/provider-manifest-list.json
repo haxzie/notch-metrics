@@ -27,19 +27,13 @@
           "label": "Monthly recurring revenue",
           "shortLabel": "MRR",
           "unit": "currency",
-          "granularities": [
-            "day",
-            "week",
-            "month"
-          ],
+          "granularities": ["day", "week", "month"],
           "supportsSeries": false,
           "supportsCompare": true,
           "methodology": "Active subscriptions at the end of the window, each normalised to a monthly amount and reduced by any percentage coupon."
         }
       ],
-      "allowedHosts": [
-        "api.stripe.com"
-      ],
+      "allowedHosts": ["api.stripe.com"],
       "status": "stable",
       "minAppVersion": "0.1.0"
     }

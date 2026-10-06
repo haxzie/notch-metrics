@@ -6,15 +6,8 @@
   "credentialHint": "rk_live_…4f2a",
   "accountLabel": "acct_1Nx · Acme Inc",
   "accountCurrency": "USD",
-  "enabledMetrics": [
-    "mrr",
-    "revenue"
-  ],
-  "availableMetrics": [
-    "mrr",
-    "revenue",
-    "active_subscribers"
-  ],
+  "enabledMetrics": ["mrr", "revenue"],
+  "availableMetrics": ["mrr", "revenue", "active_subscribers"],
   "lastSyncedAt": "2026-10-05T12:00:00.000Z",
   "lastErrorAt": null,
   "lastErrorCode": null,

@@ -32,7 +32,11 @@ billing.post("/checkout", sessionOnly, async (c) => {
     const result = await createCheckout(c.env, {
       productId: productIdFor(c.env, plan),
       email: user.email,
+      name: user.name,
       userId,
+      // Cloudflare's own geolocation of this request. Absent locally, which
+      // is what the fallback is for.
+      country: c.req.header("cf-ipcountry"),
       returnUrl: `${c.env.APP_URL}/app/settings/billing?checkout=done`,
     });
     return c.json(result);
