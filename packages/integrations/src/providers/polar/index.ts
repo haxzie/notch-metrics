@@ -6,6 +6,7 @@ import { ProviderError } from "../../types.ts";
 export const manifest: ProviderManifest = {
   id: "polar",
   name: "Polar",
+  category: "revenue",
   tagline: "Revenue and subscriptions from your Polar storefront.",
   docsUrl: "https://polar.sh/settings",
   iconPath: "/providers/polar.svg",

@@ -1,0 +1,151 @@
+import { env } from "cloudflare:test";
+import { createExecutionContext } from "cloudflare:test";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { deviceToken, integration, user } from "@notch/db";
+import worker from "../src/index.ts";
+import { id, randomToken, sha256Base64Url } from "../src/lib/ids.ts";
+import { db, makeUser, migrate, scalar } from "./helpers.ts";
+
+beforeAll(migrate);
+beforeEach(async () => {
+  await db().delete(integration);
+  await db().delete(deviceToken);
+  await db().delete(user);
+});
+
+const ctx = createExecutionContext();
+
+function get(path: string, token?: string) {
+  return worker.fetch(
+    new Request(`http://localhost:8787${path}`, {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+    }),
+    env,
+    ctx,
+  );
+}
+
+interface Catalogue {
+  version: string;
+  categories: {
+    id: string;
+    label: string;
+    connectors: {
+      id: string;
+      name: string;
+      category: string;
+      authMode: string;
+      status: string;
+      fields: { key: string; type: string }[];
+      oauth?: { scopeSummary: string[]; requiresSelection: boolean };
+      connections: { id: string; label: string; status: string }[];
+    }[];
+  }[];
+}
+
+describe("the connector catalogue", () => {
+  it("is readable without signing in", async () => {
+    // The app fetches this on first launch, before anybody has an account.
+    const response = await get("/v1/connectors");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("public");
+  });
+
+  it("returns the four categories in a deliberate order", async () => {
+    const body = await (await get("/v1/connectors")).json<Catalogue>();
+    expect(body.categories.map((c) => c.id)).toEqual(["revenue", "analytics", "marketing", "crm"]);
+    expect(body.categories.map((c) => c.label)).toEqual([
+      "Revenue",
+      "Product analytics",
+      "Marketing & SEO",
+      "CRM",
+    ]);
+  });
+
+  it("puts working connectors before coming-soon ones", async () => {
+    // A category whose first three rows are all greyed out reads as a product
+    // that does not work yet.
+    const body = await (await get("/v1/connectors")).json<Catalogue>();
+    const revenue = scalar(body.categories.find((c) => c.id === "revenue"));
+    expect(scalar(revenue.connectors[0]).id).toBe("stripe");
+    expect(scalar(revenue.connectors[0]).status).toBe("stable");
+  });
+
+  it("describes every connector well enough to render a connect page", async () => {
+    const body = await (await get("/v1/connectors")).json<Catalogue>();
+    const all = body.categories.flatMap((c) => c.connectors);
+    expect(all.length).toBeGreaterThanOrEqual(17);
+
+    for (const connector of all) {
+      expect(connector.name, connector.id).toBeTruthy();
+      expect(["api_key", "oauth2"]).toContain(connector.authMode);
+
+      if (connector.authMode === "oauth2") {
+        // Tokens are never typed in, so an OAuth connector must not ask for
+        // one as a form field.
+        const secretFields = connector.fields.filter((f) => f.type === "secret");
+        expect(secretFields, connector.id).toHaveLength(0);
+        // And it has to be able to tell the user what it is asking for.
+        expect(connector.oauth?.scopeSummary.length, connector.id).toBeGreaterThan(0);
+      } else {
+        expect(connector.fields.length, connector.id).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("never leaks a credential into the catalogue", async () => {
+    const u = await makeUser();
+    const token = randomToken(32);
+    await db()
+      .insert(deviceToken)
+      .values({
+        id: id("dev"),
+        tokenHash: await sha256Base64Url(token),
+        userId: u.id,
+        label: "Mac",
+      });
+    await db()
+      .insert(integration)
+      .values({
+        id: id("int"),
+        userId: u.id,
+        provider: "stripe",
+        label: "Acme",
+        credentialCiphertext: "CIPHERTEXT_SENTINEL",
+        credentialIv: "IV_SENTINEL",
+        credentialWrappedDek: "DEK_SENTINEL",
+        keyVersion: 1,
+        credentialHint: "rk_live_…4f2a",
+        credentialFingerprint: "fp",
+        accountLabel: "Acme Inc",
+      });
+
+    const raw = await (await get("/v1/connectors", token)).text();
+    for (const sentinel of ["CIPHERTEXT_SENTINEL", "IV_SENTINEL", "DEK_SENTINEL"]) {
+      expect(raw).not.toContain(sentinel);
+    }
+
+    const body = JSON.parse(raw) as Catalogue;
+    const stripe = scalar(
+      body.categories.flatMap((c) => c.connectors).find((x) => x.id === "stripe"),
+    );
+    expect(stripe.connections).toHaveLength(1);
+    expect(scalar(stripe.connections[0]).label).toBe("Acme Inc");
+  });
+
+  it("does not cache a signed-in response publicly", async () => {
+    const u = await makeUser();
+    const token = randomToken(32);
+    await db()
+      .insert(deviceToken)
+      .values({
+        id: id("dev"),
+        tokenHash: await sha256Base64Url(token),
+        userId: u.id,
+        label: "Mac",
+      });
+    // It carries connected-account state, so a shared cache must not keep it.
+    const response = await get("/v1/connectors", token);
+    expect(response.headers.get("cache-control")).toContain("private");
+  });
+});

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Granularity } from "./money.ts";
-import { MetricId, ProviderId } from "./ids.ts";
+import { ConnectorCategory, MetricId, ProviderId } from "./ids.ts";
 import { MetricUnit } from "./metric.ts";
 
 /**
@@ -48,9 +48,28 @@ export const MetricDescriptor = z.object({
 });
 export type MetricDescriptor = z.infer<typeof MetricDescriptor>;
 
+/**
+ * What the connect page needs to know about an OAuth connector before the
+ * user has authorised anything.
+ */
+export const OAuthDescriptor = z.object({
+  /** Shown on the connect page so the user knows what they are granting. */
+  scopeSummary: z.array(z.string()),
+  /**
+   * Whether the user has to choose something after authorising — a GA4
+   * property, a Search Console site, an Ads customer. The link flow pauses on
+   * `awaiting_configuration` when this is set.
+   */
+  requiresSelection: z.boolean().default(false),
+  /** What they are choosing, for the picker's heading. */
+  selectionLabel: z.string().optional(),
+});
+export type OAuthDescriptor = z.infer<typeof OAuthDescriptor>;
+
 export const ProviderManifest = z.object({
   id: ProviderId,
   name: z.string(),
+  category: ConnectorCategory,
   tagline: z.string(),
   /** Where to find the API key, linked from the connect sheet. */
   docsUrl: z.url(),
@@ -59,6 +78,14 @@ export const ProviderManifest = z.object({
   iconPath: z.string(),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   authMode: z.enum(["api_key", "oauth2"]),
+  /** Present only when `authMode` is `oauth2`. */
+  oauth: OAuthDescriptor.optional(),
+  /**
+   * What the connect page asks for.
+   *
+   * For an OAuth connector this is usually empty — tokens are never typed in
+   * by a human — but some need something alongside, like Plausible's site id.
+   */
   fields: z.array(AuthField),
   metrics: z.array(MetricDescriptor).nonempty(),
   /** The outbound allowlist enforced by `AdapterContext.http`. */

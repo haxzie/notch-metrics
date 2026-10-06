@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { createAuth } from "./lib/auth.ts";
 import { withDb, type AppContext } from "./middleware.ts";
 import { billing } from "./routes/billing.ts";
+import { connectors } from "./routes/connectors.ts";
 import { desktop } from "./routes/desktop.ts";
 import { integrations } from "./routes/integrations.ts";
 import { me } from "./routes/me.ts";
@@ -41,6 +42,7 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.ra
 app.route("/v1/me", me);
 app.route("/v1/desktop", desktop);
 app.route("/v1/providers", providers);
+app.route("/v1/connectors", connectors);
 app.route("/v1/integrations", integrations);
 app.route("/v1/metrics", metrics);
 app.route("/v1/widgets", widgets);

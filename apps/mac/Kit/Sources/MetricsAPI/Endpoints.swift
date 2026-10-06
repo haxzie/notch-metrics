@@ -29,14 +29,30 @@ public struct ProviderManifestList: Codable, Sendable {
     public let providers: [ProviderManifest]
 }
 
+public struct ConnectorOAuth: Codable, Sendable, Hashable {
+    /// What the user is granting, in their language rather than the
+    /// provider's scope strings.
+    public let scopeSummary: [String]
+    /// Whether authorising is enough, or whether they still have to pick a
+    /// property, site or ad account afterwards.
+    public let requiresSelection: Bool
+    public let selectionLabel: String?
+}
+
 public struct ProviderManifest: Codable, Sendable, Identifiable, Hashable {
     public let id: String
     public let name: String
+    /// "revenue" | "analytics" | "marketing" | "crm". A plain string with a
+    /// fallback rather than an enum, so a category added on the server does
+    /// not make the whole catalogue fail to decode.
+    public let category: String
     public let tagline: String
     public let docsUrl: String
     public let iconPath: String
     public let accentColor: String
     public let authMode: String
+    /// Present only when `authMode` is "oauth2".
+    public let oauth: ConnectorOAuth?
     public let fields: [AuthField]
     public let metrics: [MetricDescriptor]
     public let allowedHosts: [String]
@@ -49,6 +65,9 @@ public struct ProviderManifest: Codable, Sendable, Identifiable, Hashable {
     /// release — but a provider needing a field type this build has never heard
     /// of cannot be rendered, and a half-drawn form submits a credential set
     /// the adapter will reject. Better to offer an update.
+    public var isConnectable: Bool { status != "coming_soon" }
+    public var needsOAuth: Bool { authMode == "oauth2" }
+
     public func isRenderable(by appVersion: String) -> Bool {
         guard let required = SemanticVersion(minAppVersion),
               let current = SemanticVersion(appVersion)
@@ -150,4 +169,50 @@ public struct DesktopTokenResponse: Codable, Sendable {
 public struct WidgetLayoutResponse: Codable, Sendable {
     public let revision: Int
     public let widgets: [NotchWidget]
+}
+
+/// `GET /v1/connectors` — everything the app can connect to, grouped.
+///
+/// The settings UI renders from this rather than from anything compiled in,
+/// which is the property that lets a connector ship without a Mac release.
+public struct ConnectorCatalogue: Codable, Sendable {
+    public let version: String
+    public let categories: [ConnectorCategoryGroup]
+
+    public var allConnectors: [ConnectorEntry] { categories.flatMap(\.connectors) }
+}
+
+public struct ConnectorCategoryGroup: Codable, Sendable, Identifiable, Hashable {
+    public let id: String
+    public let label: String
+    public let connectors: [ConnectorEntry]
+}
+
+public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let category: String
+    public let tagline: String
+    public let docsUrl: String
+    public let accentColor: String
+    public let authMode: String
+    public let oauth: ConnectorOAuth?
+    public let fields: [AuthField]
+    public let metrics: [MetricDescriptor]
+    public let status: String
+    public let minAppVersion: String
+    /// Accounts the signed-in user has already connected for this connector.
+    /// Empty when signed out — the catalogue is readable either way.
+    public let connections: [ConnectorConnection]
+
+    public var isConnectable: Bool { status != "coming_soon" }
+    public var isConnected: Bool { !connections.isEmpty }
+}
+
+public struct ConnectorConnection: Codable, Sendable, Identifiable, Hashable {
+    public let id: String
+    public let label: String
+    public let status: String
+
+    public var needsAttention: Bool { status == "auth_failed" }
 }

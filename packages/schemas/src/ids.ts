@@ -19,13 +19,46 @@ import { z } from "zod";
  * whichever user connects it first.
  */
 export const ProviderId = z.enum([
+  // Revenue
   "stripe",
   "dodopayments",
   "lemonsqueezy",
   "polar",
+  "paddle",
+  // Product analytics
+  "posthog",
+  "plausible",
+  "mixpanel",
+  "amplitude",
   "google-analytics",
+  // Marketing and SEO
+  "google-search-console",
+  "ahrefs",
+  "google-ads",
+  "meta-ads",
+  // CRM
+  "hubspot",
+  "intercom",
+  "apollo",
 ]);
 export type ProviderId = z.infer<typeof ProviderId>;
+
+/**
+ * How the catalogue is grouped, in the settings UI and on the website.
+ *
+ * Deliberately four buckets rather than a free-form tag: a user scanning for
+ * "where do my signups come from" should find one short list, not eleven
+ * categories of one.
+ */
+export const ConnectorCategory = z.enum(["revenue", "analytics", "marketing", "crm"]);
+export type ConnectorCategory = z.infer<typeof ConnectorCategory>;
+
+export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
+  revenue: "Revenue",
+  analytics: "Product analytics",
+  marketing: "Marketing & SEO",
+  crm: "CRM",
+};
 
 /**
  * The app a number came from, for display.
@@ -46,13 +79,50 @@ export const AppId = z
   .regex(/^[a-z0-9][a-z0-9-]*$/);
 export type AppId = z.infer<typeof AppId>;
 
+/**
+ * Every metric any connector can produce.
+ *
+ * One shared vocabulary rather than per-connector ids, so a widget can say
+ * "visitors" and the notch can render it the same whether it came from
+ * Plausible or GA4 — and so swapping providers does not orphan a widget.
+ * A connector declares which of these it supports in its manifest.
+ */
 export const MetricId = z.enum([
+  // Revenue
   "mrr",
+  "arr",
   "revenue",
+  "refunds",
   "active_subscribers",
   "new_subscribers",
   "churned_subscribers",
-  "refunds",
+  "trials",
+  // Product analytics
+  "visitors",
+  "pageviews",
+  "sessions",
+  "active_users",
+  "new_users",
+  "events",
+  "bounce_rate",
+  "conversion_rate",
+  // Marketing and SEO
+  "clicks",
+  "impressions",
+  "ctr",
+  "average_position",
+  "backlinks",
+  "domain_rating",
+  "organic_keywords",
+  "ad_spend",
+  "ad_conversions",
+  // CRM
+  "contacts",
+  "new_contacts",
+  "open_deals",
+  "won_deals",
+  "pipeline_value",
+  "open_conversations",
 ]);
 export type MetricId = z.infer<typeof MetricId>;
 

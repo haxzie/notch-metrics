@@ -6,6 +6,7 @@ import { ProviderError } from "../../types.ts";
 export const manifest: ProviderManifest = {
   id: "lemonsqueezy",
   name: "Lemon Squeezy",
+  category: "revenue",
   tagline: "Store revenue and subscriptions from Lemon Squeezy.",
   docsUrl: "https://app.lemonsqueezy.com/settings/api",
   iconPath: "/providers/lemonsqueezy.svg",

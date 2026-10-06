@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 import type { CurrencyCode, Granularity, MetricId, ProviderManifest } from "@notch/schemas";
+import type { OAuthConfig } from "./oauth.ts";
 
 export interface HttpResponse {
   ok: boolean;
@@ -66,13 +67,19 @@ export type ProviderErrorCode =
   "auth_failed" | "rate_limited" | "provider_down" | "unsupported" | "bad_response";
 
 export class ProviderError extends Error {
-  constructor(
-    readonly code: ProviderErrorCode,
-    message: string,
-    readonly retryAfterSeconds?: number,
-  ) {
+  // Declared and assigned rather than written as constructor parameter
+  // properties. Those are one of the few TypeScript features that cannot be
+  // erased by type-stripping alone, so they make the whole package
+  // unloadable under `node --experimental-strip-types` — which the contract
+  // emitter and any plain-Node script rely on.
+  readonly code: ProviderErrorCode;
+  readonly retryAfterSeconds?: number;
+
+  constructor(code: ProviderErrorCode, message: string, retryAfterSeconds?: number) {
     super(message);
     this.name = "ProviderError";
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -89,11 +96,39 @@ export interface VerifyResult {
   availableMetrics: MetricId[];
 }
 
-export interface ProviderAdapter<C extends Record<string, string> = Record<string, string>> {
+/**
+ * A connector: one external account the notch can read numbers from.
+ *
+ * Adding one is a directory under `providers/`, a line in the registry, and a
+ * test. Nothing else changes — the catalogue, the connect flow, the settings
+ * UI and the OAuth callback all read the registry generically, which is the
+ * property that lets a provider ship without a Mac release.
+ */
+export interface ProviderAdapter<C extends Record<string, unknown> = Record<string, unknown>> {
   readonly manifest: ProviderManifest;
-  /** The one schema for the credentials form's output. */
+  /** The one schema for the credentials the connect page produces. */
   readonly credentialSchema: ZodType<C>;
-  /** Proves the key works. Called before any row is written. */
+
+  /**
+   * Which credential fields a human types.
+   *
+   * OAuth connectors store tokens in the same blob, and those must never be
+   * rendered as a form field or accepted from a submission. Omitted means
+   * "every field in the schema", which is right for a bare API key and wrong
+   * for anything with tokens in it.
+   */
+  readonly userInputFields?: readonly string[];
+
+  /** Present only for `authMode: "oauth2"`. */
+  readonly oauth?: OAuthConfig<C>;
+
+  /** Proves the credentials work. Called before any row is written. */
   verify(ctx: AdapterContext, credentials: C): Promise<VerifyResult>;
+
   fetchMetric(ctx: AdapterContext, credentials: C, request: MetricRequest): Promise<RawSeries>;
+}
+
+/** Thrown by a connector that is declared but not implemented yet. */
+export function notImplemented(name: string): never {
+  throw new ProviderError("unsupported", `The ${name} integration is not ready yet.`);
 }

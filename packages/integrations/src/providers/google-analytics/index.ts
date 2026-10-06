@@ -6,6 +6,7 @@ import { ProviderError } from "../../types.ts";
 export const manifest: ProviderManifest = {
   id: "google-analytics",
   name: "Google Analytics",
+  category: "analytics",
   tagline: "Visitors, sessions and conversions from GA4.",
   docsUrl: "https://analytics.google.com/analytics/web/",
   iconPath: "/providers/google-analytics.svg",
@@ -14,15 +15,17 @@ export const manifest: ProviderManifest = {
   // is OAuth-only, so connecting one needs the authorisation flow that
   // `authMode` exists to signal. The settings UI branches on this.
   authMode: "oauth2",
-  fields: [
-    {
-      key: "property_id",
-      label: "Property ID",
-      type: "string",
-      required: true,
-      help: "Admin → Property Settings. A number like 123456789.",
-    },
-  ],
+  oauth: {
+    scopeSummary: ["Read your Google Analytics reports"],
+    // Authorising grants access to every property on the account, so the user
+    // still has to say which one this connection is for. Tokens that are
+    // valid against nothing in particular are not a working connection.
+    requiresSelection: true,
+    selectionLabel: "Which property?",
+  },
+  // Nothing is typed: the property is chosen from a list after authorising,
+  // because nobody knows their GA4 property id off the top of their head.
+  fields: [],
   metrics: [
     {
       id: "active_subscribers",
@@ -51,9 +54,12 @@ export const manifest: ProviderManifest = {
 };
 
 export const credentialSchema = z.object({
-  property_id: z.string().regex(/^\d+$/, "A GA4 property ID is a number."),
-  // Written by the OAuth callback, never by the settings form.
-  refresh_token: z.string().min(20).optional(),
+  /** Chosen from the picker after authorising. */
+  property_id: z.string().regex(/^\d+$/, "A GA4 property ID is a number.").optional(),
+  // Written by the OAuth callback, never by a form.
+  access_token: z.string().min(10).optional(),
+  refresh_token: z.string().min(10).optional(),
+  expires_at: z.number().int().optional(),
 });
 export type GoogleAnalyticsCredentials = z.infer<typeof credentialSchema>;
 
@@ -66,6 +72,9 @@ export type GoogleAnalyticsCredentials = z.infer<typeof credentialSchema>;
 export const googleAnalytics: ProviderAdapter<GoogleAnalyticsCredentials> = {
   manifest,
   credentialSchema,
+  // Empty, and explicit. Without it the connect page falls back to rendering
+  // every schema field — which would put an access token in a text box.
+  userInputFields: [],
   async verify() {
     throw new ProviderError("unsupported", "Google Analytics needs OAuth, which is not ready yet.");
   },

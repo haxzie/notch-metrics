@@ -6,6 +6,7 @@ import { ProviderError } from "../../types.ts";
 export const manifest: ProviderManifest = {
   id: "dodopayments",
   name: "Dodo Payments",
+  category: "revenue",
   tagline: "Revenue and subscriptions from your Dodo Payments account.",
   docsUrl: "https://app.dodopayments.com/developer/api-keys",
   iconPath: "/providers/dodopayments.svg",

@@ -62,6 +62,7 @@ const series: S.MetricSeries = {
 const manifest: S.ProviderManifest = {
   id: "stripe",
   name: "Stripe",
+  category: "revenue",
   tagline: "Revenue, MRR and subscribers from your Stripe account.",
   docsUrl: "https://dashboard.stripe.com/apikeys",
   iconPath: "/providers/stripe.svg",

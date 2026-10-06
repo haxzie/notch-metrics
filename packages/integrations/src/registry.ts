@@ -1,10 +1,30 @@
-import type { ProviderId, ProviderManifest } from "@notch/schemas";
+import type { ConnectorCategory, ProviderId, ProviderManifest } from "@notch/schemas";
+import type { ProviderAdapter } from "./types.ts";
+
+// Revenue
+import { stripe } from "./providers/stripe/index.ts";
 import { dodopayments } from "./providers/dodopayments/index.ts";
-import { googleAnalytics } from "./providers/google-analytics/index.ts";
 import { lemonsqueezy } from "./providers/lemonsqueezy/index.ts";
 import { polar } from "./providers/polar/index.ts";
-import { stripe } from "./providers/stripe/index.ts";
-import type { ProviderAdapter } from "./types.ts";
+import { paddle } from "./providers/paddle/index.ts";
+
+// Product analytics
+import { posthog } from "./providers/posthog/index.ts";
+import { plausible } from "./providers/plausible/index.ts";
+import { mixpanel } from "./providers/mixpanel/index.ts";
+import { amplitude } from "./providers/amplitude/index.ts";
+import { googleAnalytics } from "./providers/google-analytics/index.ts";
+
+// Marketing and SEO
+import { googleSearchConsole } from "./providers/google-search-console/index.ts";
+import { ahrefs } from "./providers/ahrefs/index.ts";
+import { googleAds } from "./providers/google-ads/index.ts";
+import { metaAds } from "./providers/meta-ads/index.ts";
+
+// CRM
+import { hubspot } from "./providers/hubspot/index.ts";
+import { intercom } from "./providers/intercom/index.ts";
+import { apollo } from "./providers/apollo/index.ts";
 
 /**
  * Every provider the API knows about.
@@ -29,7 +49,19 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   dodopayments,
   lemonsqueezy,
   polar,
+  paddle,
+  posthog,
+  plausible,
+  mixpanel,
+  amplitude,
   "google-analytics": googleAnalytics,
+  "google-search-console": googleSearchConsole,
+  ahrefs,
+  "google-ads": googleAds,
+  "meta-ads": metaAds,
+  hubspot,
+  intercom,
+  apollo,
 };
 
 /**
@@ -39,7 +71,7 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
  * app that has cached the old list never learns about the new provider, which
  * is a silent failure rather than a loud one.
  */
-export const REGISTRY_VERSION = "2026-10-05.2";
+export const REGISTRY_VERSION = "2026-10-06.1";
 
 export function getAdapter(id: string): ProviderAdapter {
   const adapter = (REGISTRY as Record<string, ProviderAdapter | undefined>)[id];
@@ -49,4 +81,28 @@ export function getAdapter(id: string): ProviderAdapter {
 
 export function manifests(): ProviderManifest[] {
   return Object.values(REGISTRY).map((adapter) => adapter.manifest);
+}
+
+/**
+ * The catalogue, grouped the way the settings UI and the website show it.
+ *
+ * Within a category, connectors that actually work come first — a list whose
+ * first three entries are all greyed out reads as a product that does not
+ * work yet.
+ */
+export function catalogue(): { category: ConnectorCategory; connectors: ProviderManifest[] }[] {
+  const order: ConnectorCategory[] = ["revenue", "analytics", "marketing", "crm"];
+  const rank = (m: ProviderManifest) => (m.status === "stable" ? 0 : m.status === "beta" ? 1 : 2);
+
+  return order.map((category) => ({
+    category,
+    connectors: manifests()
+      .filter((m) => m.category === category)
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
+  }));
+}
+
+/** Connectors a user can actually connect today. */
+export function connectable(): ProviderManifest[] {
+  return manifests().filter((m) => m.status !== "coming_soon");
 }

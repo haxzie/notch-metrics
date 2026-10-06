@@ -9,11 +9,32 @@
         "dodopayments",
         "lemonsqueezy",
         "polar",
-        "google-analytics"
+        "paddle",
+        "posthog",
+        "plausible",
+        "mixpanel",
+        "amplitude",
+        "google-analytics",
+        "google-search-console",
+        "ahrefs",
+        "google-ads",
+        "meta-ads",
+        "hubspot",
+        "intercom",
+        "apollo"
       ]
     },
     "name": {
       "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "revenue",
+        "analytics",
+        "marketing",
+        "crm"
+      ]
     },
     "tagline": {
       "type": "string"
@@ -35,6 +56,29 @@
         "api_key",
         "oauth2"
       ]
+    },
+    "oauth": {
+      "type": "object",
+      "properties": {
+        "scopeSummary": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requiresSelection": {
+          "default": false,
+          "type": "boolean"
+        },
+        "selectionLabel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scopeSummary",
+        "requiresSelection"
+      ],
+      "additionalProperties": false
     },
     "fields": {
       "type": "array",
@@ -113,11 +157,36 @@
             "type": "string",
             "enum": [
               "mrr",
+              "arr",
               "revenue",
+              "refunds",
               "active_subscribers",
               "new_subscribers",
               "churned_subscribers",
-              "refunds"
+              "trials",
+              "visitors",
+              "pageviews",
+              "sessions",
+              "active_users",
+              "new_users",
+              "events",
+              "bounce_rate",
+              "conversion_rate",
+              "clicks",
+              "impressions",
+              "ctr",
+              "average_position",
+              "backlinks",
+              "domain_rating",
+              "organic_keywords",
+              "ad_spend",
+              "ad_conversions",
+              "contacts",
+              "new_contacts",
+              "open_deals",
+              "won_deals",
+              "pipeline_value",
+              "open_conversations"
             ]
           },
           "label": {
@@ -198,6 +267,7 @@
   "required": [
     "id",
     "name",
+    "category",
     "tagline",
     "docsUrl",
     "iconPath",
