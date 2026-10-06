@@ -38,6 +38,13 @@ public struct WidgetTile: View {
     }
 
     private var accent: Color { NotchTheme.accent(for: app) }
+    /// The widget's own colour first, then the app's, then the theme's lift.
+    /// A widget can say "this one is lime" without the app catalogue having
+    /// to learn about it.
+    private var chartTint: Color {
+        if let hex = widget.chartStyle?.tintHex, let colour = Color(hex: hex) { return colour }
+        return NotchTheme.chartTint(for: app)
+    }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,6 +63,16 @@ public struct WidgetTile: View {
             Spacer(minLength: 2)
             value
             Spacer(minLength: 2)
+
+            // Always the bottom edge, never under the number. The chart used
+            // to live inside the value stack, so it floated with the figure
+            // and sat at a different height on every tile.
+            if case .value(let series) = state,
+               widget.chart != .none, series.points.count > 1, widget.size != .small {
+                chart(for: series)
+                    .frame(height: chartHeight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
@@ -146,9 +163,6 @@ public struct WidgetTile: View {
                     }
                 }
 
-                if widget.chart != .none, series.points.count > 1, widget.size != .small {
-                    chart(for: series).frame(height: chartHeight)
-                }
             }
 
         case .failed(let reason):
@@ -182,8 +196,13 @@ public struct WidgetTile: View {
     private func chart(for series: MetricSeries) -> some View {
         let values = series.points.map(\.v)
         switch widget.chart {
-        case .bars: MiniBars(values: values, tint: accent)
-        case .sparkline: Sparkline(values: values, tint: accent)
+        case .bars:
+            MiniBars(values: values, tint: chartTint)
+        case .sparkline:
+            Sparkline(
+                values: values, tint: chartTint,
+                fill: widget.chartStyle?.fill ?? true,
+                fillOpacity: widget.chartStyle?.fillOpacity ?? 0.45)
         case .none: EmptyView()
         }
     }

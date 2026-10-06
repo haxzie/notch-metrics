@@ -127,3 +127,20 @@ struct DisplayModeTests {
         #expect(layout.display == .grid)
     }
 }
+
+@Suite struct ChartColourTests {
+    @Test("a brand with a separate chart colour keeps both")
+    func dodoHasBoth() {
+        // Dodo Payments is black with lime. The black belongs behind their
+        // mark; a near-black 1.5pt line on a near-black tile is invisible.
+        let dodo = AppCatalog.resolve("dodopayments")
+        #expect(dodo.accentHex == "111111")
+        #expect(dodo.chartHex == "C6FE1E")
+    }
+
+    @Test("most brands need only one colour")
+    func othersHaveNoOverride() {
+        #expect(AppCatalog.resolve("stripe").chartHex == nil)
+        #expect(AppCatalog.resolve("lemonsqueezy").chartHex == nil)
+    }
+}

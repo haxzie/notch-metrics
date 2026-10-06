@@ -9,19 +9,28 @@ import Foundation
 public struct MetricApp: Sendable, Hashable, Identifiable {
     public let id: String
     public let name: String
-    /// An SF Symbol. Deliberately not the vendor's own logo: third-party marks
-    /// mean an asset pipeline, a licence question each, and a release every
-    /// time somebody rebrands.
+    /// An SF Symbol, used only where no vendored brand mark exists.
     public let symbol: String
     /// `RRGGBB`. Converted to a colour in NotchUI, so MetricsCore stays free
     /// of SwiftUI and can be tested without a UI.
     public let accentHex: String
 
-    public init(id: String, name: String, symbol: String, accentHex: String) {
+    /// The colour for a chart line, when it differs from the accent.
+    ///
+    /// Several brands are a dark primary plus a bright secondary: Dodo
+    /// Payments is black with lime. The black is right behind their mark and
+    /// useless as a 1.5pt line on a dark tile, so the two are separate rather
+    /// than one being derived from the other.
+    public let chartHex: String?
+
+    public init(
+        id: String, name: String, symbol: String, accentHex: String, chartHex: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.symbol = symbol
         self.accentHex = accentHex
+        self.chartHex = chartHex
     }
 }
 
@@ -50,7 +59,8 @@ public enum AppCatalog {
         MetricApp(
             id: "stripe", name: "Stripe", symbol: "creditcard.fill", accentHex: "635BFF"),
         MetricApp(
-            id: "dodopayments", name: "Dodo Payments", symbol: "bird.fill", accentHex: "111111"),
+            id: "dodopayments", name: "Dodo Payments", symbol: "bird.fill", accentHex: "111111",
+            chartHex: "C6FE1E"),
         MetricApp(
             id: "lemonsqueezy", name: "Lemon Squeezy", symbol: "cart.fill", accentHex: "FFC233"),
         MetricApp(

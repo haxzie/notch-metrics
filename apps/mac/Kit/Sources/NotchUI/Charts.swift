@@ -104,11 +104,17 @@ public struct Sparkline: View {
     public let values: [Double]
     public var tint: Color
     public var fill: Bool
+    /// Opacity at the top of the area gradient; it always falls to zero.
+    public var fillOpacity: Double
 
-    public init(values: [Double], tint: Color = .accentColor, fill: Bool = true) {
+    public init(
+        values: [Double], tint: Color = .accentColor, fill: Bool = true,
+        fillOpacity: Double = 0.45
+    ) {
         self.values = values
         self.tint = tint
         self.fill = fill
+        self.fillOpacity = fillOpacity
     }
 
     public var body: some View {
@@ -126,10 +132,22 @@ public struct Sparkline: View {
                 area.addLine(to: CGPoint(x: points[points.count - 1].x, y: rect.maxY))
                 area.addLine(to: CGPoint(x: points[0].x, y: rect.maxY))
                 area.closeSubpath()
+                // Three stops, not two. A straight ramp from 0.45 to 0 is
+                // linear in alpha but reads as a hard band against a dark
+                // tile, because perceived brightness is not; the middle stop
+                // pulls the falloff earlier so the bottom genuinely vanishes.
+                //
+                // Anchored to the drawing rect rather than the path's own
+                // bounds, so a flat series fades over the same distance as a
+                // spiky one instead of being a solid block.
                 context.fill(
                     area,
                     with: .linearGradient(
-                        Gradient(colors: [tint.opacity(0.28), tint.opacity(0.0)]),
+                        Gradient(stops: [
+                            .init(color: tint.opacity(fillOpacity), location: 0),
+                            .init(color: tint.opacity(fillOpacity * 0.36), location: 0.45),
+                            .init(color: tint.opacity(0.0), location: 1),
+                        ]),
                         startPoint: CGPoint(x: rect.midX, y: rect.minY),
                         endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
             }
@@ -175,9 +193,20 @@ public struct MiniBars: View {
                 let bar = CGRect(
                     x: rect.minX + CGFloat(index) * slot + (slot - barWidth) / 2,
                     y: rect.maxY - height, width: barWidth, height: height)
+                // The same top-down falloff as the sparkline's area, so the
+                // two chart kinds sit next to each other without one looking
+                // heavier than the other. Anchored to the rect, not the bar,
+                // or a short bar would be uniformly pale.
                 context.fill(
                     Path(roundedRect: bar, cornerRadius: min(1.5, barWidth / 2)),
-                    with: .color(tint.opacity(0.85)))
+                    with: .linearGradient(
+                        Gradient(stops: [
+                            .init(color: tint.opacity(0.95), location: 0),
+                            .init(color: tint.opacity(0.55), location: 0.45),
+                            .init(color: tint.opacity(0.18), location: 1),
+                        ]),
+                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
+                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
             }
         }
         .drawingGroup(opaque: false)

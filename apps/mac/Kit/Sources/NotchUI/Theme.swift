@@ -87,6 +87,40 @@ public enum NotchTheme {
         )
     }
 
+    /// The accent as a chart line or sparkline fill.
+    ///
+    /// A higher floor than `tileFill`. A tile only has to be a distinguishable
+    /// shape, and 0.28 brightness behind a hairline border manages that; a
+    /// 1.5pt line *is* the content, and Dodo Payments' `#111111` drew a
+    /// near-black chart on a near-black tile — present, and unreadable.
+    ///
+    /// Brands with a usable colour are untouched, so a Lemon Squeezy chart
+    /// stays Lemon Squeezy yellow.
+    public static func chartTint(for app: MetricApp) -> Color {
+        // The brand's own chart colour when it has one; the lift below is for
+        // brands that only publish a dark primary.
+        guard let nsColor = NSColor(hex: app.chartHex ?? app.accentHex)?
+            .usingColorSpace(.sRGB)
+        else { return gradientStart }
+
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        nsColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+
+        guard brightness < 0.6 else { return Color(nsColor: nsColor) }
+
+        // A brand with no hue to raise — pure black or grey — would otherwise
+        // become an arbitrary tinted line, so it goes to a neutral light grey.
+        if saturation < 0.15 {
+            return Color(white: 0.72)
+        }
+        return Color(
+            nsColor: NSColor(
+                hue: hue, saturation: max(saturation, 0.5), brightness: 0.78, alpha: alpha))
+    }
+
     /// Tints a tile from its index. Only for the case where no app is known.
     public static func accent(for index: Int) -> Color {
         let stops: [Color] = [

@@ -61,3 +61,41 @@ import Testing
         #expect(MetricFormatter.display(s, override: nil) == MetricFormatter.display(s))
     }
 }
+
+@Suite struct WidgetChartStyleTests {
+    @Test("a widget with no style decodes and stays automatic")
+    func absentIsNil() throws {
+        // Every layout.json written before chart styles existed.
+        let json = """
+            {"id":"w1","kind":"provider_metric","appId":"stripe","size":"2x1",
+             "col":0,"row":0,"position":0,"granularity":"day","range":"30d",
+             "chart":"sparkline","visible":true}
+            """
+        let widget = try JSONDecoder().decode(NotchWidget.self, from: Data(json.utf8))
+        #expect(widget.chartStyle == nil)
+        #expect(widget.format == nil)
+    }
+
+    @Test("a style round-trips through JSON")
+    func roundTrips() throws {
+        let widget = NotchWidget(
+            id: "w1", appId: "dodopayments", metric: "revenue",
+            chartStyle: WidgetChartStyle(tintHex: "C6FE1E", fill: true, fillOpacity: 0.6))
+
+        let data = try JSONEncoder().encode(widget)
+        let decoded = try JSONDecoder().decode(NotchWidget.self, from: data)
+
+        #expect(decoded.chartStyle?.tintHex == "C6FE1E")
+        #expect(decoded.chartStyle?.fill == true)
+        #expect(decoded.chartStyle?.fillOpacity == 0.6)
+    }
+
+    @Test("a widget can turn the area fill off")
+    func fillOff() throws {
+        let widget = NotchWidget(
+            id: "w1", appId: "stripe", chartStyle: WidgetChartStyle(fill: false))
+        let decoded = try JSONDecoder().decode(
+            NotchWidget.self, from: JSONEncoder().encode(widget))
+        #expect(decoded.chartStyle?.fill == false)
+    }
+}
