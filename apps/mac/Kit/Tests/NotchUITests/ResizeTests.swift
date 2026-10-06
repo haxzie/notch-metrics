@@ -48,32 +48,34 @@ struct ResizeTests {
         #expect(a?.col == 0)
     }
 
-    @Test("dragging the leading edge moves the origin and keeps the far edge")
+    @Test("dragging the leading edge changes the span, and the flow places it")
     func growsLeft() {
         let (model, _) = model([widget("a", .wide, col: 3, row: 0)])
         model.beginResize("a")
-        // The right edge was at column 4; dragging the left handle to column 1
-        // should span 1...4.
         #expect(model.resizeMoved(to: (col: 1, row: 0, cols: 4, rows: 1)))
         model.endResize(commit: true)
 
         let a = model.layout.widgets.first { $0.id == "a" }
-        #expect(a?.col == 1)
         #expect(a?.size.cols == 4)
+        // The column is not the handle's to set. In a flow the position comes
+        // from the order, so the only widget flows to the start.
+        #expect(a?.col == 0)
     }
 
-    @Test("a resize into a neighbour is refused, and the widget keeps its size")
-    func refusesOverlap() {
+    @Test("growing into a neighbour pushes it along rather than being refused")
+    func resizeMakesRoom() {
+        // Refusing when anything was in the way meant resizing only worked on
+        // the last widget in the grid, which is to say it mostly did not.
         let (model, _) = model([
             widget("a", .wide, col: 0, row: 0),
             widget("b", .wide, col: 2, row: 0),
         ])
         model.beginResize("a")
-        // Four columns from zero runs straight through `b`.
-        #expect(model.resizeMoved(to: (col: 0, row: 0, cols: 4, rows: 1)) == false)
+        #expect(model.resizeMoved(to: (col: 0, row: 0, cols: 4, rows: 1)))
         model.endResize(commit: true)
 
-        #expect(model.layout.widgets.first { $0.id == "a" }?.size == .wide)
+        #expect(model.layout.widgets.first { $0.id == "a" }?.size.cols == 4)
+        #expect(model.layout.widgets.first { $0.id == "b" }?.col == 4)
         #expect(overlaps(model.layout) == false)
     }
 
@@ -81,8 +83,9 @@ struct ResizeTests {
     func refusesOffGrid() {
         let (model, _) = model([widget("a", .wide, col: 4, row: 0)])
         model.beginResize("a")
-        #expect(model.resizeMoved(to: (col: 4, row: 0, cols: 4, rows: 1)) == false)
-        #expect(model.resizeMoved(to: (col: 4, row: 0, cols: 2, rows: 3)) == false)
+        // Wider than the grid, and taller than it.
+        #expect(model.resizeMoved(to: (col: 4, row: 0, cols: 8, rows: 1)) == false)
+        #expect(model.resizeMoved(to: (col: 0, row: 0, cols: 6, rows: 9)) == false)
     }
 
     @Test("a cancelled resize leaves the layout untouched")
@@ -109,22 +112,22 @@ struct ResizeTests {
         #expect(model.layout.widgets.first?.size == .wide)
     }
 
-    @Test("resizing never pushes a neighbour out of the way")
-    func neighboursNeverMove() {
-        // A resize that shoves its neighbours is impossible to aim.
+    @Test("neighbours keep their order while they make room")
+    func orderSurvivesAResize() {
+        // They move, but they do not reshuffle: the grid is a flow, so what a
+        // resize changes is where the others land, never the order they are in.
         let (model, _) = model([
             widget("a", .wide, col: 0, row: 0),
             widget("b", .wide, col: 2, row: 0),
+            widget("c", .wide, col: 4, row: 0),
         ])
-        let before = model.layout.widgets.first { $0.id == "b" }
-
         model.beginResize("a")
-        _ = model.resizeMoved(to: (col: 0, row: 0, cols: 3, rows: 1))
+        _ = model.resizeMoved(to: (col: 0, row: 0, cols: 4, rows: 1))
         model.endResize(commit: true)
 
-        let after = model.layout.widgets.first { $0.id == "b" }
-        #expect(after?.col == before?.col)
-        #expect(after?.row == before?.row)
+        let order = model.layout.widgets.sorted { $0.position < $1.position }.map(\.id)
+        #expect(order == ["a", "b", "c"])
+        #expect(overlaps(model.layout) == false)
     }
 }
 

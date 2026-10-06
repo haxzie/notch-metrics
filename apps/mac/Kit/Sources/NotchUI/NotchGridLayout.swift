@@ -109,7 +109,7 @@ public final class NotchLayoutModel {
     /// against a different grid, and a `PUT /v1/widgets` from another Mac can
     /// carry anything. Overlapping tiles render on top of each other.
     public func replace(with layout: NotchLayout) {
-        self.layout = GridPacker.repack(layout)
+        self.layout = GridPacker.reflow(layout)
     }
 
     public func beginDrag(_ id: String) {
@@ -118,13 +118,17 @@ public final class NotchLayoutModel {
         preview = layout
     }
 
-    /// Runs the packer against a copy, so the user sees the displacement that
-    /// dropping here would cause before they commit to it.
+    /// Runs the packer against a copy, so the user sees the rearrangement
+    /// that dropping here would cause before they commit to it.
+    ///
+    /// A drop is an *index* in reading order, not a pair of coordinates. The
+    /// grid flows, so "put it here" means "put it after these" — and
+    /// everything else reflows around it rather than being shoved into
+    /// whatever cell happened to be free.
     public func dragMoved(to origin: (col: Int, row: Int)) {
         guard let draggingID else { return }
-        if let next = GridPacker.place(draggingID, at: origin, in: layout) {
-            preview = next
-        }
+        let index = GridPacker.index(at: origin, in: layout, excluding: draggingID)
+        preview = GridPacker.move(draggingID, toIndex: index, in: layout)
     }
 
     public func endDrag(commit: Bool) {
@@ -177,7 +181,7 @@ public final class NotchLayoutModel {
               let index = layout.widgets.firstIndex(where: { $0.id == id })
         else { return }
         layout.widgets[index].size = size
-        layout = GridPacker.normalised(layout)
+        layout = GridPacker.reflow(layout)
         persist(layout)
     }
 
@@ -212,41 +216,28 @@ public final class NotchLayoutModel {
     /// size, which is how every resize in every other app behaves.
     @discardableResult
     public func resizeMoved(to rect: (col: Int, row: Int, cols: Int, rows: Int)) -> Bool {
-        guard let id = resizingID,
-              let original = resizeOriginal,
-              let base = resizePreview ?? Optional(layout)
-        else { return false }
+        guard let id = resizingID else { return false }
 
         let size = WidgetSize(cols: rect.cols, rows: rect.rows)
-        guard rect.col >= 0, rect.row >= 0,
-              rect.col + size.cols <= NotchLayout.columns,
-              rect.row + size.rows <= base.rows
+        guard rect.col >= 0, rect.row >= 0, rect.col + size.cols <= NotchLayout.columns
         else { return false }
 
         var candidate = layout
         guard let index = candidate.widgets.firstIndex(where: { $0.id == id }) else { return false }
         candidate.widgets[index].size = size
-        candidate.widgets[index].col = rect.col
-        candidate.widgets[index].row = rect.row
 
-        // Everything else has to still fit without being moved. A resize that
-        // shoves its neighbours around is impossible to aim, which is most of
-        // why the old one felt like it was fighting back.
-        let others = candidate.widgets.filter { $0.id != id && $0.visible }
-        var taken: Set<GridCell> = []
-        for widget in others {
-            guard let cells = GridPacker.cells(
-                for: widget, at: (widget.col, widget.row), rows: candidate.rows)
-            else { return false }
-            taken.formUnion(cells)
-        }
-        guard let wanted = GridPacker.cells(
-            for: candidate.widgets[index], at: (rect.col, rect.row), rows: candidate.rows),
-            taken.isDisjoint(with: Set(wanted))
-        else { return false }
+        // The grid flows, so a resize does not have to find empty space — it
+        // takes the space it wants and everything after it reflows around the
+        // new shape. Refusing when a neighbour was in the way meant resizing
+        // only worked on the last widget in the grid, which is to say it
+        // mostly did not work.
+        let reflowed = GridPacker.reflow(candidate)
 
-        _ = original
-        resizePreview = GridPacker.normalised(candidate)
+        // The one thing still worth refusing: a span that cannot fit the grid
+        // at all, which would push the widget itself into the hidden pile.
+        guard reflowed.widgets.first(where: { $0.id == id })?.visible == true else { return false }
+
+        resizePreview = reflowed
         return true
     }
 
@@ -263,7 +254,9 @@ public final class NotchLayoutModel {
 
     public func remove(_ id: String) {
         layout.widgets.removeAll { $0.id == id }
-        layout = GridPacker.normalised(layout)
+        // Reflowed, so removing a tile closes the hole it leaves rather than
+        // stranding the ones after it.
+        layout = GridPacker.reflow(layout)
         persist(layout)
     }
 

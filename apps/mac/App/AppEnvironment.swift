@@ -254,7 +254,7 @@ final class AppEnvironment {
                 moved.row = 0
                 return moved
             }
-            layout = GridPacker.repack(layout)
+            layout = GridPacker.reflow(layout)
             saveLayout(layout)
         }
         return layout

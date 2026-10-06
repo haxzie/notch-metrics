@@ -339,3 +339,138 @@ struct FormattingTests {
         #expect(overlaps(GridPacker.repack(odd)) == false)
     }
 }
+
+/// The grid is a flow: order decides position, not the other way round.
+@Suite struct ReflowTests {
+    private func widget(_ id: String, _ size: WidgetSize, position: Int) -> NotchWidget {
+        NotchWidget(
+            id: id, appId: "stripe", metric: "mrr", size: size,
+            col: 0, row: 0, position: position)
+    }
+
+    private func layout(_ widgets: [NotchWidget], rows: Int = 2) -> NotchLayout {
+        NotchLayout(rows: rows, widgets: widgets)
+    }
+
+    private func cells(_ layout: NotchLayout) -> [String: GridCell] {
+        Dictionary(
+            uniqueKeysWithValues: layout.widgets.filter(\.visible).map {
+                ($0.id, GridCell(col: $0.col, row: $0.row))
+            })
+    }
+
+    @Test("widgets flow left to right, then down")
+    func flowsInReadingOrder() {
+        let flowed = GridPacker.reflow(
+            layout([
+                widget("a", .wide, position: 0),
+                widget("b", .wide, position: 1),
+                widget("c", .wide, position: 2),
+                widget("d", .wide, position: 3),
+            ]))
+
+        let at = cells(flowed)
+        #expect(at["a"] == GridCell(col: 0, row: 0))
+        #expect(at["b"] == GridCell(col: 2, row: 0))
+        #expect(at["c"] == GridCell(col: 4, row: 0))
+        // The row is full, so the fourth drops to the next one.
+        #expect(at["d"] == GridCell(col: 0, row: 1))
+    }
+
+    @Test("a gap is closed rather than left behind")
+    func noOblivion() {
+        // The exact complaint: a widget stranded away from the others with
+        // empty cells before it.
+        var stranded = widget("b", .wide, position: 1)
+        stranded.col = 4
+        stranded.row = 1
+        let flowed = GridPacker.reflow(layout([widget("a", .wide, position: 0), stranded]))
+
+        #expect(cells(flowed)["b"] == GridCell(col: 2, row: 0))
+    }
+
+    @Test("growing a widget pushes the ones after it along")
+    func resizeMakesRoom() {
+        var base = layout([
+            widget("a", .wide, position: 0),
+            widget("b", .wide, position: 1),
+            widget("c", .wide, position: 2),
+        ])
+        base = GridPacker.reflow(base)
+
+        // `a` grows from two columns to four; the rest flow around it.
+        let index = base.widgets.firstIndex { $0.id == "a" }!
+        base.widgets[index].size = WidgetSize(cols: 4, rows: 1)
+        let flowed = GridPacker.reflow(base)
+
+        let at = cells(flowed)
+        #expect(at["a"] == GridCell(col: 0, row: 0))
+        #expect(at["b"] == GridCell(col: 4, row: 0))
+        #expect(at["c"] == GridCell(col: 0, row: 1))
+    }
+
+    @Test("removing a widget closes the hole")
+    func removalCloses() {
+        var base = GridPacker.reflow(
+            layout([
+                widget("a", .wide, position: 0),
+                widget("b", .wide, position: 1),
+                widget("c", .wide, position: 2),
+            ]))
+        base.widgets.removeAll { $0.id == "a" }
+
+        let at = cells(GridPacker.reflow(base))
+        #expect(at["b"] == GridCell(col: 0, row: 0))
+        #expect(at["c"] == GridCell(col: 2, row: 0))
+    }
+
+    @Test("moving a widget to an index reorders the rest")
+    func moveReorders() {
+        let base = GridPacker.reflow(
+            layout([
+                widget("a", .wide, position: 0),
+                widget("b", .wide, position: 1),
+                widget("c", .wide, position: 2),
+            ]))
+
+        let moved = GridPacker.move("c", toIndex: 0, in: base)
+        let at = cells(moved)
+        #expect(at["c"] == GridCell(col: 0, row: 0))
+        #expect(at["a"] == GridCell(col: 2, row: 0))
+        #expect(at["b"] == GridCell(col: 4, row: 0))
+    }
+
+    @Test("what cannot fit is hidden, not dropped")
+    func overflowHides() {
+        let flowed = GridPacker.reflow(
+            layout(
+                [
+                    widget("a", .hero, position: 0),
+                    widget("b", .hero, position: 1),
+                ],
+                rows: 2))
+        #expect(flowed.widgets.count == 2)
+        #expect(flowed.widgets.filter(\.visible).count == 1)
+    }
+
+    @Test("a flowed layout never overlaps")
+    func neverOverlaps() {
+        let flowed = GridPacker.reflow(
+            layout(
+                [
+                    widget("a", WidgetSize(cols: 3, rows: 2), position: 0),
+                    widget("b", WidgetSize(cols: 4, rows: 1), position: 1),
+                    widget("c", .small, position: 2),
+                    widget("d", .square, position: 3),
+                ],
+                rows: 4))
+
+        var seen: Set<GridCell> = []
+        for w in flowed.widgets where w.visible {
+            for cell in GridPacker.cells(for: w, at: (w.col, w.row), rows: flowed.rows) ?? [] {
+                #expect(seen.contains(cell) == false)
+                seen.insert(cell)
+            }
+        }
+    }
+}

@@ -164,10 +164,21 @@ public struct NotchContentView: View {
             headerButton("slider.horizontal.3", help: "Settings", action: onOpenSettings)
             headerButton("xmark", help: "Close", action: onClose)
         }
+        // Filling the band before it is given a height, so the row's contents
+        // centre on the header rather than on their own 24pt selves. Without
+        // this the HStack is only as tall as a button and sits at the top of
+        // the bar, which reads as the icons being pushed up.
+        .frame(maxHeight: .infinity)
         .padding(.horizontal, 16)
-        // Tall enough to leave real space above a 24pt button, not the five
-        // points that centring in a 34pt bar happened to give — which put the
-        // icons hard against the top edge of the panel.
+        // The panel's top edge sits above the screen's, so the band is
+        // centred on a top that cannot be seen and the row reads as pushed
+        // up. This nudges it into the middle of the part that can be seen.
+        //
+        // Padding inside a centred frame moves the content by half of it, so
+        // this is twice the correction — measured, not derived, because the
+        // overhang comes from how the window is placed over the notch rather
+        // than from anything this view knows about.
+        .padding(.top, 16)
         .frame(height: max(44, geometry.hasNotch ? geometry.notchRect.height + 12 : 44))
     }
 

@@ -335,6 +335,70 @@ public enum GridPacker {
                 rows: layout.rows, widgets: settled))
     }
 
+    /// Lays every widget out in order, left to right and top to bottom.
+    ///
+    /// The grid is a flow, not a pinboard. Widgets hold an *order*; where they
+    /// sit is derived from it. That is what stops a tile being stranded in the
+    /// middle of an empty row after the one beside it shrinks, and it is why a
+    /// resize can make room — everything after the resized widget simply flows
+    /// around its new shape.
+    ///
+    /// Anything that will not fit at all is marked not visible rather than
+    /// dropped, so it survives a trip through a smaller grid and comes back
+    /// when there is room.
+    public static func reflow(_ layout: NotchLayout) -> NotchLayout {
+        var settled: [NotchWidget] = []
+
+        for var widget in layout.widgets.sorted(by: { $0.position < $1.position }) {
+            let scratch = NotchLayout(
+                schemaVersion: layout.schemaVersion, revision: layout.revision,
+                rows: layout.rows, widgets: settled)
+
+            if let slot = firstFit(for: widget, in: scratch) {
+                widget.col = slot.col
+                widget.row = slot.row
+                widget.visible = true
+            } else {
+                widget.visible = false
+            }
+            settled.append(widget)
+        }
+
+        var next = layout
+        next.widgets = settled
+        return normalised(next)
+    }
+
+    /// Moves `id` so that it lands at `index` in reading order, then reflows.
+    ///
+    /// Dragging reorders rather than assigning coordinates. Dropping a tile
+    /// "between" two others is a position in a sequence, and treating it as a
+    /// pair of coordinates is what let widgets end up with gaps around them.
+    public static func move(_ id: String, toIndex index: Int, in layout: NotchLayout) -> NotchLayout {
+        var ordered = layout.widgets.sorted { $0.position < $1.position }
+        guard let from = ordered.firstIndex(where: { $0.id == id }) else { return layout }
+
+        let widget = ordered.remove(at: from)
+        ordered.insert(widget, at: min(max(0, index), ordered.count))
+        for (position, _) in ordered.enumerated() { ordered[position].position = position }
+
+        var next = layout
+        next.widgets = ordered
+        return reflow(next)
+    }
+
+    /// The reading-order index a drop at `origin` corresponds to.
+    ///
+    /// Counts the widgets whose own cell comes before that point, so dropping
+    /// into the gap after a tile puts the dragged one directly after it.
+    public static func index(at origin: (col: Int, row: Int), in layout: NotchLayout, excluding id: String) -> Int {
+        let target = origin.row * NotchLayout.columns + origin.col
+        return layout.widgets
+            .filter { $0.id != id && $0.visible }
+            .filter { $0.row * NotchLayout.columns + $0.col < target }
+            .count
+    }
+
     public static func firstFit(
         for widget: NotchWidget,
         in layout: NotchLayout
