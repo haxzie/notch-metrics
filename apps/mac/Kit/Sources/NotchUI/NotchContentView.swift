@@ -118,10 +118,10 @@ public struct NotchContentView: View {
         case .grid:
             NotchWidgetCanvas(model: model, states: states, appOverrides: appOverrides)
                 .padding(.horizontal, 16)
-                // Clear of the header. Edit mode draws a backdrop a little
-                // larger than the grid, and without this its top edge and dots
-                // ran straight into the row of icons above.
-                .padding(.top, 10)
+                // Clear of the header, with room for the edit backdrop's own
+                // inset on top of it — that is what this has to cover, not
+                // just the grid.
+                .padding(.top, NotchWidgetCanvas.editInset + 6)
         case .list:
             NotchListView(model: model, states: states, appOverrides: appOverrides)
                 .padding(.horizontal, 10)
@@ -371,13 +371,15 @@ public struct NotchWidgetCanvas: View {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
                         )
-                        // Grown sideways and downwards only. Growing upwards
-                        // put it under the header's icons however much space
-                        // was left between them.
+                        // The same inset on all four sides. Trimming the top
+                        // to keep it clear of the header made the gap above
+                        // the first row visibly tighter than the one beside
+                        // it; the clearance belongs in the content's own top
+                        // padding, where it does not distort this.
                         .frame(
-                            width: grid.contentSize.width + 16,
-                            height: grid.contentSize.height + 12)
-                        .offset(x: -8, y: -4)
+                            width: grid.contentSize.width + Self.editInset * 2,
+                            height: grid.contentSize.height + Self.editInset * 2)
+                        .offset(x: -Self.editInset, y: -Self.editInset)
                         .transition(.opacity)
                         // Behind the tiles in the ZStack, so a tap only
                         // reaches it where no tile covers it. Clicking the
@@ -473,6 +475,9 @@ public struct NotchWidgetCanvas: View {
         }
         .frame(height: Self.canvasHeight(rows: model.displayed.rows))
     }
+
+    /// How far the edit backdrop extends past the grid, on every side.
+    static let editInset: CGFloat = 8
 
     /// One row is tall enough for a label over a headline figure; each extra
     /// row adds the same again plus the gap between them.
