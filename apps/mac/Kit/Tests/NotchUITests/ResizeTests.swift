@@ -79,13 +79,27 @@ struct ResizeTests {
         #expect(overlaps(model.layout) == false)
     }
 
-    @Test("a resize past the edge of the grid is refused")
+    @Test("a resize past the side of the grid is refused")
     func refusesOffGrid() {
         let (model, _) = model([widget("a", .wide, col: 4, row: 0)])
         model.beginResize("a")
-        // Wider than the grid, and taller than it.
+        // Width is still a wall: there is no seventh column to grow into.
         #expect(model.resizeMoved(to: (col: 4, row: 0, cols: 8, rows: 1)) == false)
-        #expect(model.resizeMoved(to: (col: 0, row: 0, cols: 6, rows: 9)) == false)
+    }
+
+    @Test("a span taller than the viewport is clamped, not refused")
+    func clampsTallSpans() {
+        // Height stopped being a wall when the area began to scroll. The
+        // viewport is no longer the bound — the flow behind it is far taller —
+        // so the only limit left is WidgetSize's own, and passing it clamps.
+        // Refusing instead would make the bottom handle stick for a reason
+        // nothing on screen explains.
+        let (model, _) = model([widget("a", .wide, col: 0, row: 0)])
+        model.beginResize("a")
+        #expect(model.resizeMoved(to: (col: 0, row: 0, cols: 6, rows: 9)))
+        model.endResize(commit: true)
+
+        #expect(model.layout.widgets.first { $0.id == "a" }?.size.rows == WidgetSize.maxRows)
     }
 
     @Test("a cancelled resize leaves the layout untouched")
