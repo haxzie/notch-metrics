@@ -397,7 +397,7 @@ public struct NotchContentView: View {
         // Every vertical band the VStack actually contains. Leaving the
         // content's own padding out of this is what squeezed the header.
         let content = NotchWidgetCanvas.contentTop
-            + NotchWidgetCanvas.canvasHeight(rows: model.visibleRows)
+            + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
             + NotchWidgetCanvas.contentBottom
             + Self.grabberHeight
         return CGSize(
@@ -473,8 +473,15 @@ public struct NotchWidgetCanvas: View {
             // not fit are below the fold and scrolled to, which is what makes
             // adding a widget to a full grid work at all.
             let rows = max(Int(model.visibleRows.rounded(.up)), layoutRows)
+            // Less the well's band on both sides. The grid now lays out
+            // *inside* that padding, so handing it the full width would make
+            // the padded content wider than the viewport — which is what got
+            // the band clipped away in the first place.
             let grid = GridGeometry(
-                available: proxy.size, rows: rows,
+                available: CGSize(
+                    width: proxy.size.width - Self.editInset * 2,
+                    height: proxy.size.height),
+                rows: rows, spacing: Self.rowSpacing,
                 origin: .zero, rowHeight: Self.rowHeight)
             let layout = model.displayedWithResize
 
@@ -482,44 +489,6 @@ public struct NotchWidgetCanvas: View {
             // was full simply refused the next widget.
             ScrollView(.vertical, showsIndicators: false) {
             ZStack(alignment: .topLeading) {
-                if model.isEditing {
-                    // A recessed surface behind the tiles, so edit mode reads
-                    // as a different place rather than the same panel with
-                    // specks on it. Inset outwards so the dots run past the
-                    // tiles rather than stopping flush against the outermost
-                    // one.
-                    //
-                    // The shade only has to separate the well from the panel;
-                    // at 0.28 it went to near-black and the tiles read as
-                    // floating over a hole. The dots mark the grid, they do
-                    // not have to be legible one by one.
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.black.opacity(0.12))
-                        .overlay(
-                            DottedGrid(pitch: 11, opacity: 0.07)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                        // The same inset on all four sides. Trimming the top
-                        // to keep it clear of the header made the gap above
-                        // the first row visibly tighter than the one beside
-                        // it; the clearance belongs in the content's own top
-                        // padding, where it does not distort this.
-                        .frame(
-                            width: grid.contentSize.width + Self.editInset * 2,
-                            height: grid.contentSize.height + Self.editInset * 2)
-                        .offset(x: -Self.editInset, y: -Self.editInset)
-                        .transition(.opacity)
-                        // Behind the tiles in the ZStack, so a tap only
-                        // reaches it where no tile covers it. Clicking the
-                        // empty grid is the obvious way to dismiss a
-                        // selection and did nothing at all.
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedID = nil }
-                }
 
                 // A notch with nothing in it has to say so. There used to be
                 // three seeded Stripe tiles here instead, which meant every
@@ -651,6 +620,13 @@ public struct NotchWidgetCanvas: View {
                     hoveredID = nil
                 }
             }
+            // The well is the *background* of a padded grid, not an oversized
+            // rectangle drawn behind it. Framed larger and offset outwards,
+            // its left and right bands sat outside the ScrollView's bounds
+            // and were clipped — so the dots stopped dead at the outermost
+            // tile and the band only ever appeared above the first row.
+            .padding(Self.editInset)
+            .background { if model.isEditing { well } }
             }
             // A tile being dragged must not also scroll the view under it —
             // the drag's own vertical movement would be read as a scroll and
@@ -661,7 +637,35 @@ public struct NotchWidgetCanvas: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         // The viewport. The content inside is as tall as the flow needs.
-        .frame(height: Self.canvasHeight(rows: model.visibleRows))
+        .frame(height: Self.viewportHeight(rows: model.visibleRows))
+    }
+
+    /// The recessed surface the tiles sit on in edit mode.
+    ///
+    /// Sized by whatever it backs, so the band around the tiles is exactly
+    /// the padding applied to the grid — there is no second number to keep
+    /// in step, and nothing to clip.
+    ///
+    /// The shade only has to separate the well from the panel; at 0.28 it
+    /// went to near-black and the tiles read as floating over a hole. The
+    /// dots mark the grid, they do not have to be legible one by one.
+    private var well: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color.black.opacity(0.12))
+            .overlay(
+                DottedGrid(pitch: 11, opacity: 0.07)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .transition(.opacity)
+            // Behind the tiles, so a tap only reaches it where no tile covers
+            // it. Clicking the empty grid is the obvious way to dismiss a
+            // selection and did nothing at all.
+            .contentShape(Rectangle())
+            .onTapGesture { selectedID = nil }
     }
 
     /// How many rows of content there are, never fewer than the viewport.
@@ -671,10 +675,11 @@ public struct NotchWidgetCanvas: View {
 
     /// How far the edit backdrop extends past the grid, on every side.
     ///
-    /// This is the dotted band *around* the tiles, and it is the one that
-    /// wants to be generous: it is what makes the well read as a surface the
-    /// tiles sit on rather than a box drawn tight around them.
-    static let editInset: CGFloat = 14
+    /// The gutter, exactly — not a number of its own. A well whose padding
+    /// matches the gaps between the tiles reads as one grid; anything else
+    /// reads as tiles sitting in a box, and the difference is visible at a
+    /// glance even when neither value is wrong on its own.
+    static var editInset: CGFloat { rowSpacing }
 
     /// How far the edit well itself sits from the panel's edges.
     ///
@@ -683,22 +688,30 @@ public struct NotchWidgetCanvas: View {
     /// the dotted band looking like a hairline.
     static let wellMargin: CGFloat = 8
 
-    /// The tiles are inset far enough that the well lands on `wellMargin`.
-    static var contentHorizontal: CGFloat { wellMargin + editInset }
-    static var contentTop: CGFloat { wellMargin + editInset }
-    /// The grabber supplies the bottom margin, so this only has to clear the
-    /// well itself out from under it.
-    static var contentBottom: CGFloat { editInset }
+    /// The canvas carries the well's band inside itself now, so the content's
+    /// own padding is only the gap between the well and the panel.
+    static var contentHorizontal: CGFloat { wellMargin }
+    static var contentTop: CGFloat { wellMargin }
+    /// The grabber supplies the bottom margin on its own.
+    static var contentBottom: CGFloat { 0 }
 
     /// One row is tall enough for a label over a headline figure; each extra
     /// row adds the same again plus the gap between them.
     static let rowHeight: CGFloat = 84
+    /// The gap between two tiles, in both axes — and, through `editInset`,
+    /// the gap between a tile and the edge of the well.
     static let rowSpacing: CGFloat = 10
 
     /// Fractional, because the handle drag follows the pointer between
     /// detents rather than snapping to a row on every frame.
     static func canvasHeight(rows: CGFloat) -> CGFloat {
         rows * rowHeight + max(0, rows - 1) * rowSpacing
+    }
+
+    /// The grid plus the well's band above and below it — what the viewport
+    /// has to be for `rows` rows to be fully visible inside the well.
+    static func viewportHeight(rows: CGFloat) -> CGFloat {
+        canvasHeight(rows: rows) + editInset * 2
     }
 
     /// Turns a handle drag into a target rectangle in grid cells.
