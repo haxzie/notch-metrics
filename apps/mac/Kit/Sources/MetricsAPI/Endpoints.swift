@@ -194,6 +194,16 @@ public struct ConnectorCategoryGroup: Codable, Sendable, Identifiable, Hashable 
     public let id: String
     public let label: String
     public let connectors: [ConnectorEntry]
+
+    // A struct's memberwise initialiser is internal however public its
+    // properties are, so without this a caller outside this module can decode
+    // a group but not build one — which is what filtering a category down to
+    // the connectors worth showing amounts to.
+    public init(id: String, label: String, connectors: [ConnectorEntry]) {
+        self.id = id
+        self.label = label
+        self.connectors = connectors
+    }
 }
 
 public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {

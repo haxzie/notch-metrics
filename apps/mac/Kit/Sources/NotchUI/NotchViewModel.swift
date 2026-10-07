@@ -48,6 +48,14 @@ public final class NotchViewModel {
     public var onRefresh: @MainActor () -> Void = {}
     /// Opens the app on this widget's configuration.
     public var onConfigureWidget: @MainActor (NotchWidget) -> Void = { _ in }
+    /// Opens the gallery of widgets that can be added.
+    public var onAddWidget: @MainActor () -> Void = {}
+    /// A widget dragged out of the gallery and dropped on the grid.
+    ///
+    /// The payload is opaque here on purpose: turning "stripe/mrr" into a
+    /// `NotchWidget` needs the server's catalogue, which belongs to the app
+    /// target. NotchUI only knows where it landed.
+    public var onDropWidget: @MainActor (String, Int) -> Bool = { _, _ in false }
     public var onTogglePin: @MainActor () -> Void = {}
     public var onClose: @MainActor () -> Void = {}
 

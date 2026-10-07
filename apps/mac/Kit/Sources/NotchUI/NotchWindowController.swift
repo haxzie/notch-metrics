@@ -16,6 +16,8 @@ public final class NotchWindowController {
 
     public var onOpenSettings: () -> Void = {}
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
+    public var onAddWidget: () -> Void = {}
+    public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
     public var onRefresh: () -> Void = {}
 
     /// What the SwiftUI tree reads. Mutating this updates the notch in place;
@@ -143,6 +145,10 @@ public final class NotchWindowController {
         viewModel.onOpenSettings = { [weak self] in self?.onOpenSettings() }
         viewModel.onConfigureWidget = { [weak self] widget in
             self?.onConfigureWidget(widget)
+        }
+        viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
+        viewModel.onDropWidget = { [weak self] payload, index in
+            self?.onDropWidget(payload, index) ?? false
         }
         viewModel.onRefresh = { [weak self] in self?.onRefresh() }
         viewModel.onTogglePin = { [weak self] in self?.togglePin() }
@@ -306,6 +312,24 @@ public final class NotchWindowController {
     public func close() {
         view?.isPinned = false
         collapse(animated: true)
+    }
+
+    /// Holds the notch open and in edit mode while the gallery is up.
+    ///
+    /// A drag from another window takes the pointer nowhere near the notch,
+    /// so the exit watch would collapse the drop target the moment the drag
+    /// started. Pinning is the same mechanism edit mode already uses.
+    public func holdOpenForGallery(_ open: Bool) {
+        guard let view else { return }
+        if open {
+            expand()
+            view.isPinned = true
+            model.isEditing = true
+            hover?.cancelPendingCollapse()
+        } else {
+            view.isPinned = false
+            collapseIfUnpinned()
+        }
     }
 
     public func togglePin() {

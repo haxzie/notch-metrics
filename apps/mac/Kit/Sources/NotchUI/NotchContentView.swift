@@ -47,6 +47,7 @@ public struct NotchContentView: View {
     private var isPinned: Bool { view.isPinned }
     private var onOpenSettings: () -> Void { view.onOpenSettings }
     private var onConfigureWidget: (NotchWidget) -> Void { view.onConfigureWidget }
+    private var onAddWidget: () -> Void { view.onAddWidget }
     private var onRefresh: () -> Void { view.onRefresh }
     private var onTogglePin: () -> Void { view.onTogglePin }
     private var onClose: () -> Void { view.onClose }
@@ -126,7 +127,8 @@ public struct NotchContentView: View {
     private var content: some View {
         NotchWidgetCanvas(
             model: model, states: states, appOverrides: appOverrides,
-            onConfigureWidget: onConfigureWidget)
+            onConfigureWidget: onConfigureWidget,
+            onDropWidget: view.onDropWidget)
             // The well, not the tiles, is what has to clear the panel edge —
             // so the tiles are inset by the margin the well wants *plus* the
             // distance the well extends past them.
@@ -192,6 +194,14 @@ public struct NotchContentView: View {
                     .transition(.opacity)
             }
 
+            // Only in edit mode, beside Done. Adding a widget is a thing you
+            // do *while* arranging them, and a permanent button here would
+            // sit next to Close competing with the one control that is not
+            // destructive.
+            if model.isEditing {
+                addWidgetButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
             editButton
             headerButton("xmark", help: "Close", action: onClose)
         }
@@ -260,6 +270,26 @@ public struct NotchContentView: View {
         .foregroundStyle(model.isEditing ? Color.white : NotchTheme.secondaryText)
         .help(model.isEditing ? "Finish editing" : "Rearrange and resize widgets")
         .animation(.easeOut(duration: 0.14), value: model.isEditing)
+    }
+
+    /// Opens the gallery. Labelled, like Done, because the two read as a pair.
+    private var addWidgetButton: some View {
+        Button(action: onAddWidget) {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text("Add Widget")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.1)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(NotchTheme.secondaryText)
+        .help("Browse widgets and drag one in")
     }
 
     /// Fetch every tile again, now.
@@ -433,6 +463,9 @@ public struct NotchWidgetCanvas: View {
     public let appOverrides: [String: MetricApp]
     /// Opens the app on a widget's configuration.
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
+    /// A payload dropped from the gallery, with the reading-order index it
+    /// landed on. Returns false when it did not produce a widget.
+    public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -451,6 +484,8 @@ public struct NotchWidgetCanvas: View {
     /// other half of the jitter.
     @State private var lastCell: GridCell?
     @State private var selectedID: String?
+    /// True while a gallery drag is over the grid.
+    @State private var isDropTargeted = false
     @State private var hoveredID: String?
     /// Where the pointer was when the span last changed, for hysteresis.
     @State private var resizeAnchorCell: CGPoint?
@@ -459,12 +494,14 @@ public struct NotchWidgetCanvas: View {
         model: NotchLayoutModel,
         states: [String: TileState],
         appOverrides: [String: MetricApp] = [:],
-        onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in }
+        onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
+        onDropWidget: @escaping (String, Int) -> Bool = { _, _ in false }
     ) {
         self.model = model
         self.states = states
         self.appOverrides = appOverrides
         self.onConfigureWidget = onConfigureWidget
+        self.onDropWidget = onDropWidget
     }
 
     public var body: some View {
@@ -627,6 +664,32 @@ public struct NotchWidgetCanvas: View {
             // tile and the band only ever appeared above the first row.
             .padding(Self.editInset)
             .background { if model.isEditing { well } }
+            // Dropping is how a widget gets in from the gallery. The index is
+            // computed from the same `grid` the tiles are drawn with, so a
+            // widget lands where the pointer let go rather than on the end.
+            .dropDestination(for: String.self) { payloads, location in
+                guard let payload = payloads.first else { return false }
+                let inGrid = CGPoint(
+                    x: location.x - Self.editInset, y: location.y - Self.editInset)
+                let cell = grid.gridPoint(at: inGrid)
+                let index = GridPacker.index(
+                    at: cell, in: model.displayed, excluding: "")
+                return onDropWidget(payload, index)
+            } isTargeted: { targeted in
+                // Edit mode for the duration: the well is the only thing on
+                // screen that says "this is a grid and it takes tiles", and a
+                // drop onto a plain row of numbers looks like nothing.
+                if targeted { model.isEditing = true }
+                isDropTargeted = targeted
+            }
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(NotchTheme.editHighlight, lineWidth: 2)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.12), value: isDropTargeted)
             }
             // A tile being dragged must not also scroll the view under it —
             // the drag's own vertical movement would be read as a scroll and

@@ -495,7 +495,7 @@ private struct WidgetBuilderView: View {
 /// The same button in both tabs: somebody who gets as far as picking a widget
 /// and finds nothing to point it at should not have to go and find the Apps
 /// pane.
-private struct ConnectButton: View {
+struct ConnectButton: View {
     let app: ConnectorEntry
     @Bindable var model: WidgetCatalogueModel
     var onConnected: ((String) -> Void)?
@@ -567,6 +567,10 @@ final class WidgetCatalogueModel {
     }
 
     private(set) var state: State = .loading
+    /// Kept grouped as well as flat: the gallery's sidebar lists connectors
+    /// under the server's own category labels, and flattening them here would
+    /// mean inventing those labels again on the other side.
+    private(set) var categoryGroups: [ConnectorCategoryGroup] = []
 
     private var apps: [ConnectorEntry] {
         if case .loaded(let apps) = state { return apps }
@@ -584,8 +588,14 @@ final class WidgetCatalogueModel {
             let catalogue = try await env.api.catalogue()
             // Only apps that actually offer a widget. A row you can open to
             // find an empty grid is a dead end.
-            state = .loaded(
-                catalogue.categories.flatMap(\.connectors).filter { !$0.metrics.isEmpty })
+            let groups = catalogue.categories.compactMap { group -> ConnectorCategoryGroup? in
+                let connectors = group.connectors.filter { !$0.metrics.isEmpty }
+                guard !connectors.isEmpty else { return nil }
+                return ConnectorCategoryGroup(
+                    id: group.id, label: group.label, connectors: connectors)
+            }
+            categoryGroups = groups
+            state = .loaded(groups.flatMap(\.connectors))
         } catch {
             state = .failed("Could not load the app catalogue.")
         }

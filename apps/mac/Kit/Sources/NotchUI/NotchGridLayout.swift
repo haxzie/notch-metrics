@@ -274,6 +274,26 @@ public final class NotchLayoutModel {
         persist(layout)
     }
 
+    /// Moves a widget to a position in reading order.
+    ///
+    /// The grid is a flow, so "put it here" is an index rather than a cell —
+    /// the same thing a tile drag commits.
+    public func move(_ id: String, toIndex index: Int) {
+        layout = GridPacker.move(id, toIndex: index, in: layout)
+        persist(layout)
+    }
+
+    /// Replaces a widget that is already on the grid.
+    ///
+    /// Reflowed, because a size change has to make room the same way a handle
+    /// drag does — and the configurator can change the size.
+    public func update(_ widget: NotchWidget) {
+        guard let index = layout.widgets.firstIndex(where: { $0.id == widget.id }) else { return }
+        layout.widgets[index] = widget
+        layout = GridPacker.reflow(layout)
+        persist(layout)
+    }
+
     public func remove(_ id: String) {
         layout.widgets.removeAll { $0.id == id }
         // Reflowed, so removing a tile closes the hole it leaves rather than

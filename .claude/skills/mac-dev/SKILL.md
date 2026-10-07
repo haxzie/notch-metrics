@@ -57,6 +57,7 @@ The notch is awkward to inspect because it hides when the pointer leaves it.
 | `NOTCH_DEBUG_EXPAND=1` | Open and **pin** the notch at launch.                    |
 | `NOTCH_DEBUG_EDIT=1`   | Start in edit mode — dotted grid, resize handles.        |
 | `NOTCH_DEBUG_DEMO=1`   | Plausible numbers instead of "Sign in". For screenshots. |
+| `NOTCH_DEBUG_GALLERY=1`| Open the Add Widgets gallery at launch.                  |
 | `NOTCH_SUPPORT_DIR=…`  | Point Application Support somewhere disposable.          |
 | `NOTCH_RUNNER_PATH=…`  | Use a locally built custom-metric runner.                |
 

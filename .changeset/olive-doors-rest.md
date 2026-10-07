@@ -8,12 +8,21 @@ close button, and on a notched display it begins immediately after the
 camera housing — so the two controls reached for most often sat furthest
 from the pointer.
 
-Give the edit-mode well its own margin from the panel edges, and stop the
-header being squeezed. The panel sized the header band 10pt shorter than
-the band draws itself and counted none of the content's padding, so the
-VStack was over-committed and SwiftUI reclaimed the difference from the
-header's top padding — the controls slid up against the top edge. Both
-numbers now come from one expression.
+Fix the edit-mode well, which was framed larger than the grid and offset
+outwards. Inside a ScrollView that overflows the viewport, so its left and
+right bands were clipped and the dots stopped dead at the outermost tile
+whatever the inset was set to. It is now the background of a padded grid,
+and the padding is the gutter — so the gap around a tile matches the gap
+between two of them.
 
-Use the shapes mark for Widgets everywhere it appears: the notch's edit
-button and the settings sidebar.
+Stop the header being squeezed: the panel sized the header band 10pt
+shorter than the band draws itself and counted none of the content's
+padding, so SwiftUI reclaimed the difference from the header's top padding.
+
+Add a widget gallery. "Add Widget" sits beside Done in edit mode and opens
+a translucent window listing every widget each connector offers, grouped
+the way the server groups them. A widget is dragged from there onto the
+notch, lands where the pointer let go, and opens a configuration window for
+its account, size, number format, chart and range.
+
+Use the shapes mark for Widgets everywhere it appears.

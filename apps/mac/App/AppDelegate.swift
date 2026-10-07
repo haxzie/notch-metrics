@@ -8,6 +8,11 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let env = AppEnvironment()
     private var statusItem: NSStatusItem?
+    private lazy var gallery = WidgetGalleryWindowController(env: env)
+    private lazy var configurator = WidgetConfiguratorWindowController(env: env)
+    /// The catalogue, kept warm so a drop can turn "stripe/mrr" into a widget
+    /// without waiting on a round trip at the moment the pointer lets go.
+    private let dropCatalogue = WidgetCatalogueModel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Accessory, not regular: no Dock icon, no app menu. It flips to
@@ -17,9 +22,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         env.notch.onOpenSettings = { [weak self] in self?.openSettings() }
         // Lands on Widgets rather than on the exact widget: the builder makes
         // new widgets and there is no screen yet for editing one that exists.
-        env.notch.onConfigureWidget = { [weak self] _ in
-            self?.env.settingsPane = .widgets
-            self?.openSettings()
+        // Configures the widget itself now, rather than landing on the pane
+        // that builds new ones.
+        env.notch.onConfigureWidget = { [weak self] widget in
+            self?.configurator.show(widgetId: widget.id)
+        }
+
+        env.notch.onAddWidget = { [weak self] in
+            guard let self else { return }
+            self.gallery.show()
+            Task { await self.dropCatalogue.load(env: self.env) }
+        }
+
+        env.notch.onDropWidget = { [weak self] payload, index in
+            self?.addDroppedWidget(payload, at: index) ?? false
         }
 
         env.notch.onRefresh = { [weak self] in
@@ -31,6 +47,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installMainMenu()
         updateStatusItem()
+
+        // The gallery is otherwise only reachable by hovering the notch,
+        // entering edit mode and clicking — none of which a screenshot or a
+        // first look at the layout can do.
+        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_GALLERY"] == "1" {
+            gallery.show()
+            Task { await dropCatalogue.load(env: env) }
+        }
+    }
+
+    /// Turns a dragged payload into a widget on the grid.
+    ///
+    /// Returns false when the catalogue has not loaded or does not know the
+    /// metric, so the drop animates back to the gallery rather than silently
+    /// doing nothing.
+    private func addDroppedWidget(_ payload: String, at index: Int) -> Bool {
+        guard let parsed = GalleryPayload.decode(payload),
+              let entry = dropCatalogue.entry(parsed.connector),
+              let metric = entry.metrics.first(where: { $0.id == parsed.metric })
+        else { return false }
+
+        var widget = NotchWidget(
+            id: "w_\(UUID().uuidString.prefix(8))",
+            kind: .providerMetric,
+            appId: entry.id,
+            // Whatever is already connected, so a drop lands on real numbers
+            // when there is only one account — which is the common case.
+            integrationId: entry.connections.first?.id,
+            metric: metric.id,
+            title: metric.shortLabel,
+            size: .wide,
+            granularity: metric.granularities.first ?? .day,
+            range: .month,
+            chart: metric.supportsSeries ? .sparkline : .none,
+            format: WidgetFormat(compact: true))
+
+        guard env.layoutModel.add(widget) else { return false }
+        // Dropped *here*, not appended: `add` puts it on the end, and the
+        // pointer was somewhere specific.
+        env.layoutModel.move(widget.id, toIndex: index)
+        widget = env.layoutModel.layout.widgets.first { $0.id == widget.id } ?? widget
+
+        Task { await env.refresh() }
+        // Straight into configuration: a widget with no account renders as
+        // "Pick a connection", and dropping one only to be shown a broken
+        // tile is a worse first run than one more window.
+        configurator.show(widgetId: widget.id)
+        return true
     }
 
     /// Closing the settings window must not quit an app whose whole point is
