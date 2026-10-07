@@ -127,11 +127,17 @@ public struct NotchContentView: View {
         NotchWidgetCanvas(
             model: model, states: states, appOverrides: appOverrides,
             onConfigureWidget: onConfigureWidget)
-            .padding(.horizontal, 16)
+            // Wider than the backdrop's inset, so the well has room to sit
+            // between the tiles and the panel edge instead of being squeezed
+            // flush against one or the other.
+            .padding(.horizontal, 20)
             // Clear of the header, with room for the edit backdrop's own
             // inset on top of it — that is what this has to cover, not just
             // the grid.
             .padding(.top, NotchWidgetCanvas.editInset + 6)
+            // The well extends below the last row too, and the grabber sits
+            // directly under it. Without this the dots ran behind the handle.
+            .padding(.bottom, NotchWidgetCanvas.editInset)
             // A tile drag or resize holds the notch open for the same reason
             // the handle does. Edit mode pins already, but a drag begun by
             // long-press turns edit mode on *without* pinning, and that one
@@ -144,17 +150,28 @@ public struct NotchContentView: View {
             }
     }
 
-    /// Brand on the left, controls on the right, the camera housing between.
+    /// Brand and the everyday controls on the left, edit and close on the
+    /// right, the camera housing between.
     ///
     /// The header is exactly as tall as the physical notch and the middle of
     /// it is deliberately empty — that span is occupied by hardware, and
     /// anything placed there is invisible.
+    ///
+    /// Refresh and settings sit beside the name rather than on the right.
+    /// The right half is the crowded one — it carries the edit pill, the
+    /// below-fold count and the close button — and on a notched display it
+    /// starts immediately after the housing, so the two controls reached for
+    /// most often were the ones furthest from the pointer and nearest the
+    /// hardware. The left half is otherwise only a logo and a label.
     private var header: some View {
         HStack(spacing: 7) {
             NotchLogo(size: 17)
             Text("Notch Metrics")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NotchTheme.secondaryText)
+
+            refreshButton
+            headerButton("gearshape", help: "Settings", action: onOpenSettings)
 
             Spacer(minLength: 0)
             // The width of the camera housing, kept clear.
@@ -179,8 +196,6 @@ public struct NotchContentView: View {
             }
 
             editButton
-            refreshButton
-            headerButton("gearshape", help: "Settings", action: onOpenSettings)
             headerButton("xmark", help: "Close", action: onClose)
         }
         // Filling the band before it is given a height, so the row's contents
@@ -638,7 +653,13 @@ public struct NotchWidgetCanvas: View {
     }
 
     /// How far the edit backdrop extends past the grid, on every side.
-    static let editInset: CGFloat = 8
+    ///
+    /// At 8 the well was the same distance from the tiles as the tiles were
+    /// from the panel, so the two gaps read as one and the dots looked like
+    /// they were touching the outermost tile. The content's own horizontal
+    /// padding grew with it, which keeps the well the same distance from the
+    /// panel edge rather than pushing it out against the glass.
+    static let editInset: CGFloat = 12
 
     /// One row is tall enough for a label over a headline figure; each extra
     /// row adds the same again plus the gap between them.
