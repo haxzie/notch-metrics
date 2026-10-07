@@ -670,15 +670,18 @@ public struct NotchWidgetCanvas: View {
     }
 
     /// How far the edit backdrop extends past the grid, on every side.
-    static let editInset: CGFloat = 10
+    ///
+    /// This is the dotted band *around* the tiles, and it is the one that
+    /// wants to be generous: it is what makes the well read as a surface the
+    /// tiles sit on rather than a box drawn tight around them.
+    static let editInset: CGFloat = 14
 
     /// How far the edit well itself sits from the panel's edges.
     ///
-    /// The well is the thing with a visible boundary, so this is the gap the
-    /// eye actually reads as the window's padding. At 8 it was close enough
-    /// to the glass that the dots looked like they were bleeding off the
-    /// panel rather than sitting inside it.
-    static let wellMargin: CGFloat = 16
+    /// Small, because the two gaps add up. Spending the budget out here
+    /// rather than inside pushed the tiles a long way off the glass and left
+    /// the dotted band looking like a hairline.
+    static let wellMargin: CGFloat = 8
 
     /// The tiles are inset far enough that the well lands on `wellMargin`.
     static var contentHorizontal: CGFloat { wellMargin + editInset }
