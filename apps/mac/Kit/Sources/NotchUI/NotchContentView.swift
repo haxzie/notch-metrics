@@ -31,6 +31,8 @@ public struct NotchContentView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isResizing = false
+    /// Whole turns of the refresh glyph, one per press.
+    @State private var turns = 0.0
     @State private var rowsAtDragStart = NotchLayout.defaultRows
 
     public init(model: NotchLayoutModel, view: NotchViewModel) {
@@ -44,6 +46,8 @@ public struct NotchContentView: View {
     private var appOverrides: [String: MetricApp] { view.appOverrides }
     private var isPinned: Bool { view.isPinned }
     private var onOpenSettings: () -> Void { view.onOpenSettings }
+    private var onConfigureWidget: (NotchWidget) -> Void { view.onConfigureWidget }
+    private var onRefresh: () -> Void { view.onRefresh }
     private var onTogglePin: () -> Void { view.onTogglePin }
     private var onClose: () -> Void { view.onClose }
 
@@ -65,9 +69,12 @@ public struct NotchContentView: View {
 
     private var panel: some View {
         let shape = NotchShape(
-            topCornerRadius: presentation == .expanded ? 12 : 0,
+            topCornerRadius: presentation == .expanded ? 28 : 0,
             bottomCornerRadius: presentation == .expanded ? 26 : notchBottomRadius
         )
+
+        let width = presentation == .expanded ? expandedSize.width : collapsedSize.width
+        let height = presentation == .expanded ? expandedSize.height : collapsedSize.height
 
         return ZStack(alignment: .top) {
             // Frosted glass, then a dark tint over it. The material alone goes
@@ -85,13 +92,17 @@ public struct NotchContentView: View {
 
             if presentation == .expanded {
                 expandedContent
+                    // Inside the ears, so the content keeps the body's width
+                    // and its padding is unchanged by them.
+                    .padding(.horizontal, shape.horizontalOverhang / 2)
                     .transition(NotchMotion.content(reduceMotion: reduceMotion))
             }
         }
-        .frame(
-            width: presentation == .expanded ? expandedSize.width : collapsedSize.width,
-            height: presentation == .expanded ? expandedSize.height : collapsedSize.height
-        )
+        // The ears are drawn inside the shape's rect, so the frame carries
+        // them: a path that overflowed its own bounds was silently clipped,
+        // which is why the top corners had gone square. `width` is still the
+        // body, and the content is inset back onto it above.
+        .frame(width: width + shape.horizontalOverhang, height: height)
         .background(
             GeometryReader { proxy in
                 Color.clear.preference(key: PanelSizeKey.self, value: proxy.size)
@@ -113,12 +124,24 @@ public struct NotchContentView: View {
     }
 
     private var content: some View {
-        NotchWidgetCanvas(model: model, states: states, appOverrides: appOverrides)
+        NotchWidgetCanvas(
+            model: model, states: states, appOverrides: appOverrides,
+            onConfigureWidget: onConfigureWidget)
             .padding(.horizontal, 16)
             // Clear of the header, with room for the edit backdrop's own
             // inset on top of it — that is what this has to cover, not just
             // the grid.
             .padding(.top, NotchWidgetCanvas.editInset + 6)
+            // A tile drag or resize holds the notch open for the same reason
+            // the handle does. Edit mode pins already, but a drag begun by
+            // long-press turns edit mode on *without* pinning, and that one
+            // collapses mid-gesture.
+            .onChange(of: model.draggingID) { _, id in
+                view.isInteracting = id != nil || model.resizingID != nil
+            }
+            .onChange(of: model.resizingID) { _, id in
+                view.isInteracting = id != nil || model.draggingID != nil
+            }
     }
 
     /// Brand on the left, controls on the right, the camera housing between.
@@ -142,21 +165,21 @@ public struct NotchContentView: View {
             // camera housing on a notched display, so the text was half
             // hidden on exactly the machines this app is for — and the
             // selection outline and handles say what to do without words.
-            if hiddenCount > 0 {
-                // The grid ran out of room. Saying so beats silently showing
-                // fewer numbers than the user added; no longer a button,
-                // because the view it used to offer is gone.
-                Text("+\(hiddenCount) hidden")
+            if belowFoldCount > 0 {
+                // Below the fold, not lost. Saying so beats silently showing
+                // fewer numbers than the user added.
+                Text("+\(belowFoldCount) below")
                     .font(.system(size: 10, weight: .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(Color.white.opacity(0.1)))
                     .foregroundStyle(NotchTheme.secondaryText)
-                    .help("Drag the handle at the bottom to make the notch taller.")
+                    .help("Scroll the grid, or drag the handle at the bottom to make the notch taller.")
                     .transition(.opacity)
             }
 
             editButton
+            refreshButton
             headerButton("gearshape", help: "Settings", action: onOpenSettings)
             headerButton("xmark", help: "Close", action: onClose)
         }
@@ -210,6 +233,29 @@ public struct NotchContentView: View {
         .animation(.easeOut(duration: 0.14), value: model.isEditing)
     }
 
+    /// Fetch every tile again, now.
+    ///
+    /// The poll is five minutes and the server caches a daily figure for
+    /// fifteen, so a number that has just moved is otherwise invisible for a
+    /// while. The glyph turns once per press — a button that does its work
+    /// silently reads as a button that did nothing.
+    private var refreshButton: some View {
+        headerButton(
+            "arrow.clockwise",
+            help: view.isRefreshing ? "Refreshing…" : "Refresh now",
+            action: {
+                // A counter rather than a bool. Toggling 0↔360 unwinds on the
+                // way back, so the glyph spun forwards and then visibly
+                // backwards; this only ever increases.
+                turns += 1
+                onRefresh()
+            }
+        )
+        .rotationEffect(.degrees(turns * 360))
+        .animation(.easeInOut(duration: 0.7), value: turns)
+        .disabled(view.isRefreshing)
+    }
+
     private func headerButton(
         _ symbol: String, help: String, active: Bool = false, action: @escaping () -> Void
     ) -> some View {
@@ -226,10 +272,14 @@ public struct NotchContentView: View {
         .help(help)
     }
 
-    /// Widgets the grid could not find room for. Always zero in list view,
-    /// which has no fixed capacity.
-    private var hiddenCount: Int {
-        return model.displayed.widgets.count { !$0.visible }
+    /// Widgets that start below the visible rows.
+    ///
+    /// Not "hidden" any more — the area scrolls, so they are reachable. The
+    /// count is still worth showing, because a notch two rows tall gives no
+    /// other hint that there is a third row under it.
+    private var belowFoldCount: Int {
+        let visible = Int(model.visibleRows.rounded())
+        return model.displayed.widgets.count { $0.visible && $0.row >= visible }
     }
 
     /// Entering edit mode pins the notch open.
@@ -280,16 +330,22 @@ public struct NotchContentView: View {
                 if !isResizing {
                     isResizing = true
                     rowsAtDragStart = model.layout.rows
+                    // The pointer is about to travel towards the edge of the
+                    // panel, and an exit mid-drag would collapse the notch
+                    // out from under the gesture.
+                    view.isInteracting = true
                 }
-                // Half a row of travel flips to the next detent, so the handle
-                // tracks the pointer rather than lagging a full row behind it.
+                // Fractional, and followed exactly. Rounding to a whole row
+                // on every frame meant the panel jumped a row at a time
+                // under a pointer that was moving smoothly; the detent
+                // belongs at the end of the gesture.
                 let stride = NotchWidgetCanvas.rowHeight + NotchWidgetCanvas.rowSpacing
-                let delta = Int((value.translation.height / stride).rounded())
-                model.setRows(rowsAtDragStart + delta, commit: false)
+                model.dragRows(to: CGFloat(rowsAtDragStart) + value.translation.height / stride)
             }
             .onEnded { _ in
                 isResizing = false
-                model.commitRows()
+                view.isInteracting = false
+                model.endRowDrag()
             }
     }
 
@@ -310,15 +366,23 @@ public struct NotchContentView: View {
     /// screen below the last row of tiles.
     private var expandedSize: CGSize {
         let header = max(34, geometry.hasNotch ? geometry.notchRect.height + 6 : 34)
-        let content = NotchWidgetCanvas.canvasHeight(rows: model.displayed.rows)
+        let content = NotchWidgetCanvas.canvasHeight(rows: model.visibleRows)
             + Self.grabberHeight
         return CGSize(
-            width: min(NotchPanel.maxSize.width, max(560, geometry.notchRect.width + 480)),
+            // Less the ears, which the panel frame adds back — the window is
+            // a fixed 900 and a body at the cap would push them outside it,
+            // where they are clipped away again.
+            width: min(
+                NotchPanel.maxSize.width - Self.earOverhang,
+                max(560, geometry.notchRect.width + 480)),
             height: min(NotchPanel.maxSize.height, header + content)
         )
     }
 
     static let grabberHeight: CGFloat = 19
+
+    /// Both ears together, at the expanded top corner radius.
+    static let earOverhang: CGFloat = 56
 
     private var notchBottomRadius: CGFloat { geometry.hasNotch ? 8 : 3 }
 }
@@ -335,6 +399,8 @@ public struct NotchWidgetCanvas: View {
     @Bindable public var model: NotchLayoutModel
     public let states: [String: TileState]
     public let appOverrides: [String: MetricApp]
+    /// Opens the app on a widget's configuration.
+    public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -353,39 +419,57 @@ public struct NotchWidgetCanvas: View {
     /// other half of the jitter.
     @State private var lastCell: GridCell?
     @State private var selectedID: String?
+    @State private var hoveredID: String?
     /// Where the pointer was when the span last changed, for hysteresis.
     @State private var resizeAnchorCell: CGPoint?
 
     public init(
         model: NotchLayoutModel,
         states: [String: TileState],
-        appOverrides: [String: MetricApp] = [:]
+        appOverrides: [String: MetricApp] = [:],
+        onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in }
     ) {
         self.model = model
         self.states = states
         self.appOverrides = appOverrides
+        self.onConfigureWidget = onConfigureWidget
     }
 
     public var body: some View {
         GeometryReader { proxy in
-            let grid = GridGeometry(available: proxy.size, rows: model.displayed.rows)
+            // Laid out over the content, not the viewport: the rows that do
+            // not fit are below the fold and scrolled to, which is what makes
+            // adding a widget to a full grid work at all.
+            let rows = max(Int(model.visibleRows.rounded(.up)), layoutRows)
+            let grid = GridGeometry(
+                available: proxy.size, rows: rows,
+                origin: .zero, rowHeight: Self.rowHeight)
             let layout = model.displayedWithResize
 
+            // The viewport scrolls over the flow. Before this, a grid that
+            // was full simply refused the next widget.
+            ScrollView(.vertical, showsIndicators: false) {
             ZStack(alignment: .topLeading) {
                 if model.isEditing {
-                    // A darker surface behind the tiles, so edit mode reads as
-                    // a different place rather than the same panel with specks
-                    // on it. Inset outwards so the dots run past the tiles
-                    // rather than stopping flush against the outermost one.
+                    // A recessed surface behind the tiles, so edit mode reads
+                    // as a different place rather than the same panel with
+                    // specks on it. Inset outwards so the dots run past the
+                    // tiles rather than stopping flush against the outermost
+                    // one.
+                    //
+                    // The shade only has to separate the well from the panel;
+                    // at 0.28 it went to near-black and the tiles read as
+                    // floating over a hole. The dots mark the grid, they do
+                    // not have to be legible one by one.
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.black.opacity(0.28))
+                        .fill(Color.black.opacity(0.12))
                         .overlay(
-                            DottedGrid(pitch: 11, opacity: 0.1)
+                            DottedGrid(pitch: 11, opacity: 0.07)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                         )
                         // The same inset on all four sides. Trimming the top
                         // to keep it clear of the header made the gap above
@@ -432,7 +516,8 @@ public struct NotchWidgetCanvas: View {
                         widget: widget,
                         app: widget.app(overrides: appOverrides),
                         state: states[widget.id] ?? .loading,
-                        isEditing: model.isEditing
+                        isEditing: model.isEditing,
+                        isHovered: hoveredID == widget.id
                     )
                     .frame(width: frame.width, height: frame.height)
                     // Inside the animation below, deliberately. Applied after
@@ -440,6 +525,25 @@ public struct NotchWidgetCanvas: View {
                     // jumps to the destination frame while the tile is still
                     // gliding there — selection and tile visibly out of step
                     // for the length of every move.
+                    // Inset from the corner rather than centred on it, so the
+                    // badges do not sit under the top-trailing resize handle
+                    // when a widget is both hovered and selected.
+                    .overlay(alignment: .topTrailing) {
+                        if model.isEditing, hoveredID == widget.id {
+                            HStack(spacing: 4) {
+                                TileBadge(symbol: "slider.horizontal.3", help: "Configure") {
+                                    onConfigureWidget(widget)
+                                }
+                                TileBadge(symbol: "xmark", help: "Remove this widget") {
+                                    if selectedID == widget.id { selectedID = nil }
+                                    hoveredID = nil
+                                    model.remove(widget.id)
+                                }
+                            }
+                            .padding(6)
+                            .transition(.scale(scale: 0.7).combined(with: .opacity))
+                        }
+                    }
                     .overlay {
                         if model.isEditing, selectedID == widget.id {
                             ZStack {
@@ -465,6 +569,7 @@ public struct NotchWidgetCanvas: View {
                     // layout animation, or it lags behind the cursor by the
                     // spring's duration.
                     .animation(isDragging ? nil : .snappy(duration: 0.2), value: frame)
+                    .animation(.easeOut(duration: 0.12), value: hoveredID)
                     .onTapGesture {
                         guard model.isEditing else { return }
                         // Exactly one selection at a time: tapping a
@@ -487,9 +592,49 @@ public struct NotchWidgetCanvas: View {
             .onChange(of: model.isEditing) { _, editing in
                 if !editing { selectedID = nil }
             }
+            .frame(
+                width: grid.contentSize.width, height: grid.contentSize.height,
+                alignment: .topLeading)
             .coordinateSpace(name: "notch-grid")
+            // Hover is resolved from the pointer against the same rects the
+            // tiles are drawn at, not by a per-tile `.onHover`.
+            //
+            // Per-tile hover asked each tile's *presentation* layer, which is
+            // mid-flight during every reflow and sits under a `.scaleEffect`
+            // and an animated `.offset`. The result was badges appearing on a
+            // neighbour of the tile the pointer was actually over, and exits
+            // that never arrived. One point tested against `grid.rect` cannot
+            // disagree with itself.
+            .onContinuousHover(coordinateSpace: .named("notch-grid")) { phase in
+                guard model.isEditing, model.draggingID == nil else {
+                    hoveredID = nil
+                    return
+                }
+                switch phase {
+                case .active(let point):
+                    hoveredID =
+                        layout.widgets
+                        .first { $0.visible && grid.rect(for: $0).contains(point) }?.id
+                case .ended:
+                    hoveredID = nil
+                }
+            }
+            }
+            // A tile being dragged must not also scroll the view under it —
+            // the drag's own vertical movement would be read as a scroll and
+            // the tile would chase a grid that is sliding away from it.
+            .scrollDisabled(model.draggingID != nil || model.resizingID != nil)
+            // No rubber-banding when everything already fits. A two-row grid
+            // that bounces reads as broken rather than as scrollable.
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .frame(height: Self.canvasHeight(rows: model.displayed.rows))
+        // The viewport. The content inside is as tall as the flow needs.
+        .frame(height: Self.canvasHeight(rows: model.visibleRows))
+    }
+
+    /// How many rows of content there are, never fewer than the viewport.
+    private var layoutRows: Int {
+        max(model.displayedWithResize.contentRows, model.displayed.rows)
     }
 
     /// How far the edit backdrop extends past the grid, on every side.
@@ -500,8 +645,10 @@ public struct NotchWidgetCanvas: View {
     static let rowHeight: CGFloat = 84
     static let rowSpacing: CGFloat = 10
 
-    static func canvasHeight(rows: Int) -> CGFloat {
-        CGFloat(rows) * rowHeight + CGFloat(max(0, rows - 1)) * rowSpacing
+    /// Fractional, because the handle drag follows the pointer between
+    /// detents rather than snapping to a row on every frame.
+    static func canvasHeight(rows: CGFloat) -> CGFloat {
+        rows * rowHeight + max(0, rows - 1) * rowSpacing
     }
 
     /// Turns a handle drag into a target rectangle in grid cells.
@@ -756,5 +903,39 @@ enum ResizeGate {
         case (false, true): return dy >= threshold
         default: return dx >= threshold || dy >= threshold
         }
+    }
+}
+
+/// A small round control on a hovered tile while editing.
+///
+/// Only on hover: always-visible would put a pair of buttons on every widget
+/// the moment edit mode opens, and the grid is small enough that they would
+/// be most of what is on screen.
+private struct TileBadge: View {
+    let symbol: String
+    let help: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.black.opacity(0.78))
+                .frame(width: 17, height: 17)
+                .background(Circle().fill(isHovered ? Color.white : Color.white.opacity(0.88)))
+                .overlay(Circle().strokeBorder(.black.opacity(0.18), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                .scaleEffect(isHovered ? 1.12 : 1)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .animation(.easeOut(duration: 0.1), value: isHovered)
+        .help(help)
     }
 }

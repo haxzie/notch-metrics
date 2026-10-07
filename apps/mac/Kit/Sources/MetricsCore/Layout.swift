@@ -200,6 +200,15 @@ public struct NotchLayout: Codable, Sendable, Hashable {
     public static let minRows = 1
     public static let maxRows = 4
 
+    /// How far the flow may run, independent of how much of it is on screen.
+    ///
+    /// `rows` is the *viewport* — how tall the notch opens. The widgets
+    /// themselves lay out into this much taller space and the viewport
+    /// scrolls over it. Conflating the two is what made adding a widget to a
+    /// full grid fail: there was nowhere to put it, so it was marked hidden
+    /// and silently vanished instead of pushing the content down.
+    public static let maxContentRows = 24
+
     /// Bumped whenever the on-disk shape changes, read by `migrate(_:)`.
     public var schemaVersion: Int
     /// The server's copy of this layout. The Mac is authoritative; this is the
@@ -217,6 +226,13 @@ public struct NotchLayout: Codable, Sendable, Hashable {
         self.revision = revision
         self.rows = rows.clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
         self.widgets = widgets
+    }
+
+    /// How many rows the widgets actually occupy, which may exceed `rows`.
+    ///
+    /// Drives the scrollable height; `rows` drives the window.
+    public var contentRows: Int {
+        widgets.filter(\.visible).map { $0.row + $0.size.rows }.max() ?? 0
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -270,13 +286,16 @@ public enum GridPacker {
     public static func occupied(_ layout: NotchLayout, excluding id: String? = nil) -> Set<GridCell> {
         var taken: Set<GridCell> = []
         for widget in layout.widgets where widget.visible && widget.id != id {
-            taken.formUnion(cells(for: widget, at: (widget.col, widget.row), rows: layout.rows) ?? [])
+            taken.formUnion(
+                cells(for: widget, at: (widget.col, widget.row), rows: NotchLayout.maxContentRows)
+                    ?? [])
         }
         return taken
     }
 
     public static func fits(_ widget: NotchWidget, at origin: (col: Int, row: Int), in layout: NotchLayout) -> Bool {
-        guard let wanted = cells(for: widget, at: origin, rows: layout.rows) else { return false }
+        guard let wanted = cells(for: widget, at: origin, rows: NotchLayout.maxContentRows)
+        else { return false }
         return occupied(layout, excluding: widget.id).isDisjoint(with: Set(wanted))
     }
 
@@ -408,7 +427,10 @@ public enum GridPacker {
         // Scanned row-major so a displaced widget slides along the row it was
         // already in before dropping to the next one, which is what the eye
         // expects when something is pushed aside.
-        for row in 0..<layout.rows {
+        // Scanned over the flow space rather than the visible rows: a widget
+        // that does not fit on screen belongs below the fold, not in the
+        // hidden pile.
+        for row in 0..<NotchLayout.maxContentRows {
             for col in 0..<NotchLayout.columns where fits(widget, at: (col, row), in: scratch) {
                 return (col, row)
             }

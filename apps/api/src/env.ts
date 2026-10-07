@@ -39,6 +39,19 @@ export interface Env {
   BETTER_AUTH_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** Sign-in. Distinct from the connector's client below, on purpose. */
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  /**
+   * The GitHub *connector's* OAuth client, named by `oauthSecretNames`.
+   *
+   * A separate app from sign-in: the two have different callback URLs, ask
+   * for different scopes, and one is revoked without the other. Sharing a
+   * client would mean signing in to Notch Metrics silently granted it
+   * repository access.
+   */
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
   INTEGRATION_KEK_V1?: string;
   INTEGRATION_KEK_V2?: string;
   DODOPAYMENT_API_KEY?: string;

@@ -149,6 +149,29 @@ final class AppEnvironment {
         refreshTask = nil
     }
 
+    /// The refresh button in the notch.
+    ///
+    /// Guarded, and it holds the button for one full turn of the glyph: a
+    /// batch that answers from cache in 40ms otherwise cuts the rotation
+    /// short and the press looks like it missed. Note this does not bypass the *server's*
+    /// cache — a daily figure is held for fifteen minutes there, so pressing
+    /// this twice in a minute returns the same number by design.
+    func refreshNow() async {
+        guard !notch.isRefreshing else { return }
+        notch.isRefreshing = true
+        defer { notch.isRefreshing = false }
+
+        async let fetch: Void = refresh()
+        async let floor: Void = Self.spinFloor()
+        _ = await (fetch, floor)
+    }
+
+    /// Long enough for the glyph's one turn to finish before the button
+    /// comes back, so a 40ms cached reply does not cut the rotation short.
+    private static func spinFloor() async {
+        try? await Task.sleep(for: .milliseconds(700))
+    }
+
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
     /// added so a new tile fills in rather than sitting on "Loading".
     func refresh() async {

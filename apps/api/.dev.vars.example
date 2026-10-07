@@ -26,6 +26,38 @@ BETTER_AUTH_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# GitHub sign-in. An **OAuth App** (Settings → Developer settings → OAuth
+# Apps), not a GitHub App: a GitHub App's user token is scoped to its
+# installations and brings an installation flow with it, which buys nothing
+# when all we want is an identity.
+#
+# Authorization callback URL — one per app, so this is two apps:
+#
+#   http://localhost:8787/api/auth/callback/github
+#   https://api.notchmetrics.com/api/auth/callback/github
+#
+# The API's origin, not the site's, for the same reason as Google above.
+#
+# Nothing to do with the GitHub *connector*: that reads a repository with a
+# token the user pastes in themselves and needs no app and no secret here.
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
+# The GitHub *connector* — reading stars, forks and open work from a
+# repository. A second OAuth App, not the sign-in one above: different
+# callback, different scopes, revoked independently. Sharing one would mean
+# signing in silently granted repository access.
+#
+# Authorization callback URL:
+#
+#   http://localhost:8787/v1/link/oauth/callback
+#   https://api.notchmetrics.com/v1/link/oauth/callback
+#
+# Scopes are requested by the adapter (public_repo, read:user) and are not
+# configured here.
+OAUTH_GITHUB_CLIENT_ID=
+OAUTH_GITHUB_CLIENT_SECRET=
+
 # The key that wraps every user's provider credentials. 32 bytes, base64:
 #
 #     openssl rand -base64 32

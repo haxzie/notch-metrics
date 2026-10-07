@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { ConnectorMark } from "@/components/ConnectorMark";
 
 /**
@@ -30,13 +30,17 @@ type Connector = {
   docsUrl?: string;
   accentColor: string;
   authMode: "api_key" | "oauth2";
-  oauth: { scopeSummary: string } | null;
+  oauth: { scopeSummary: string[]; requiresSelection: boolean; selectionLabel?: string } | null;
   fields: Field[];
 };
+
+type Option = { value: string; label: string; hint?: string };
 
 type Load =
   | { phase: "loading" }
   | { phase: "ready"; connector: Connector }
+  /** Back from the provider, choosing what to read. */
+  | { phase: "select"; connector: Connector; label: string; options: Option[] }
   | { phase: "done"; connector: Connector; label?: string }
   | { phase: "dead"; message: string };
 
@@ -46,6 +50,7 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -56,6 +61,29 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
           setLoad({ phase: "dead", message: body.message ?? "This link is no longer valid." });
           return;
         }
+
+        // The OAuth return leg lands back here with a query string rather
+        // than on a page of its own, so the link token stays in one place
+        // and a refresh after authorising does not start over.
+        const back = new URLSearchParams(window.location.search);
+        if (back.get("error")) setProblem(back.get("error"));
+        if (back.get("cancelled")) setProblem("You cancelled that. Try again when you are ready.");
+        if (back.get("step") === "select") {
+          const chooser = await fetch(
+            `${API_URL}/v1/link/${encodeURIComponent(token)}/options`,
+          ).then((r) => r.json());
+          if (chooser.options) {
+            setLoad({
+              phase: "select",
+              connector: body.connector,
+              label: chooser.label,
+              options: chooser.options,
+            });
+            return;
+          }
+          setProblem(chooser.message ?? "We could not read your account.");
+        }
+
         setLoad({ phase: "ready", connector: body.connector });
         // Pre-seed selects so a user who accepts every default can just submit.
         setValues(
@@ -99,6 +127,32 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
     }
   }
 
+  /** The second half of an OAuth connection: which repository, property, site. */
+  const choose = useCallback(
+    async (value: string) => {
+      setSubmitting(true);
+      setProblem(null);
+      try {
+        const response = await fetch(`${API_URL}/v1/link/${encodeURIComponent(token)}/select`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value }),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          setProblem(body.message ?? "We could not finish the connection.");
+          return;
+        }
+        window.location.href = body.returnTo;
+      } catch {
+        setProblem("We could not finish the connection.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [token],
+  );
+
   if (load.phase === "loading") {
     return (
       <Shell>
@@ -128,6 +182,99 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
         <p className="text-sm text-white/60">
           {load.label ? `Connected as ${load.label}. ` : ""}You can close this tab and go back to
           the app.
+        </p>
+      </Shell>
+    );
+  }
+
+  if (load.phase === "select") {
+    return (
+      <Shell connector={connector}>
+        <h1 className="text-xl font-semibold">Choose a {load.label.toLowerCase()}</h1>
+        <p className="text-sm text-white/60">
+          {connector.name} is authorised. Pick what {connector.name === "GitHub" ? "repo" : "it"}
+          {"'"}s numbers should come from.
+        </p>
+
+        {problem && (
+          <p className="w-full rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {problem}
+          </p>
+        )}
+
+        {/* Scrolls rather than paginates: somebody with 80 repositories is
+            looking for one they already know the name of, and a filter is
+            faster than a page control. */}
+        <input
+          type="search"
+          placeholder="Filter…"
+          className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+
+        <ul className="mt-1 flex max-h-80 w-full flex-col gap-1 overflow-y-auto text-left">
+          {load.options
+            .filter((option) => option.label.toLowerCase().includes(filter.toLowerCase()))
+            .map((option) => (
+              <li key={option.value}>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => void choose(option.value)}
+                  className="flex w-full items-baseline justify-between gap-3 rounded-lg px-3 py-2 text-sm transition hover:bg-white/10 disabled:opacity-50"
+                >
+                  <span className="truncate font-medium">{option.label}</span>
+                  {option.hint && (
+                    <span className="shrink-0 text-xs text-white/40">{option.hint}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+        </ul>
+      </Shell>
+    );
+  }
+
+  // OAuth connectors have nothing to type. The grant is the credential, and
+  // a form here would be a form asking for a password that is not ours.
+  if (connector.authMode === "oauth2") {
+    return (
+      <Shell connector={connector}>
+        <h1 className="text-xl font-semibold">Connect {connector.name}</h1>
+        <p className="text-sm text-white/60">{connector.tagline}</p>
+
+        {connector.oauth && (
+          <ul className="mt-3 flex w-full flex-col gap-1.5 text-left text-sm text-white/60">
+            {connector.oauth.scopeSummary.map((line) => (
+              <li key={line} className="flex gap-2">
+                <span aria-hidden className="text-white/30">
+                  •
+                </span>
+                {line}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {problem && (
+          <p className="mt-3 w-full rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {problem}
+          </p>
+        )}
+
+        {/* A link, not a fetch. This has to be a top-level navigation: the
+            provider's consent screen cannot be loaded in a fetch, and a
+            popup is the thing blockers eat. */}
+        <a
+          href={`${API_URL}/v1/link/${encodeURIComponent(token)}/authorize`}
+          className="mt-4 w-full rounded-lg bg-white px-4 py-2.5 text-center text-sm font-semibold text-black transition hover:bg-white/90"
+        >
+          Continue with {connector.name}
+        </a>
+
+        <p className="text-center text-xs text-white/40">
+          You will be sent to {connector.name} to approve this. We never see your password.
         </p>
       </Shell>
     );

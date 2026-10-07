@@ -41,6 +41,8 @@ public struct ConnectorIcon: View {
     private var mark: NSImage? { NSImage(named: "connector-\(app.id)") }
 
     private var usesLightTile: Bool { ConnectorMarks.lightTile.contains(app.id) }
+    /// Artwork that already is the tile, so it is drawn to the edges.
+    private var isFullBleed: Bool { mark != nil && ConnectorMarks.fullBleed.contains(app.id) }
 
     private var tile: Color {
         // Not pure white: a hard #FFF square is brighter than anything else in
@@ -59,6 +61,9 @@ public struct ConnectorIcon: View {
         RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
             .fill(tile)
             .overlay(glyph)
+            // Clipped here rather than on the glyph alone, so a full-bleed
+            // mark takes the tile's corners instead of squaring them off.
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
             .overlay(
                 // A hairline so a tile whose brand colour is close to the
                 // window's own still has an edge.
@@ -79,9 +84,10 @@ public struct ConnectorIcon: View {
                 .scaledToFit()
                 // Full-colour marks carry their own padding in the artwork, so
                 // they need less inset than a simple-icons glyph that bleeds
-                // to its viewBox.
-                .frame(width: size * (usesLightTile ? 0.62 : 0.54),
-                       height: size * (usesLightTile ? 0.62 : 0.54))
+                // to its viewBox. A full-bleed mark carries the tile too.
+                .frame(
+                    width: size * (isFullBleed ? 1 : usesLightTile ? 0.62 : 0.54),
+                    height: size * (isFullBleed ? 1 : usesLightTile ? 0.62 : 0.54))
         } else {
             Image(systemName: app.symbol)
                 .font(.system(size: size * 0.46, weight: .semibold))

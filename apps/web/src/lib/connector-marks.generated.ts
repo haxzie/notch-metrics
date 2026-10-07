@@ -10,6 +10,7 @@ export const OWN_COLOUR_MARKS: ReadonlySet<string> = new Set([
   "google-analytics",
   "google-search-console",
 ]);
+export const FULL_BLEED_MARKS: ReadonlySet<string> = new Set(["dodopayments"]);
 export const MARKS: ReadonlySet<string> = new Set([
   "dodopayments",
   "github",

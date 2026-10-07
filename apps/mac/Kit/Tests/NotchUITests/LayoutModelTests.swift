@@ -36,16 +36,71 @@ struct LayoutModelTests {
         #expect(model.layout.rows == NotchLayout.minRows)
     }
 
-    @Test("shrinking stops rather than dropping a widget off the grid")
-    func refusesToOrphan() {
-        // A widget sitting on the third row cannot survive a shrink to two,
-        // so the handle simply stops — which is how a resize normally
-        // communicates a limit. Silently deleting it would be the alternative.
+    @Test("shrinking hides a row rather than dropping the widget on it")
+    func shrinkingScrollsRatherThanOrphans() {
+        // Shrinking used to be refused outright when a widget sat on a row
+        // that would disappear. The area scrolls now, so the handle only
+        // changes how much is revealed — the widget is below the fold, not
+        // gone, and `contentRows` still counts it.
         let (model, box) = model(
             rows: 3, widgets: [NotchWidget(id: "a", size: .small, col: 0, row: 2)])
-        #expect(!model.setRows(2))
-        #expect(model.layout.rows == 3)
+        let shrank = model.setRows(2)
+        #expect(shrank)
+        #expect(model.layout.rows == 2)
+        #expect(model.layout.contentRows == 3)
+        #expect(model.layout.widgets[0].visible)
+        #expect(box.saves == 1)
+    }
+
+    @Test("a full viewport grows to meet a new widget instead of refusing it")
+    func addingGrowsTheViewport() {
+        // Six 1x1 tiles fill a two-row grid's first row and then some; the
+        // seventh used to have nowhere to go and `add` returned false, which
+        // read in the UI as the button doing nothing.
+        let (model, _) = model(
+            rows: 1,
+            widgets: (0..<6).map { NotchWidget(id: "w\($0)", size: .small, col: $0, row: 0) })
+
+        let added = model.add(NotchWidget(id: "new", size: .small))
+        #expect(added)
+        #expect(model.layout.widgets.count == 7)
+        #expect(model.layout.widgets.filter(\.visible).count == 7)
+        // The viewport grew to show the row the new widget landed on.
+        #expect(model.layout.rows == 2)
+    }
+
+    @Test("past the tallest viewport, adding keeps working and scrolls")
+    func addingBeyondTheViewport() {
+        let many = (0..<(6 * NotchLayout.maxRows)).map {
+            NotchWidget(id: "w\($0)", size: .small, col: $0 % 6, row: $0 / 6)
+        }
+        let (model, _) = model(rows: NotchLayout.maxRows, widgets: many)
+
+        let added = model.add(NotchWidget(id: "extra", size: .small))
+        #expect(added)
+        #expect(model.layout.widgets.first { $0.id == "extra" }?.visible == true)
+        // The window cannot grow past its cap, so the content runs past it.
+        #expect(model.layout.rows == NotchLayout.maxRows)
+        #expect(model.layout.contentRows == NotchLayout.maxRows + 1)
+    }
+
+    @Test("the handle follows the pointer between detents and snaps on release")
+    func handleDragIsContinuous() {
+        let (model, box) = model(rows: 2)
+        model.dragRows(to: 2.4)
+        // Followed exactly while held: rounding every frame made the panel
+        // jump a whole row under a pointer that was moving smoothly.
+        #expect(model.visibleRows == 2.4)
+        #expect(model.layout.rows == 2)
         #expect(box.saves == 0)
+
+        model.endRowDrag()
+        #expect(model.layout.rows == 2)
+
+        model.dragRows(to: 2.6)
+        model.endRowDrag()
+        #expect(model.layout.rows == 3)
+        #expect(model.visibleRows == 3)
     }
 
     @Test("a drag does not write a file on every frame")
@@ -58,7 +113,7 @@ struct LayoutModelTests {
         #expect(model.layout.rows == 4)
         #expect(box.saves == 0)
 
-        model.commitRows()
+        model.endRowDrag()
         #expect(box.saves == 1)
     }
 

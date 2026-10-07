@@ -25,16 +25,23 @@ public struct WidgetTile: View {
     /// highlight on a tile the user cannot move is a promise the UI does not
     /// keep.
     public let isEditing: Bool
-
-    @State private var isHovered = false
+    /// Whether the pointer is over this tile.
+    ///
+    /// Passed in rather than tracked here. A local `.onHover` is a second
+    /// opinion about the same pointer, and it disagreed with the canvas's:
+    /// the highlight landed on one tile while the badges landed on another.
+    /// One source, resolved from the pointer against the grid.
+    public let isHovered: Bool
 
     public init(
-        widget: NotchWidget, app: MetricApp, state: TileState, isEditing: Bool = false
+        widget: NotchWidget, app: MetricApp, state: TileState, isEditing: Bool = false,
+        isHovered: Bool = false
     ) {
         self.widget = widget
         self.app = app
         self.state = state
         self.isEditing = isEditing
+        self.isHovered = isHovered
     }
 
     private var accent: Color { NotchTheme.accent(for: app) }
@@ -53,7 +60,7 @@ public struct WidgetTile: View {
                 .font(.system(size: labelSize, weight: .regular))
                 .foregroundStyle(NotchTheme.secondaryText)
                 .lineLimit(1)
-                .padding(.top, 2)
+                .padding(.top, labelGap)
 
             // A Spacer either side rather than one above: the number sits in
             // the middle of whatever height is left under the label, which
@@ -92,13 +99,6 @@ public struct WidgetTile: View {
         // paint over it.
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .onHover { hovering in
-            // Tracked unconditionally rather than only in edit mode, so the
-            // border is already correct on the frame edit mode turns on —
-            // otherwise the tile under the pointer stays unhighlighted until
-            // it moves.
-            isHovered = hovering
-        }
         .animation(.easeOut(duration: 0.12), value: highlighted)
     }
 
@@ -231,6 +231,13 @@ public struct WidgetTile: View {
     /// Slightly larger than the old glyph: a mark inside a rounded tile needs
     /// the extra point or two to stay readable once its own corners are cut.
     private var markSize: CGFloat { isTiny ? 13 : 15 }
+
+    /// Between the source row and the metric's own label.
+    ///
+    /// At 2 the two lines read as one block and the app name looked like a
+    /// heading the label was wrapped from. A 1x1 keeps it tighter — there is
+    /// no app name up there to separate from.
+    private var labelGap: CGFloat { isTiny ? 3 : 7 }
     private var labelSize: CGFloat { isTiny ? 10 : 12 }
 
     /// Scales with the span rather than switching on four presets, now that

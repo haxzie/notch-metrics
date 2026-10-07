@@ -31,7 +31,23 @@ public final class NotchViewModel {
     /// content; they would drift within a week.
     public var visiblePanelSize: CGSize = .zero
 
+    /// True while a manual refresh is in flight, so the button can say so.
+    public var isRefreshing = false
+
+    /// True while a gesture owns the pointer — a handle drag, a tile being
+    /// moved or resized.
+    ///
+    /// The collapse watch has to stand down for the duration. A drag towards
+    /// the bottom edge takes the pointer out of the panel, and collapsing
+    /// there pulls the window out from under the gesture: the notch shuts
+    /// mid-drag and the change is lost.
+    public var isInteracting = false
+
     public var onOpenSettings: @MainActor () -> Void = {}
+    /// Fetch every tile again, now.
+    public var onRefresh: @MainActor () -> Void = {}
+    /// Opens the app on this widget's configuration.
+    public var onConfigureWidget: @MainActor (NotchWidget) -> Void = { _ in }
     public var onTogglePin: @MainActor () -> Void = {}
     public var onClose: @MainActor () -> Void = {}
 

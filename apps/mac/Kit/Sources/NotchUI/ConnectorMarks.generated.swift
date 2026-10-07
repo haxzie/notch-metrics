@@ -16,4 +16,10 @@ public enum ConnectorMarks {
         "google-analytics",
         "google-search-console",
     ]
+
+    /// Marks that are the tile: drawn edge to edge and clipped to its
+    /// corner radius, rather than inset into it.
+    public static let fullBleed: Set<String> = [
+        "dodopayments",
+    ]
 }

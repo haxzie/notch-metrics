@@ -15,6 +15,8 @@ public final class NotchWindowController {
     public private(set) var geometry: NotchGeometry?
 
     public var onOpenSettings: () -> Void = {}
+    public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
+    public var onRefresh: () -> Void = {}
 
     /// What the SwiftUI tree reads. Mutating this updates the notch in place;
     /// the hosting view is built once and never replaced except when the
@@ -86,6 +88,12 @@ public final class NotchWindowController {
         view?.states = states
     }
 
+    /// Whether the refresh glyph is turning.
+    public var isRefreshing: Bool {
+        get { view?.isRefreshing ?? false }
+        set { view?.isRefreshing = newValue }
+    }
+
     /// App names and colours from the server's provider manifests.
     public func update(appOverrides: [String: MetricApp]) {
         view?.appOverrides = appOverrides
@@ -133,6 +141,10 @@ public final class NotchWindowController {
         viewModel.presentation = .collapsed
         viewModel.isPinned = false
         viewModel.onOpenSettings = { [weak self] in self?.onOpenSettings() }
+        viewModel.onConfigureWidget = { [weak self] widget in
+            self?.onConfigureWidget(widget)
+        }
+        viewModel.onRefresh = { [weak self] in self?.onRefresh() }
         viewModel.onTogglePin = { [weak self] in self?.togglePin() }
         viewModel.onClose = { [weak self] in self?.close() }
         self.view = viewModel
@@ -265,7 +277,7 @@ public final class NotchWindowController {
     }
 
     public func collapseIfUnpinned() {
-        guard !isPinned else { return }
+        guard !isPinned, !(view?.isInteracting ?? false) else { return }
         collapse(animated: true)
     }
 

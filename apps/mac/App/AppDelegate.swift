@@ -15,6 +15,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         env.notch.onOpenSettings = { [weak self] in self?.openSettings() }
+        // Lands on Widgets rather than on the exact widget: the builder makes
+        // new widgets and there is no screen yet for editing one that exists.
+        env.notch.onConfigureWidget = { [weak self] _ in
+            self?.env.settingsPane = .widgets
+            self?.openSettings()
+        }
+
+        env.notch.onRefresh = { [weak self] in
+            guard let self else { return }
+            Task { await self.env.refreshNow() }
+        }
 
         Task { await env.start() }
 

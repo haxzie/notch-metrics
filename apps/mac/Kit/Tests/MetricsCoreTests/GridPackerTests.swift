@@ -69,14 +69,16 @@ struct GridPackerTests {
         // packer should resolve it rather than refuse.
         #expect(GridPacker.place("c", at: (0, 0), in: layout) != nil)
 
-        // Straddling two tiles is different: `c` at column 1 overlaps both `a`
-        // and `b`, and once `a` has taken the only remaining pair of columns
-        // there is nowhere left for `b`. The drag must snap back rather than
-        // commit a layout with a widget silently gone.
-        #expect(GridPacker.place("c", at: (1, 0), in: layout) == nil)
+        // Straddling two tiles displaces both. `a` takes the only remaining
+        // pair of columns on row 0 and `b` drops to the row beneath — which
+        // is a resolution rather than a refusal now that the flow runs past
+        // the visible rows. Nothing is dropped either way.
+        let straddled = GridPacker.place("c", at: (1, 0), in: layout)
+        #expect(straddled?.widgets.count == 3)
+        #expect(straddled?.widgets.first { $0.id == "b" }?.row == 2)
     }
 
-    @Test("appending finds the first free slot, and reports a full grid")
+    @Test("appending finds the first free slot, and keeps going past the viewport")
     func appends() throws {
         // Six columns by two rows is twelve cells, and `.small` is one cell.
         var layout = NotchLayout()
@@ -88,19 +90,27 @@ struct GridPackerTests {
         #expect(layout.widgets.filter { $0.row == 0 }.count == 6)
         #expect(layout.widgets.filter { $0.row == 1 }.count == 6)
 
-        // The thirteenth has nowhere to go, and saying so beats silently
-        // discarding it.
-        #expect(GridPacker.append(widget("overflow", .small, col: 0, row: 0), to: layout) == nil)
+        // The thirteenth goes onto a third row. The viewport is two rows
+        // tall and scrolls; refusing here is what used to make "add widget"
+        // do nothing once the notch looked full.
+        let overflowed = try #require(
+            GridPacker.append(widget("overflow", .small, col: 0, row: 0), to: layout))
+        #expect(overflowed.widgets.first { $0.id == "overflow" }?.row == 2)
+        #expect(overflowed.contentRows == 3)
+        #expect(overflowed.rows == 2)
     }
 
-    @Test("dragging the handle to a third row makes room for more widgets")
-    func appendsIntoAddedRows() throws {
+    @Test("the flow eventually does run out, far below any viewport")
+    func appendsUntilTheFlowSpaceIsFull() throws {
         var layout = NotchLayout(rows: 3)
-        for index in 0..<18 {
+        let capacity = NotchLayout.columns * NotchLayout.maxContentRows
+        for index in 0..<capacity {
             layout = try #require(
                 GridPacker.append(widget("w\(index)", .small, col: 0, row: 0), to: layout))
         }
-        #expect(layout.widgets.count == 18)
+        #expect(layout.widgets.count == capacity)
+        // A bound rather than no bound: a layout that can grow forever is a
+        // layout that can be grown until the app is unusable.
         #expect(GridPacker.append(widget("overflow", .small, col: 0, row: 0), to: layout) == nil)
     }
 
@@ -440,8 +450,11 @@ struct FormattingTests {
         #expect(at["b"] == GridCell(col: 4, row: 0))
     }
 
-    @Test("what cannot fit is hidden, not dropped")
-    func overflowHides() {
+    @Test("what does not fit on screen flows below the fold, not into hiding")
+    func overflowFlowsDown() {
+        // Two 6x2 heroes in a two-row viewport. The second used to be marked
+        // not visible and simply vanish; the area scrolls now, so it lands on
+        // the rows underneath and `contentRows` says how far the flow runs.
         let flowed = GridPacker.reflow(
             layout(
                 [
@@ -450,7 +463,10 @@ struct FormattingTests {
                 ],
                 rows: 2))
         #expect(flowed.widgets.count == 2)
-        #expect(flowed.widgets.filter(\.visible).count == 1)
+        #expect(flowed.widgets.filter(\.visible).count == 2)
+        #expect(flowed.rows == 2)
+        #expect(flowed.contentRows == 4)
+        #expect(flowed.widgets.first { $0.id == "b" }?.row == 2)
     }
 
     @Test("a flowed layout never overlaps")

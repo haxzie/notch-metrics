@@ -13,9 +13,16 @@ public struct GridGeometry: Equatable, Sendable {
     public let origin: CGPoint
     public let rows: Int
 
+    /// - Parameters:
+    ///   - rows: how many rows of *content* there are, which since the area
+    ///     scrolls is not how many are on screen.
+    ///   - rowHeight: a fixed height per row. Passed in rather than divided
+    ///     out of `available.height`, because dividing makes every row
+    ///     shorter as content is added — the grid would shrink to fit itself
+    ///     instead of scrolling.
     public init(
         available: CGSize, rows: Int = NotchLayout.defaultRows,
-        spacing: CGFloat = 10, origin: CGPoint = .zero
+        spacing: CGFloat = 10, origin: CGPoint = .zero, rowHeight: CGFloat? = nil
     ) {
         self.spacing = spacing
         self.origin = origin
@@ -24,7 +31,7 @@ public struct GridGeometry: Equatable, Sendable {
         let totalSpacingY = spacing * CGFloat(self.rows - 1)
         self.cellSize = CGSize(
             width: max(1, (available.width - totalSpacingX) / CGFloat(NotchLayout.columns)),
-            height: max(1, (available.height - totalSpacingY) / CGFloat(self.rows))
+            height: rowHeight ?? max(1, (available.height - totalSpacingY) / CGFloat(self.rows))
         )
     }
 
@@ -146,35 +153,50 @@ public final class NotchLayoutModel {
     /// the grid resizes tiles, the list removes rows — and staying in edit
     /// mode across the switch leaves handles on screen that do nothing.
 
-    /// Sets the number of grid rows, dropping the preview used while dragging.
+    /// Sets how many rows of the grid are on screen.
     ///
-    /// Shrinking is refused when a widget would be left off the grid rather
-    /// than silently dropping it — the handle just stops, which is the normal
-    /// way a resize communicates a limit.
+    /// Shrinking used to be refused when a widget would fall outside the new
+    /// height. Now the area scrolls, so the handle only ever changes how much
+    /// is revealed — it cannot strand a widget, and refusing made the handle
+    /// feel stuck for a reason nothing on screen explained.
     @discardableResult
     public func setRows(_ rows: Int, commit: Bool = true) -> Bool {
         let wanted = rows.clamped(to: NotchLayout.minRows...NotchLayout.maxRows)
         guard wanted != layout.rows else { return true }
 
-        var next = layout
-        next.rows = wanted
-        let fits = next.widgets.allSatisfy { widget in
-            GridPacker.cells(for: widget, at: (widget.col, widget.row), rows: wanted) != nil
-        }
-        guard fits else { return false }
-
-        layout = next
+        layout.rows = wanted
         if commit { persist(layout) }
         return true
     }
 
+    /// The height the handle is being dragged to, in rows, while it is held.
+    ///
+    /// Fractional on purpose. Snapping every frame made the panel jump a
+    /// whole row at a time under a pointer that was moving smoothly; the
+    /// detent belongs at the end of the gesture, not during it.
+    public var rowsDuringDrag: CGFloat?
+
+    /// How tall the viewport should be drawn right now, in rows.
+    public var visibleRows: CGFloat { rowsDuringDrag ?? CGFloat(displayed.rows) }
+
+    public func dragRows(to rows: CGFloat) {
+        rowsDuringDrag = rows.clamped(
+            to: CGFloat(NotchLayout.minRows)...CGFloat(NotchLayout.maxRows))
+    }
+
     /// Writes the row count reached by a drag.
     ///
-    /// The drag itself passes `commit: false` on every frame — persisting a
-    /// file per frame would be absurd — so the gesture ending is what saves.
-    public func commitRows() {
+    /// The drag itself never touches the layout — it only moves
+    /// `rowsDuringDrag` — so the gesture ending is both the snap and the save.
+    public func endRowDrag() {
+        if let dragged = rowsDuringDrag {
+            setRows(Int(dragged.rounded()), commit: false)
+        }
+        rowsDuringDrag = nil
         persist(layout)
     }
+
+
 
     public func resize(_ id: String, to size: WidgetSize) {
         guard GridPacker.canResize(id, to: size, in: layout),
@@ -260,9 +282,20 @@ public final class NotchLayoutModel {
         persist(layout)
     }
 
+    /// Adds a widget, making room for it.
+    ///
+    /// Adding used to fail outright when the visible grid was full — the
+    /// widget was placed nowhere and the call returned false, which read as
+    /// the button not working. The flow space is far taller than the
+    /// viewport, so a widget always lands somewhere; the viewport then grows
+    /// to meet it if it can, and scrolls to it if it cannot.
+    @discardableResult
     public func add(_ widget: NotchWidget) -> Bool {
         guard let next = GridPacker.append(widget, to: layout) else { return false }
         layout = next
+        if layout.contentRows > layout.rows {
+            layout.rows = min(layout.contentRows, NotchLayout.maxRows)
+        }
         persist(layout)
         return true
     }

@@ -159,3 +159,189 @@ describe("POST /v1/link/:token/submit", () => {
     expect((await response.json()) as { code: string }).toMatchObject({ code: "WRONG_FLOW" });
   });
 });
+
+/**
+ * The OAuth leg: authorize → provider → callback → pick → connected.
+ *
+ * GitHub is stubbed at `fetch`, which is where both the token exchange and
+ * the repository list go.
+ */
+describe("link / oauth", () => {
+  function stubGitHub(options: { exchange?: unknown; repos?: unknown; status?: number } = {}) {
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      if (url.includes("login/oauth/access_token")) {
+        return json(options.exchange ?? { access_token: "gho_token", scope: "public_repo" });
+      }
+      if (url.includes("/user/repos")) {
+        return json(
+          options.repos ?? [
+            { full_name: "haxzie/notch-metrics", stargazers_count: 412, private: false },
+            { full_name: "haxzie/other", stargazers_count: 3, private: false },
+          ],
+        );
+      }
+      if (url.includes("/repos/")) {
+        return json(
+          {
+            full_name: "haxzie/notch-metrics",
+            stargazers_count: 412,
+            forks_count: 37,
+            open_issues_count: 23,
+            private: false,
+          },
+          options.status ?? 200,
+        );
+      }
+      throw new Error(`unexpected fetch to ${url}`);
+    });
+  }
+
+  /** The env the Worker sees has no connector client unless a test adds one. */
+  const withClient = {
+    ...env,
+    OAUTH_GITHUB_CLIENT_ID: "Ov23liTEST",
+    OAUTH_GITHUB_CLIENT_SECRET: "secret",
+  };
+
+  function callWith(path: string, e: typeof env, init?: RequestInit) {
+    return worker.fetch(new Request(`http://localhost:8787${path}`, init), e, ctx);
+  }
+
+  it("says so plainly when the server has no client configured", async () => {
+    const u = await makeUser();
+    const token = await makeLink(u.id, "github");
+
+    // Explicitly blank rather than relying on the ambient env: the pool
+    // loads `.dev.vars`, so a developer who has configured the connector
+    // locally would otherwise see this test redirect to GitHub and fail for
+    // a reason that has nothing to do with the code.
+    const bare = {
+      ...env,
+      OAUTH_GITHUB_CLIENT_ID: undefined,
+      OAUTH_GITHUB_CLIENT_SECRET: undefined,
+    };
+    const response = await callWith(`/v1/link/${token}/authorize`, bare as typeof env);
+    // A redirect carrying the message, not JSON: a human clicked a button to
+    // get here, and a raw error object in the address bar is a dead end.
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("not+set+up+on+this+server");
+  });
+
+  it("redirects to GitHub and remembers the state hashed", async () => {
+    const u = await makeUser();
+    const token = await makeLink(u.id, "github");
+
+    const response = await callWith(`/v1/link/${token}/authorize`, withClient);
+    expect(response.status).toBe(302);
+
+    const location = new URL(scalar(response.headers.get("location") ?? undefined, "location"));
+    expect(location.host).toBe("github.com");
+    expect(location.searchParams.get("client_id")).toBe("Ov23liTEST");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "http://localhost:8787/v1/link/oauth/callback",
+    );
+    // Least privilege: `repo` would be read *and write* on every repository.
+    expect(location.searchParams.get("scope")).toBe("public_repo read:user");
+
+    const state = scalar(location.searchParams.get("state") ?? undefined, "state");
+    const row = scalar(
+      (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
+      "link",
+    );
+    expect(row.oauthState).toBe(await sha256Base64Url(state));
+    expect(row.oauthState).not.toBe(state);
+  });
+
+  it("refuses a callback whose state nobody issued", async () => {
+    stubGitHub();
+    const response = await callWith("/v1/link/oauth/callback?code=abc&state=madeup", withClient);
+    expect(response.status).toBe(404);
+  });
+
+  it("holds the token encrypted between the callback and the choice", async () => {
+    const u = await makeUser();
+    const token = await makeLink(u.id, "github");
+    stubGitHub();
+
+    const start = await callWith(`/v1/link/${token}/authorize`, withClient);
+    const state = new URL(
+      scalar(start.headers.get("location") ?? undefined, "location"),
+    ).searchParams.get("state");
+
+    const back = await callWith(`/v1/link/oauth/callback?code=abc&state=${state}`, withClient, {
+      headers: { cookie: `nm_connect_link=${token}` },
+    });
+    expect(back.status).toBe(302);
+    expect(back.headers.get("location")).toContain("step=select");
+
+    const row = scalar(
+      (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
+      "link",
+    );
+    // The access token is a live credential from this moment, so the row
+    // must not hold it in the clear.
+    expect(row.pendingCiphertext).toBeTruthy();
+    expect(JSON.stringify(row)).not.toContain("gho_token");
+  });
+
+  it("completes on a choice, and refuses one the provider never offered", async () => {
+    const u = await makeUser();
+    const token = await makeLink(u.id, "github");
+    stubGitHub();
+
+    const start = await callWith(`/v1/link/${token}/authorize`, withClient);
+    const state = new URL(
+      scalar(start.headers.get("location") ?? undefined, "location"),
+    ).searchParams.get("state");
+    await callWith(`/v1/link/oauth/callback?code=abc&state=${state}`, withClient, {
+      headers: { cookie: `nm_connect_link=${token}` },
+    });
+
+    const options = await callWith(`/v1/link/${token}/options`, withClient);
+    expect(await options.json<{ options: { value: string }[] }>()).toMatchObject({
+      options: [{ value: "haxzie/notch-metrics" }, { value: "haxzie/other" }],
+    });
+
+    const forged = await callWith(`/v1/link/${token}/select`, withClient, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "someone-else/private" }),
+    });
+    // A repository name in a POST body is not a claim about what the grant
+    // covers, so it is checked against the provider's own list.
+    expect(forged.status).toBe(400);
+
+    const done = await callWith(`/v1/link/${token}/select`, withClient, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "haxzie/notch-metrics" }),
+    });
+    expect(done.status).toBe(200);
+    expect(await done.json<{ accountLabel: string }>()).toMatchObject({
+      accountLabel: "haxzie/notch-metrics",
+    });
+
+    const saved = scalar(
+      (await db().select().from(integration).where(eq(integration.userId, u.id)))[0],
+      "integration",
+    );
+    expect(saved.label).toBe("GitHub — haxzie/notch-metrics");
+    expect(JSON.stringify(saved)).not.toContain("gho_token");
+
+    // The link is burnt and keeps nothing decryptable.
+    const row = scalar(
+      (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
+      "link",
+    );
+    expect(row.completedAt).toBeTruthy();
+    expect(row.pendingCiphertext).toBeNull();
+    expect(row.oauthState).toBeNull();
+  });
+});

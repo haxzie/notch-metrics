@@ -39,14 +39,23 @@ export function createAuth(env: Env) {
     // Worker's own API_URL rather than a flag someone could set.
     emailAndPassword: { enabled: !isProduction(env) },
 
-    socialProviders: env.GOOGLE_CLIENT_ID
-      ? {
-          google: {
-            clientId: required(env, "GOOGLE_CLIENT_ID"),
-            clientSecret: required(env, "GOOGLE_CLIENT_SECRET"),
-          },
-        }
-      : {},
+    // Built from whichever client ids are present rather than from a flag:
+    // a provider listed here without a secret fails at the redirect, which
+    // reads as a broken button rather than as missing configuration.
+    socialProviders: {
+      ...(env.GOOGLE_CLIENT_ID && {
+        google: {
+          clientId: required(env, "GOOGLE_CLIENT_ID"),
+          clientSecret: required(env, "GOOGLE_CLIENT_SECRET"),
+        },
+      }),
+      ...(env.GITHUB_CLIENT_ID && {
+        github: {
+          clientId: required(env, "GITHUB_CLIENT_ID"),
+          clientSecret: required(env, "GITHUB_CLIENT_SECRET"),
+        },
+      }),
+    },
 
     databaseHooks: {
       user: {

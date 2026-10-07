@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { LIGHT_TILE_MARKS, OWN_COLOUR_MARKS } from "@/lib/connector-marks.generated";
+import {
+  FULL_BLEED_MARKS,
+  LIGHT_TILE_MARKS,
+  OWN_COLOUR_MARKS,
+} from "@/lib/connector-marks.generated";
 import { liftForDarkUI } from "@/lib/brand-colour";
 
 /**
@@ -27,11 +31,14 @@ export function ConnectorMark({
   // rather than a broken image, so the row still looks deliberate.
   const [hasMark, setHasMark] = useState(true);
   const lightTile = LIGHT_TILE_MARKS.has(id);
-  const glyph = Math.round(size * (lightTile ? 0.62 : 0.54));
+  // Artwork that already is the tile is drawn to the edges, clipped to the
+  // same corner radius, rather than floated inside a second square.
+  const fullBleed = FULL_BLEED_MARKS.has(id);
+  const glyph = fullBleed ? size : Math.round(size * (lightTile ? 0.62 : 0.54));
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-[26%] ring-1 ${
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[26%] ring-1 ${
         lightTile ? "ring-white/25" : "ring-white/10"
       }`}
       style={{
