@@ -26,3 +26,8 @@ notch, lands where the pointer let go, and opens a configuration window for
 its account, size, number format, chart and range.
 
 Use the shapes mark for Widgets everywhere it appears.
+
+Remove the Widgets settings pane. The gallery replaces it end to end —
+browse, drag in, configure — and a second way to add a widget that works
+differently is worse than one. `notchmetrics://settings/widgets` still
+resolves, to Apps.

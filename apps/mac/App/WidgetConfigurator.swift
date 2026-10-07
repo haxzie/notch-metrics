@@ -60,26 +60,66 @@ struct WidgetConfiguratorView: View {
                 // change is already being previewed in the place that counts.
                 env.layoutModel.update(next)
             })
+        let live = binding.wrappedValue
+        let app = AppCatalog.resolve(live.appId)
 
-        return Form {
-            Section("Preview") {
-                HStack {
-                    Spacer()
-                    WidgetTile(
-                        widget: binding.wrappedValue,
-                        app: AppCatalog.resolve(binding.wrappedValue.appId),
-                        state: preview)
-                        .frame(width: previewSize(binding.wrappedValue).width,
-                               height: previewSize(binding.wrappedValue).height)
-                        .padding(.vertical, 10)
-                    Spacer()
-                }
-                .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                header(live, app: app)
+                previewCard(live, app: app)
+                connectionSection(binding)
+                appearanceSection(binding)
+                dataSection(binding)
+                removeButton
             }
+            .padding(20)
+        }
+        // Without this the scroll view paints an opaque backing and the
+        // window's glass is invisible behind it — which is most of what made
+        // the first version of this look like a dialog box from another app.
+        .scrollContentBackground(.hidden)
+    }
 
-            Section("Connection") {
-                if let entry, !entry.connections.isEmpty {
-                    Picker("Account", selection: Binding(
+    private func header(_ widget: NotchWidget, app: MetricApp) -> some View {
+        HStack(spacing: 10) {
+            ConnectorIcon(app: app, size: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(descriptor?.label ?? widget.title ?? "Widget")
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+                Text(app.name)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func previewCard(_ widget: NotchWidget, app: MetricApp) -> some View {
+        HStack {
+            Spacer()
+            WidgetTile(widget: widget, app: app, state: preview)
+                .frame(
+                    width: previewSize(widget).width,
+                    height: previewSize(widget).height)
+            Spacer()
+        }
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black.opacity(0.25)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func connectionSection(_ binding: Binding<NotchWidget>) -> some View {
+        section("Connection") {
+            if let entry, !entry.connections.isEmpty {
+                row("Account") {
+                    Picker("", selection: Binding(
                         get: { binding.wrappedValue.integrationId ?? "" },
                         set: { id in
                             var next = binding.wrappedValue
@@ -93,23 +133,35 @@ struct WidgetConfiguratorView: View {
                             Text(connection.label).tag(connection.id)
                         }
                     }
-                } else {
-                    Text("No account connected yet.")
-                        .foregroundStyle(.secondary)
+                    .labelsHidden()
+                    .fixedSize()
                 }
+            } else {
+                note("No account connected yet. The tile shows a placeholder until there is one.")
+            }
 
-                if let entry {
+            if let entry {
+                Divider().opacity(0.4)
+                HStack {
                     ConnectButton(app: entry, model: model) { newId in
                         var next = binding.wrappedValue
                         next.integrationId = newId
                         binding.wrappedValue = next
                         Task { await refreshPreview() }
                     }
+                    Spacer(minLength: 0)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
             }
+        }
+    }
 
-            Section("Appearance") {
-                Picker("Size", selection: Binding(
+    @ViewBuilder
+    private func appearanceSection(_ binding: Binding<NotchWidget>) -> some View {
+        section("Appearance") {
+            row("Size") {
+                Picker("", selection: Binding(
                     get: { binding.wrappedValue.size },
                     set: { size in
                         var next = binding.wrappedValue
@@ -122,8 +174,12 @@ struct WidgetConfiguratorView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-
-                Picker("Numbers", selection: Binding(
+                .labelsHidden()
+                .frame(width: 190)
+            }
+            Divider().opacity(0.4)
+            row("Numbers") {
+                Picker("", selection: Binding(
                     get: { binding.wrappedValue.format?.compact ?? true },
                     set: { compact in
                         var next = binding.wrappedValue
@@ -136,8 +192,12 @@ struct WidgetConfiguratorView: View {
                     Text("Short — 1.2M").tag(true)
                     Text("Full — 1,243,901").tag(false)
                 }
-
-                Picker("Chart", selection: Binding(
+                .labelsHidden()
+                .fixedSize()
+            }
+            Divider().opacity(0.4)
+            row("Chart") {
+                Picker("", selection: Binding(
                     get: { binding.wrappedValue.chart },
                     set: { chart in
                         var next = binding.wrappedValue
@@ -149,11 +209,18 @@ struct WidgetConfiguratorView: View {
                     Text("Sparkline").tag(ChartKind.sparkline)
                     Text("Bars").tag(ChartKind.bars)
                 }
+                .labelsHidden()
+                .fixedSize()
                 .disabled(descriptor?.supportsSeries == false)
             }
+        }
+    }
 
-            Section("Data") {
-                Picker("Range", selection: Binding(
+    @ViewBuilder
+    private func dataSection(_ binding: Binding<NotchWidget>) -> some View {
+        section("Data") {
+            row("Range") {
+                Picker("", selection: Binding(
                     get: { binding.wrappedValue.range },
                     set: { range in
                         var next = binding.wrappedValue
@@ -166,30 +233,87 @@ struct WidgetConfiguratorView: View {
                         Text(range.rawValue).tag(range)
                     }
                 }
-
-                if let descriptor {
-                    Text(descriptor.methodology)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                .labelsHidden()
+                .fixedSize()
             }
-
-            Section {
-                Button(role: .destructive) {
-                    env.layoutModel.remove(widgetId)
-                    draft = nil
-                } label: {
-                    Text("Remove from notch").frame(maxWidth: .infinity)
-                }
+            if let descriptor {
+                Divider().opacity(0.4)
+                note(descriptor.methodology)
             }
         }
-        .formStyle(.grouped)
+    }
+
+    private var removeButton: some View {
+        Button(role: .destructive) {
+            env.layoutModel.remove(widgetId)
+            draft = nil
+        } label: {
+            Text("Remove from notch")
+                .font(.system(size: 13))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.red.opacity(0.9))
+        .background(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.white.opacity(0.06)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    // MARK: - Pieces
+
+    /// A titled group of rows on one translucent card.
+    ///
+    /// Hand-built rather than `Form(.grouped)`, which paints its own opaque
+    /// background and ignores the window's material entirely.
+    private func section<V: View>(
+        _ title: String, @ViewBuilder content: () -> V
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 2)
+            VStack(spacing: 0) { content() }
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.06)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        }
+    }
+
+    private func row<V: View>(_ label: String, @ViewBuilder control: () -> V) -> some View {
+        HStack(spacing: 12) {
+            Text(label).font(.system(size: 13))
+            Spacer(minLength: 8)
+            control()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
     }
 
     private func previewSize(_ widget: NotchWidget) -> CGSize {
-        let unit: CGFloat = 58
-        let gap: CGFloat = 8
-        let cols = CGFloat(widget.size.cols)
+        // Bigger than the notch's own cell. At the real size a 1x1 preview is
+        // a thumbnail with three truncated words in it, and the point of the
+        // preview is to be readable.
+        let unit: CGFloat = 64
+        let gap: CGFloat = 10
+        let cols = min(CGFloat(widget.size.cols), 3)
         let rows = CGFloat(widget.size.rows)
         return CGSize(
             width: cols * unit + (cols - 1) * gap,
@@ -233,12 +357,16 @@ final class WidgetConfiguratorWindowController: NSObject, NSWindowDelegate {
         window?.close()
 
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 420, height: 620),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: CGRect(x: 0, y: 0, width: 400, height: 700),
+            // No `.fullSizeContentView`: with it the first section header laid
+            // out underneath the traffic lights, which is what made this
+            // window look broken before anything in it had been read.
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false)
         window.title = "Configure Widget"
         window.titlebarAppearsTransparent = true
+        window.minSize = CGSize(width: 380, height: 480)
         window.backgroundColor = .clear
         window.isOpaque = false
         window.delegate = self

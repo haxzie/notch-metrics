@@ -3,19 +3,22 @@ import NotchUI
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
-    case general, connections, apps, widgets, account, updates, about
+    case general, connections, apps, account, updates, about
 
     /// `notchmetrics://settings/integrations` is in the wild — in the website,
     /// in the connect flow's return URL — and kept working when the pane was
     /// renamed to Apps.
     ///
-    /// `custom-metrics` is parked rather than removed: the plugin runtime and
-    /// the MCP server still exist, so a link to a pane that is not in the
-    /// sidebar should land somewhere sensible instead of nowhere.
+    /// `widgets` and `custom-metrics` are parked rather than removed. Widgets
+    /// are added from the gallery now and the pane is gone, but those links
+    /// are in the website and in old connect-flow return URLs — and a link to
+    /// a pane that no longer exists should land on the nearest thing rather
+    /// than nowhere.
     static let aliases: [String: SettingsPane] = [
         "integrations": .apps,
-        "customMetrics": .widgets,
-        "custom-metrics": .widgets,
+        "widgets": .apps,
+        "customMetrics": .apps,
+        "custom-metrics": .apps,
     ]
 
     var id: String { rawValue }
@@ -25,7 +28,6 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .connections: "Connections"
         case .apps: "Apps"
-        case .widgets: "Widgets"
         case .account: "Account"
         case .updates: "Updates"
         case .about: "About"
@@ -37,34 +39,15 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .connections: "link"
         case .apps: "square.grid.2x2"
-        // Only reached by the fallback in `icon` — Widgets draws the shapes
-        // mark instead, which is also what the notch's own edit button uses.
-        case .widgets: "square.on.square"
         case .account: "person.crop.circle"
         case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
         }
     }
 
-    /// The sidebar glyph. Widgets is the one pane with artwork of its own.
-    ///
-    /// Main-actor isolated because building a `View` is: the enum itself is
-    /// not, and the rest of it is read off the actor.
-    @MainActor @ViewBuilder
-    var icon: some View {
-        switch self {
-        case .widgets: WidgetsMark(size: 14)
-        default: Image(systemName: symbol)
-        }
-    }
-
     /// Grouped the way System Settings groups things: the thing you came to
     /// change, then your data, then the app itself.
     static let sections: [(String?, [SettingsPane])] = [
-        // Widgets first and ungrouped: it is what people open this window to
-        // change. General is down in App with the other
-        // set-it-once-and-forget-it panes.
-        (nil, [.widgets]),
         ("Data", [.connections, .apps]),
         ("App", [.account, .general, .updates, .about]),
     ]
@@ -102,7 +85,7 @@ struct SettingsRootView: View {
 
     private func rows(_ panes: [SettingsPane]) -> some View {
         ForEach(panes) { pane in
-            Label { Text(pane.title) } icon: { pane.icon }.tag(pane)
+            Label(pane.title, systemImage: pane.symbol).tag(pane)
         }
     }
 
@@ -112,7 +95,6 @@ struct SettingsRootView: View {
         case .general: GeneralPane()
         case .connections: ConnectionsPane()
         case .apps: AppsPane()
-        case .widgets: WidgetsPane()
         case .account: AccountPane()
         case .updates: UpdatesPane()
         case .about: AboutPane()

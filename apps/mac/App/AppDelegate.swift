@@ -55,6 +55,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             gallery.show()
             Task { await dropCatalogue.load(env: env) }
         }
+
+        // The configurator is otherwise only reachable by dropping a widget or
+        // clicking a tile's sliders, neither of which a screenshot can do.
+        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONFIG"] == "1" {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                if let first = env.layoutModel.layout.widgets.first {
+                    configurator.show(widgetId: first.id)
+                }
+            }
+        }
     }
 
     /// Turns a dragged payload into a widget on the grid.

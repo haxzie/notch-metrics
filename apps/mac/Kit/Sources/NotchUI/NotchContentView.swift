@@ -876,7 +876,7 @@ private struct EmptyNotch: View {
             Text("No widgets yet")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NotchTheme.secondaryText)
-            Text("Add one from Settings → Widgets")
+            Text("Edit the notch, then Add Widget")
                 .font(.system(size: 10.5))
                 .foregroundStyle(NotchTheme.tertiaryText)
         }
