@@ -127,17 +127,14 @@ public struct NotchContentView: View {
         NotchWidgetCanvas(
             model: model, states: states, appOverrides: appOverrides,
             onConfigureWidget: onConfigureWidget)
-            // Wider than the backdrop's inset, so the well has room to sit
-            // between the tiles and the panel edge instead of being squeezed
-            // flush against one or the other.
-            .padding(.horizontal, 20)
-            // Clear of the header, with room for the edit backdrop's own
-            // inset on top of it — that is what this has to cover, not just
-            // the grid.
-            .padding(.top, NotchWidgetCanvas.editInset + 6)
+            // The well, not the tiles, is what has to clear the panel edge —
+            // so the tiles are inset by the margin the well wants *plus* the
+            // distance the well extends past them.
+            .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+            .padding(.top, NotchWidgetCanvas.contentTop)
             // The well extends below the last row too, and the grabber sits
             // directly under it. Without this the dots ran behind the handle.
-            .padding(.bottom, NotchWidgetCanvas.editInset)
+            .padding(.bottom, NotchWidgetCanvas.contentBottom)
             // A tile drag or resize holds the notch open for the same reason
             // the handle does. Edit mode pins already, but a drag begun by
             // long-press turns edit mode on *without* pinning, and that one
@@ -211,9 +208,22 @@ public struct NotchContentView: View {
         // Padding inside a centred frame moves the content by half of it, so
         // this is twice the correction — measured, not derived, because the
         // overhang comes from how the window is placed over the notch rather
-        // than from anything this view knows about.
-        .padding(.top, 16)
-        .frame(height: max(44, geometry.hasNotch ? geometry.notchRect.height + 12 : 44))
+        // than from anything this view knows about. It was 16 while the panel
+        // sized the band 10pt shorter than it draws; with that fixed the band
+        // is taller and the same correction pushed the row visibly low.
+        .padding(.top, 8)
+        .frame(height: headerHeight)
+    }
+
+    /// How tall the header band is.
+    ///
+    /// One expression, because `expandedSize` needs the same number. When the
+    /// panel's idea of the header was 10pt shorter than the header itself,
+    /// the VStack was asked for more height than the panel had and SwiftUI
+    /// took the difference out of the first flexible thing it found — this
+    /// band's top padding — so the controls slid up against the top edge.
+    private var headerHeight: CGFloat {
+        max(44, geometry.hasNotch ? geometry.notchRect.height + 12 : 44)
     }
 
     /// A labelled pill rather than a pencil.
@@ -225,8 +235,12 @@ public struct NotchContentView: View {
     private var editButton: some View {
         Button(action: toggleEditing) {
             HStack(spacing: 5) {
-                Image(systemName: model.isEditing ? "checkmark" : "square.grid.2x2")
-                    .font(.system(size: 10.5, weight: .semibold))
+                if model.isEditing {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10.5, weight: .semibold))
+                } else {
+                    WidgetsMark(size: 11.5)
+                }
                 Text(model.isEditing ? "Done" : "Edit Widgets")
                     .font(.system(size: 11, weight: .medium))
             }
@@ -380,8 +394,11 @@ public struct NotchContentView: View {
     /// the content does, or the notch hangs a strip of empty black down the
     /// screen below the last row of tiles.
     private var expandedSize: CGSize {
-        let header = max(34, geometry.hasNotch ? geometry.notchRect.height + 6 : 34)
-        let content = NotchWidgetCanvas.canvasHeight(rows: model.visibleRows)
+        // Every vertical band the VStack actually contains. Leaving the
+        // content's own padding out of this is what squeezed the header.
+        let content = NotchWidgetCanvas.contentTop
+            + NotchWidgetCanvas.canvasHeight(rows: model.visibleRows)
+            + NotchWidgetCanvas.contentBottom
             + Self.grabberHeight
         return CGSize(
             // Less the ears, which the panel frame adds back — the window is
@@ -390,7 +407,7 @@ public struct NotchContentView: View {
             width: min(
                 NotchPanel.maxSize.width - Self.earOverhang,
                 max(560, geometry.notchRect.width + 480)),
-            height: min(NotchPanel.maxSize.height, header + content)
+            height: min(NotchPanel.maxSize.height, headerHeight + content)
         )
     }
 
@@ -653,13 +670,22 @@ public struct NotchWidgetCanvas: View {
     }
 
     /// How far the edit backdrop extends past the grid, on every side.
+    static let editInset: CGFloat = 10
+
+    /// How far the edit well itself sits from the panel's edges.
     ///
-    /// At 8 the well was the same distance from the tiles as the tiles were
-    /// from the panel, so the two gaps read as one and the dots looked like
-    /// they were touching the outermost tile. The content's own horizontal
-    /// padding grew with it, which keeps the well the same distance from the
-    /// panel edge rather than pushing it out against the glass.
-    static let editInset: CGFloat = 12
+    /// The well is the thing with a visible boundary, so this is the gap the
+    /// eye actually reads as the window's padding. At 8 it was close enough
+    /// to the glass that the dots looked like they were bleeding off the
+    /// panel rather than sitting inside it.
+    static let wellMargin: CGFloat = 16
+
+    /// The tiles are inset far enough that the well lands on `wellMargin`.
+    static var contentHorizontal: CGFloat { wellMargin + editInset }
+    static var contentTop: CGFloat { wellMargin + editInset }
+    /// The grabber supplies the bottom margin, so this only has to clear the
+    /// well itself out from under it.
+    static var contentBottom: CGFloat { editInset }
 
     /// One row is tall enough for a label over a headline figure; each extra
     /// row adds the same again plus the gap between them.

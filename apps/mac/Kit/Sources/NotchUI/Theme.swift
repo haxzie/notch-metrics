@@ -174,6 +174,36 @@ public enum NotchMotion {
 ///
 /// Transcribed from `packages/ui/assets/logo.svg` so the Kit has no asset
 /// catalogue of its own and SwiftUI previews work without the app target.
+/// The widgets mark: the three shapes and the cross.
+///
+/// Looked up in the main bundle because the catalogue belongs to the app
+/// target, not to this package — the same reason `ConnectorIcon` does it that
+/// way. Drawn as a template so it takes the foreground colour, which is what
+/// lets it sit in a header button and a settings sidebar without two copies.
+///
+/// Falls back to the SF Symbol it replaced rather than rendering nothing, so
+/// a missing asset is a wrong-looking icon instead of an invisible control.
+public struct WidgetsMark: View {
+    public var size: CGFloat
+
+    public init(size: CGFloat = 13) {
+        self.size = size
+    }
+
+    public var body: some View {
+        if let mark = NSImage(named: "icon-widgets") {
+            Image(nsImage: mark)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: size, weight: .semibold))
+        }
+    }
+}
+
 public struct NotchLogo: View {
     public var size: CGFloat
 

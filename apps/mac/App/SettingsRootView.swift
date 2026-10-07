@@ -1,4 +1,5 @@
 import MetricsCore
+import NotchUI
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
@@ -36,12 +37,24 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .connections: "link"
         case .apps: "square.grid.2x2"
-        // A box, not another grid: Apps is `square.grid.2x2` and the two
-        // sat next to each other in the sidebar looking near-identical.
+        // Only reached by the fallback in `icon` — Widgets draws the shapes
+        // mark instead, which is also what the notch's own edit button uses.
         case .widgets: "square.on.square"
         case .account: "person.crop.circle"
         case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
+        }
+    }
+
+    /// The sidebar glyph. Widgets is the one pane with artwork of its own.
+    ///
+    /// Main-actor isolated because building a `View` is: the enum itself is
+    /// not, and the rest of it is read off the actor.
+    @MainActor @ViewBuilder
+    var icon: some View {
+        switch self {
+        case .widgets: WidgetsMark(size: 14)
+        default: Image(systemName: symbol)
         }
     }
 
@@ -89,7 +102,7 @@ struct SettingsRootView: View {
 
     private func rows(_ panes: [SettingsPane]) -> some View {
         ForEach(panes) { pane in
-            Label(pane.title, systemImage: pane.symbol).tag(pane)
+            Label { Text(pane.title) } icon: { pane.icon }.tag(pane)
         }
     }
 
