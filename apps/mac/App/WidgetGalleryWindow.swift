@@ -60,7 +60,11 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
         // The traffic lights float over the sidebar, as in a Finder window.
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
+        // Off, deliberately. The whole content area is draggable *cards*, and
+        // background dragging is resolved by AppKit before SwiftUI ever sees
+        // the press — so every attempt to drag a widget moved the window
+        // instead. The transparent title bar is still a drag handle.
+        window.isMovableByWindowBackground = false
         window.backgroundColor = .clear
         window.isOpaque = false
         window.minSize = CGSize(width: 820, height: 520)
