@@ -43,6 +43,24 @@ public final class NotchViewModel {
     /// mid-drag and the change is lost.
     public var isInteracting = false
 
+    /// The widget being configured, if any.
+    ///
+    /// Configuration used to be a window of its own, which meant the app threw
+    /// a second window on screen every time a tile was dropped or a slider
+    /// button pressed — on top of whatever the user was working in, and with
+    /// its own activation and focus to manage. The notch is already open and
+    /// already the thing being changed, so it hosts this instead.
+    public var configuringID: String?
+
+    /// The controls for the widget being configured.
+    ///
+    /// Supplied by the app target, which is the only place that knows about
+    /// connections and the server's catalogue. NotchUI owns the split, the
+    /// preview and the transition; it does not own the form.
+    public var configuratorPanel: @MainActor (NotchWidget) -> AnyView = { _ in
+        AnyView(EmptyView())
+    }
+
     public var onOpenSettings: @MainActor () -> Void = {}
     /// Fetch every tile again, now.
     public var onRefresh: @MainActor () -> Void = {}

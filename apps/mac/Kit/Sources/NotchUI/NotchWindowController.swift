@@ -17,6 +17,20 @@ public final class NotchWindowController {
     public var onOpenSettings: () -> Void = {}
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
     public var onAddWidget: () -> Void = {}
+
+    /// The controls shown in the notch's configure pane. See
+    /// `NotchViewModel.configuratorPanel`.
+    public var configuratorPanel: @MainActor (NotchWidget) -> AnyView = { _ in
+        AnyView(EmptyView())
+    } {
+        didSet { view?.configuratorPanel = configuratorPanel }
+    }
+
+    /// Which widget the notch is configuring, if any.
+    public var configuringID: String? {
+        get { view?.configuringID }
+        set { view?.configuringID = newValue }
+    }
     public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
     public var onRefresh: () -> Void = {}
 
@@ -147,6 +161,7 @@ public final class NotchWindowController {
             self?.onConfigureWidget(widget)
         }
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
+        viewModel.configuratorPanel = configuratorPanel
         viewModel.onDropWidget = { [weak self] payload, index in
             self?.onDropWidget(payload, index) ?? false
         }

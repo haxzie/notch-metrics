@@ -31,3 +31,9 @@ Remove the Widgets settings pane. The gallery replaces it end to end —
 browse, drag in, configure — and a second way to add a widget that works
 differently is worse than one. `notchmetrics://settings/widgets` still
 resolves, to Apps.
+
+Configure widgets inside the notch rather than in a window of their own. A
+split: the tile on the left, its controls on the right, with the grid
+sliding out and the pane sliding in. A second window thrown on screen over
+whatever the user was working in — with its own focus and activation to
+manage — was the wrong shape for changing the thing already on screen.

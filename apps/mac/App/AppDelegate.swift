@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let env = AppEnvironment()
     private var statusItem: NSStatusItem?
     private lazy var gallery = WidgetGalleryWindowController(env: env)
-    private lazy var configurator = WidgetConfiguratorWindowController(env: env)
     /// The catalogue, kept warm so a drop can turn "stripe/mrr" into a widget
     /// without waiting on a round trip at the moment the pointer lets go.
     private let dropCatalogue = WidgetCatalogueModel()
@@ -22,10 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         env.notch.onOpenSettings = { [weak self] in self?.openSettings() }
         // Lands on Widgets rather than on the exact widget: the builder makes
         // new widgets and there is no screen yet for editing one that exists.
-        // Configures the widget itself now, rather than landing on the pane
-        // that builds new ones.
+        // In the notch, not a window. A second window thrown on screen over
+        // whatever the user was working in — with its own focus and
+        // activation to manage — for what is a change to the thing already on
+        // screen was the wrong shape for this.
+        env.notch.configuratorPanel = { [weak self] widget in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(WidgetConfigPanel(widgetId: widget.id).environment(self.env))
+        }
         env.notch.onConfigureWidget = { [weak self] widget in
-            self?.configurator.show(widgetId: widget.id)
+            self?.beginConfiguring(widget.id)
         }
 
         env.notch.onAddWidget = { [weak self] in
@@ -56,13 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await dropCatalogue.load(env: env) }
         }
 
-        // The configurator is otherwise only reachable by dropping a widget or
-        // clicking a tile's sliders, neither of which a screenshot can do.
+        // The configure pane is otherwise only reachable by dropping a widget
+        // or clicking a tile's sliders, neither of which a screenshot can do.
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONFIG"] == "1" {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 if let first = env.layoutModel.layout.widgets.first {
-                    configurator.show(widgetId: first.id)
+                    beginConfiguring(first.id)
                 }
             }
         }
@@ -103,9 +108,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await env.refresh() }
         // Straight into configuration: a widget with no account renders as
         // "Pick a connection", and dropping one only to be shown a broken
-        // tile is a worse first run than one more window.
-        configurator.show(widgetId: widget.id)
+        // tile is a poor first run.
+        beginConfiguring(widget.id)
         return true
+    }
+
+    /// Opens the configure pane on a widget, animated.
+    ///
+    /// Also leaves edit mode: the pane replaces the grid, so the handles and
+    /// the dotted well behind it would be configuring nothing.
+    private func beginConfiguring(_ id: String) {
+        env.layoutModel.isEditing = false
+        withAnimation(.snappy(duration: 0.28)) {
+            env.notch.configuringID = id
+        }
     }
 
     /// Closing the settings window must not quit an app whose whole point is

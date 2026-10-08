@@ -4,13 +4,16 @@ import MetricsCore
 import NotchUI
 import SwiftUI
 
-/// Configures a widget that is already in the notch.
+/// The controls for one widget, shown in the notch's configure pane.
 ///
-/// Opened the moment one is dropped in, because a freshly dragged widget has
+/// Only the form. The split, the preview and the chrome belong to
+/// `WidgetConfigurePane` in NotchUI — this is the half that needs the server's
+/// catalogue and the user's connections, which is why it lives here.
+///
+/// Opened the moment a widget is dropped in, because a freshly dragged one has
 /// no account behind it and renders as "Pick a connection" — a tile that
-/// appears already broken. This is the screen that finishes the job, and it
-/// is reachable again later from the tile's own sliders button.
-struct WidgetConfiguratorView: View {
+/// appears already broken.
+struct WidgetConfigPanel: View {
     let widgetId: String
 
     @Environment(AppEnvironment.self) private var env
@@ -36,17 +39,22 @@ struct WidgetConfiguratorView: View {
                 // The widget was removed from the notch while this was open.
                 VStack(spacing: 8) {
                     Text("That widget is no longer in the notch.")
-                        .font(.headline)
-                    Text("Close this window and add it again.")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Press Done and add it again.")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task {
-            await model.load(env: env)
+            // The widget first, the catalogue second. They were the other way
+            // round, so until the network came back the pane showed its
+            // "no longer in the notch" state for a widget that was plainly
+            // sitting in the preview beside it.
             draft = env.layoutModel.layout.widgets.first { $0.id == widgetId }
             await refreshPreview()
+            await model.load(env: env)
         }
     }
 
@@ -60,66 +68,25 @@ struct WidgetConfiguratorView: View {
                 // change is already being previewed in the place that counts.
                 env.layoutModel.update(next)
             })
-        let live = binding.wrappedValue
-        let app = AppCatalog.resolve(live.appId)
-
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header(live, app: app)
-                previewCard(live, app: app)
                 connectionSection(binding)
                 appearanceSection(binding)
                 dataSection(binding)
                 removeButton
             }
-            .padding(20)
+            .padding(.trailing, 14)
+            .padding(.bottom, 6)
         }
-        .overlay(alignment: .top) { topFade }
-        // Reserves the title bar's height rather than guessing at a top
-        // padding: the content now runs underneath it, and scrolling up under
-        // a transparent title bar is the look — colliding with it is not.
-        .safeAreaInset(edge: .top) { Color.clear.frame(height: 24) }
+        // Pushed down past the title bar. Starting it at the window's top
+        // meant the band sat *over* the bar, frosting it and ending on a hard
+        // line just below it — the fade has to begin where the content does.
         // Without this the scroll view paints an opaque backing and the
         // window's glass is invisible behind it — which is most of what made
         // the first version of this look like a dialog box from another app.
         .scrollContentBackground(.hidden)
     }
 
-    private func header(_ widget: NotchWidget, app: MetricApp) -> some View {
-        HStack(spacing: 10) {
-            ConnectorIcon(app: app, size: 26)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(descriptor?.label ?? widget.title ?? "Widget")
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                Text(app.name)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func previewCard(_ widget: NotchWidget, app: MetricApp) -> some View {
-        HStack {
-            Spacer()
-            WidgetTile(widget: widget, app: app, state: preview)
-                .frame(
-                    width: previewSize(widget).width,
-                    height: previewSize(widget).height)
-            Spacer()
-        }
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.black.opacity(0.25)))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
-    }
-
-    @ViewBuilder
     private func connectionSection(_ binding: Binding<NotchWidget>) -> some View {
         section("Connection") {
             if let entry, !entry.connections.isEmpty {
@@ -271,50 +238,12 @@ struct WidgetConfiguratorView: View {
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
-    /// A progressive blur over the top edge.
-    ///
-    /// Content runs under the title bar, and a plain scroll cut it off against
-    /// a hard line. `.ultraThinMaterial` blurs what is behind it *within the
-    /// window*, which here is the scrolling content — so a masked band of it
-    /// is a real blur of the rows passing underneath, not a tint laid on top.
-    ///
-    /// Three bands rather than one. A single masked blur still ends on a
-    /// visible edge where its mask runs out; stacking shorter bands ramps the
-    /// *strength* of the blur rather than only its opacity, which is what
-    /// makes the falloff read as gradual.
-    private var topFade: some View {
-        ZStack(alignment: .top) {
-            fadeBand(height: 54)
-            fadeBand(height: 38)
-            fadeBand(height: 22)
-        }
-        .frame(height: 54)
-        .allowsHitTesting(false)
-    }
-
-    private func fadeBand(height: CGFloat) -> some View {
-        Rectangle()
-            .fill(.clear)
-            .background(.ultraThinMaterial)
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black.opacity(0.65), location: 0.45),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: .top, endPoint: .bottom)
-            )
-            .frame(height: height)
-            .frame(maxWidth: .infinity, alignment: .top)
-    }
-
     // MARK: - Pieces
 
     /// A titled group of rows on one translucent card.
     ///
     /// Hand-built rather than `Form(.grouped)`, which paints its own opaque
-    /// background and ignores the window's material entirely.
+    /// background and ignores the notch's material entirely.
     private func section<V: View>(
         _ title: String, @ViewBuilder content: () -> V
     ) -> some View {
@@ -353,19 +282,6 @@ struct WidgetConfiguratorView: View {
             .padding(.vertical, 10)
     }
 
-    private func previewSize(_ widget: NotchWidget) -> CGSize {
-        // Bigger than the notch's own cell. At the real size a 1x1 preview is
-        // a thumbnail with three truncated words in it, and the point of the
-        // preview is to be readable.
-        let unit: CGFloat = 64
-        let gap: CGFloat = 10
-        let cols = min(CGFloat(widget.size.cols), 3)
-        let rows = CGFloat(widget.size.rows)
-        return CGSize(
-            width: cols * unit + (cols - 1) * gap,
-            height: rows * unit + (rows - 1) * gap)
-    }
-
     private func refreshPreview() async {
         guard let draft, let metric = draft.metric else { return }
         guard let connection = draft.integrationId else {
@@ -385,68 +301,6 @@ struct WidgetConfiguratorView: View {
             }
         } catch {
             preview = .failed(reason: "Could not load a preview")
-        }
-    }
-}
-
-/// Owns the configurator window.
-@MainActor
-final class WidgetConfiguratorWindowController: NSObject, NSWindowDelegate {
-    private var window: NSWindow?
-    private let env: AppEnvironment
-
-    init(env: AppEnvironment) {
-        self.env = env
-    }
-
-    func show(widgetId: String) {
-        window?.close()
-
-        let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 400, height: 700),
-            // `.fullSizeContentView` so the material runs the full height of
-            // the window. Without it the effect view stops below the title
-            // bar, and since the window itself is clear that strip showed
-            // straight through — a transparent band above a frosted body.
-            // Clearing the title bar is the content's job, below.
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false)
-        window.title = "Configure Widget"
-        window.titlebarAppearsTransparent = true
-        window.minSize = CGSize(width: 380, height: 480)
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.delegate = self
-        window.isReleasedWhenClosed = false
-
-        window.contentView = glassContentView {
-            WidgetConfiguratorView(widgetId: widgetId)
-                .environment(env)
-                .ignoresSafeArea()
-        }
-        // Beside the notch rather than centred: the tile it configures is at
-        // the top of the screen and a window in the middle makes you look away
-        // from the thing you are changing.
-        window.center()
-        if let screen = NSScreen.main {
-            let frame = window.frame
-            window.setFrameOrigin(
-                CGPoint(
-                    x: screen.visibleFrame.maxX - frame.width - 40,
-                    y: screen.visibleFrame.maxY - frame.height - 20))
-        }
-        self.window = window
-
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        DispatchQueue.main.async {
-            let remaining = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }
-            if remaining.isEmpty { NSApp.setActivationPolicy(.accessory) }
         }
     }
 }

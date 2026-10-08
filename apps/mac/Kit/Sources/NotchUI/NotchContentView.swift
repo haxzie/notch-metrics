@@ -120,11 +120,43 @@ public struct NotchContentView: View {
         VStack(spacing: 0) {
             header
             content
-            grabber
+            // The handle sets how many rows are on screen, which is not a
+            // thing the configure pane has.
+            if configuring == nil { grabber }
+        }
+        .animation(.snappy(duration: 0.28), value: view.configuringID)
+    }
+
+    /// The widget being configured, resolved against the live layout.
+    private var configuring: NotchWidget? {
+        guard let id = view.configuringID else { return nil }
+        return model.layout.widgets.first { $0.id == id }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let widget = configuring {
+            WidgetConfigurePane(
+                widget: widget,
+                app: AppCatalog.resolve(widget.appId, overrides: appOverrides),
+                state: states[widget.id] ?? .loading,
+                panel: view.configuratorPanel)
+                .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+                .padding(.top, NotchWidgetCanvas.contentTop)
+                .padding(.bottom, NotchWidgetCanvas.contentBottom)
+                // In from the right, out by fading: the pane arrives as a
+                // place you moved to, and leaves without dragging the grid
+                // sideways behind it.
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .opacity))
+        } else {
+            grid.transition(.opacity)
         }
     }
 
-    private var content: some View {
+    private var grid: some View {
         NotchWidgetCanvas(
             model: model, states: states, appOverrides: appOverrides,
             onConfigureWidget: onConfigureWidget,
@@ -181,7 +213,7 @@ public struct NotchContentView: View {
             // camera housing on a notched display, so the text was half
             // hidden on exactly the machines this app is for — and the
             // selection outline and handles say what to do without words.
-            if belowFoldCount > 0 {
+            if belowFoldCount > 0, configuring == nil {
                 // Below the fold, not lost. Saying so beats silently showing
                 // fewer numbers than the user added.
                 Text("+\(belowFoldCount) below")
@@ -194,15 +226,20 @@ public struct NotchContentView: View {
                     .transition(.opacity)
             }
 
-            // Only in edit mode, beside Done. Adding a widget is a thing you
-            // do *while* arranging them, and a permanent button here would
-            // sit next to Close competing with the one control that is not
-            // destructive.
-            if model.isEditing {
-                addWidgetButton
+            if configuring != nil {
+                doneConfiguringButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            } else {
+                // Only in edit mode, beside Done. Adding a widget is a thing
+                // you do *while* arranging them, and a permanent button here
+                // would sit next to Close competing with the one control that
+                // is not destructive.
+                if model.isEditing {
+                    addWidgetButton
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                }
+                editButton
             }
-            editButton
             headerButton("xmark", help: "Close", action: onClose)
         }
         // Filling the band before it is given a height, so the row's contents
@@ -273,6 +310,28 @@ public struct NotchContentView: View {
     }
 
     /// Opens the gallery. Labelled, like Done, because the two read as a pair.
+    /// Leaves configuration. The same shape as Done in edit mode, because it
+    /// is the same idea: finish here and go back to the grid.
+    private var doneConfiguringButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.26)) { view.configuringID = nil }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text("Done")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(NotchTheme.editHighlight.opacity(0.9)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.white)
+        .help("Finish configuring")
+    }
+
     private var addWidgetButton: some View {
         Button(action: onAddWidget) {
             HStack(spacing: 5) {
@@ -426,8 +485,15 @@ public struct NotchContentView: View {
     private var expandedSize: CGSize {
         // Every vertical band the VStack actually contains. Leaving the
         // content's own padding out of this is what squeezed the header.
+        // Configuring is a fixed height of its own: it has a form in it, and
+        // sizing it to whatever row count the grid happened to be left on
+        // would cut the form off on a one-row notch.
+        let body =
+            configuring != nil
+            ? Self.configureHeight
+            : NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
         let content = NotchWidgetCanvas.contentTop
-            + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
+            + body
             + NotchWidgetCanvas.contentBottom
             + Self.grabberHeight
         return CGSize(
@@ -442,6 +508,9 @@ public struct NotchContentView: View {
     }
 
     static let grabberHeight: CGFloat = 19
+
+    /// How tall the panel opens while a widget is being configured.
+    static let configureHeight: CGFloat = 268
 
     /// Both ears together, at the expanded top corner radius.
     static let earOverhang: CGFloat = 56
