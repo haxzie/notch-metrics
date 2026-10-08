@@ -76,15 +76,15 @@ struct WidgetConfigPanel: View {
                 removeButton
             }
             .padding(.trailing, 14)
-            .padding(.bottom, 6)
+            // Clear of the fade, so the last control is reachable rather than
+            // sitting permanently under the blur.
+            .padding(.bottom, Self.bottomFadeHeight)
         }
-        // Pushed down past the title bar. Starting it at the window's top
-        // meant the band sat *over* the bar, frosting it and ending on a hard
-        // line just below it — the fade has to begin where the content does.
         // Without this the scroll view paints an opaque backing and the
-        // window's glass is invisible behind it — which is most of what made
-        // the first version of this look like a dialog box from another app.
+        // notch's own fill shows through nothing — the panel ends up looking
+        // like a dialog from another app pasted into it.
         .scrollContentBackground(.hidden)
+        .overlay(alignment: .bottom) { bottomFade }
     }
 
     private func connectionSection(_ binding: Binding<NotchWidget>) -> some View {
@@ -237,6 +237,48 @@ struct WidgetConfigPanel: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
+
+    /// A progressive blur along the bottom edge.
+    ///
+    /// The pane is a fixed height and the form is taller than it, so there is
+    /// almost always something below the fold — and a column that simply
+    /// stopped at the edge gave no sign of it.
+    ///
+    /// `.ultraThinMaterial` blurs what is behind it *within the window*, which
+    /// here is the scrolling form, so this is a real blur of the rows passing
+    /// under it rather than a tint laid over them. Three stacked bands rather
+    /// than one: a single masked blur still ends on a line you can see, and
+    /// stacking shorter bands ramps the strength instead of only the opacity.
+    private var bottomFade: some View {
+        ZStack(alignment: .bottom) {
+            fadeBand(height: Self.bottomFadeHeight)
+            fadeBand(height: Self.bottomFadeHeight * 0.66)
+            fadeBand(height: Self.bottomFadeHeight * 0.38)
+        }
+        .frame(height: Self.bottomFadeHeight)
+        .allowsHitTesting(false)
+    }
+
+    private func fadeBand(height: CGFloat) -> some View {
+        Rectangle()
+            .fill(.clear)
+            .background(.ultraThinMaterial)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.3),
+                        .init(color: .black.opacity(0.55), location: 0.6),
+                        .init(color: .black.opacity(0.85), location: 0.82),
+                        .init(color: .black, location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom)
+            )
+            .frame(height: height)
+            .frame(maxWidth: .infinity, alignment: .bottom)
+    }
+
+    private static let bottomFadeHeight: CGFloat = 34
 
     // MARK: - Pieces
 
