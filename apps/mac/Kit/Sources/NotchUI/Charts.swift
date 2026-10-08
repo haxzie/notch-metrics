@@ -193,20 +193,14 @@ public struct MiniBars: View {
                 let bar = CGRect(
                     x: rect.minX + CGFloat(index) * slot + (slot - barWidth) / 2,
                     y: rect.maxY - height, width: barWidth, height: height)
-                // The same top-down falloff as the sparkline's area, so the
-                // two chart kinds sit next to each other without one looking
-                // heavier than the other. Anchored to the rect, not the bar,
-                // or a short bar would be uniformly pale.
+                // Solid. The gradient matched the sparkline's area fill, but
+                // a bar is a discrete quantity rather than a region under a
+                // line — fading it towards the baseline made short bars read
+                // as faint ones, which is a second meaning the chart does not
+                // have.
                 context.fill(
                     Path(roundedRect: bar, cornerRadius: min(1.5, barWidth / 2)),
-                    with: .linearGradient(
-                        Gradient(stops: [
-                            .init(color: tint.opacity(0.95), location: 0),
-                            .init(color: tint.opacity(0.55), location: 0.45),
-                            .init(color: tint.opacity(0.18), location: 1),
-                        ]),
-                        startPoint: CGPoint(x: rect.midX, y: rect.minY),
-                        endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
+                    with: .color(tint.opacity(0.9)))
             }
         }
         .drawingGroup(opaque: false)

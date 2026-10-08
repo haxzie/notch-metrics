@@ -51,3 +51,7 @@ account.
 Refetch a widget when its configuration changes. Switching account or range
 updated the stored widget but left the tile showing the old number until the
 five-minute timer came round.
+
+Draw bar charts with a solid fill. They used the sparkline's top-down
+falloff, which made a short bar read as a faint one — a second meaning the
+chart does not have.
