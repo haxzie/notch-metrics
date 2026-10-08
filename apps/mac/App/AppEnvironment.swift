@@ -200,6 +200,14 @@ final class AppEnvironment {
         let widgets = layoutModel.layout.widgets.filter {
             $0.integrationId?.isEmpty == false && $0.metric?.isEmpty == false
         }
+
+        // A widget that lost its account keeps its last number otherwise —
+        // a figure on screen attributed to nothing. Say what it needs instead.
+        let fetchable = Set(widgets.map(\.id))
+        for widget in layoutModel.layout.widgets where !fetchable.contains(widget.id) {
+            states[widget.id] = .needsSetup("Pick a connection")
+        }
+
         guard !widgets.isEmpty else {
             states = Self.placeholderStates(for: layoutModel.layout, signedIn: true)
             notch.update(states: states)

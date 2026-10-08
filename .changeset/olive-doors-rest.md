@@ -47,3 +47,7 @@ Name the connection on a tile, not the app. Somebody with two Stripe
 accounts had two tiles both saying "Stripe". The name is editable from the
 widget's configuration, and renaming it changes every tile reading that
 account.
+
+Refetch a widget when its configuration changes. Switching account or range
+updated the stored widget but left the tile showing the old number until the
+five-minute timer came round.

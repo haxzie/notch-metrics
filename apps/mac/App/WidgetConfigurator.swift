@@ -18,7 +18,6 @@ struct WidgetConfigPanel: View {
 
     @Environment(AppEnvironment.self) private var env
     @State private var model = WidgetCatalogueModel()
-    @State private var preview: TileState = .loading
     @State private var draft: NotchWidget?
     /// The name being typed, or nil when the field is just showing the
     /// server's. Optional rather than a String seeded on appear: seeding it
@@ -104,7 +103,6 @@ struct WidgetConfigPanel: View {
             // "no longer in the notch" state for a widget that was plainly
             // sitting in the preview beside it.
             draft = env.layoutModel.layout.widgets.first { $0.id == widgetId }
-            await refreshPreview()
             await model.load(env: env)
         }
     }
@@ -157,7 +155,7 @@ struct WidgetConfigPanel: View {
                             var next = binding.wrappedValue
                             next.integrationId = newId
                             binding.wrappedValue = next
-                            Task { await refreshPreview() }
+                            Task { await env.refresh() }
                         }
                     }
                 } else {
@@ -180,7 +178,7 @@ struct WidgetConfigPanel: View {
                                 var next = binding.wrappedValue
                                 next.integrationId = id.isEmpty ? nil : id
                                 binding.wrappedValue = next
-                                Task { await refreshPreview() }
+                                Task { await env.refresh() }
                             }
                         )) {
                             Text("None").tag("")
@@ -201,7 +199,7 @@ struct WidgetConfigPanel: View {
                             var next = binding.wrappedValue
                             next.integrationId = newId
                             binding.wrappedValue = next
-                            Task { await refreshPreview() }
+                            Task { await env.refresh() }
                         }
                     }
                     .padding(.horizontal, 12)
@@ -268,7 +266,7 @@ struct WidgetConfigPanel: View {
                             var next = binding.wrappedValue
                             next.range = range
                             binding.wrappedValue = next
-                            Task { await refreshPreview() }
+                            Task { await env.refresh() }
                         }
                     )) {
                         ForEach(TimeRange.allCases, id: \.self) { range in
@@ -348,27 +346,5 @@ struct WidgetConfigPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-    }
-
-    private func refreshPreview() async {
-        guard let draft, let metric = draft.metric else { return }
-        guard let connection = draft.integrationId else {
-            preview = .needsSetup("Pick a connection")
-            return
-        }
-        preview = .loading
-        do {
-            let result = try await env.api.metric(
-                integrationId: connection,
-                metric: metric,
-                granularity: draft.granularity.rawValue,
-                range: draft.range.rawValue)
-            switch result {
-            case .success(let series): preview = .value(series)
-            case .failure(let failure): preview = .failed(reason: failure.message)
-            }
-        } catch {
-            preview = .failed(reason: "Could not load a preview")
-        }
     }
 }
