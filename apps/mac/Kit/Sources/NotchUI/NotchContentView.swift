@@ -231,6 +231,8 @@ public struct NotchContentView: View {
             }
 
             if configuring != nil {
+                cancelConfiguringButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 doneConfiguringButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
             } else {
@@ -316,9 +318,38 @@ public struct NotchContentView: View {
     /// Opens the gallery. Labelled, like Done, because the two read as a pair.
     /// Leaves configuration. The same shape as Done in edit mode, because it
     /// is the same idea: finish here and go back to the grid.
+    /// Puts the widget back as it was and leaves.
+    ///
+    /// Left of Done, which is where the system puts the action that is not the
+    /// default. It reverts the *configuration* only — a widget that was
+    /// dragged in stays in, because dropping it was a separate act from
+    /// setting it up.
+    private var cancelConfiguringButton: some View {
+        Button {
+            if let snapshot = view.configuringSnapshot { model.update(snapshot) }
+            withAnimation(.snappy(duration: 0.26)) { endConfiguring() }
+        } label: {
+            Text("Cancel")
+                .font(.system(size: 11, weight: .medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color.white.opacity(0.1)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(NotchTheme.secondaryText)
+        .help("Discard these changes")
+    }
+
+    private func endConfiguring() {
+        view.configuringID = nil
+        view.configuringSnapshot = nil
+    }
+
     private var doneConfiguringButton: some View {
         Button {
-            withAnimation(.snappy(duration: 0.26)) { view.configuringID = nil }
+            withAnimation(.snappy(duration: 0.26)) { endConfiguring() }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "checkmark")

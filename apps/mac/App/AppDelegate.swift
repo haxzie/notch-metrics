@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func beginConfiguring(_ id: String) {
         env.layoutModel.isEditing = false
         withAnimation(.snappy(duration: 0.28)) {
-            env.notch.configuringID = id
+            env.notch.beginConfiguring(id)
         }
     }
 

@@ -52,6 +52,14 @@ public final class NotchViewModel {
     /// already the thing being changed, so it hosts this instead.
     public var configuringID: String?
 
+    /// The widget as it was when configuring began.
+    ///
+    /// The form writes every change straight through to the layout, because
+    /// the tile is on screen behind it and a preview that lags the controls is
+    /// worse than one that does not. That leaves nothing buffered to throw
+    /// away, so Cancel needs a copy taken on the way in.
+    public var configuringSnapshot: NotchWidget?
+
     /// The controls for the widget being configured.
     ///
     /// Supplied by the app target, which is the only place that knows about

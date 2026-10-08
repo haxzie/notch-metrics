@@ -31,6 +31,15 @@ public final class NotchWindowController {
         get { view?.configuringID }
         set { view?.configuringID = newValue }
     }
+
+    /// Opens the configure pane, remembering what the widget looked like so
+    /// Cancel has something to put back.
+    public func beginConfiguring(_ id: String) {
+        guard let view, let widget = model.layout.widgets.first(where: { $0.id == id })
+        else { return }
+        view.configuringSnapshot = widget
+        view.configuringID = id
+    }
     public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
     public var onRefresh: () -> Void = {}
 
