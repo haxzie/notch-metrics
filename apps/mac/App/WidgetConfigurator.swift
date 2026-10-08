@@ -74,6 +74,7 @@ struct WidgetConfiguratorView: View {
             }
             .padding(20)
         }
+        .overlay(alignment: .top) { topFade }
         // Reserves the title bar's height rather than guessing at a top
         // padding: the content now runs underneath it, and scrolling up under
         // a transparent title bar is the look — colliding with it is not.
@@ -147,13 +148,16 @@ struct WidgetConfiguratorView: View {
             if let entry {
                 Divider().opacity(0.4)
                 HStack {
+                    // Right, with the pickers. Every other control in this
+                    // window is on the trailing edge, and a button alone on
+                    // the left reads as belonging to a different group.
+                    Spacer(minLength: 0)
                     ConnectButton(app: entry, model: model) { newId in
                         var next = binding.wrappedValue
                         next.integrationId = newId
                         binding.wrappedValue = next
                         Task { await refreshPreview() }
                     }
-                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -265,6 +269,44 @@ struct WidgetConfiguratorView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    /// A progressive blur over the top edge.
+    ///
+    /// Content runs under the title bar, and a plain scroll cut it off against
+    /// a hard line. `.ultraThinMaterial` blurs what is behind it *within the
+    /// window*, which here is the scrolling content — so a masked band of it
+    /// is a real blur of the rows passing underneath, not a tint laid on top.
+    ///
+    /// Three bands rather than one. A single masked blur still ends on a
+    /// visible edge where its mask runs out; stacking shorter bands ramps the
+    /// *strength* of the blur rather than only its opacity, which is what
+    /// makes the falloff read as gradual.
+    private var topFade: some View {
+        ZStack(alignment: .top) {
+            fadeBand(height: 54)
+            fadeBand(height: 38)
+            fadeBand(height: 22)
+        }
+        .frame(height: 54)
+        .allowsHitTesting(false)
+    }
+
+    private func fadeBand(height: CGFloat) -> some View {
+        Rectangle()
+            .fill(.clear)
+            .background(.ultraThinMaterial)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black.opacity(0.65), location: 0.45),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom)
+            )
+            .frame(height: height)
+            .frame(maxWidth: .infinity, alignment: .top)
     }
 
     // MARK: - Pieces
