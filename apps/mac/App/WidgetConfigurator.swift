@@ -19,11 +19,6 @@ struct WidgetConfigPanel: View {
     @Environment(AppEnvironment.self) private var env
     @State private var model = WidgetCatalogueModel()
     @State private var draft: NotchWidget?
-    /// The name being typed, or nil when the field is just showing the
-    /// server's. Optional rather than a String seeded on appear: seeding it
-    /// raced the catalogue load and left the field blank for a connection
-    /// that plainly had a name.
-    @State private var typedName: String?
 
     private var entry: ConnectorEntry? {
         guard let draft else { return nil }
@@ -54,26 +49,21 @@ struct WidgetConfigPanel: View {
         return entry?.connections.first { $0.id == id }
     }
 
-    /// Shows the server's name until somebody types over it.
-    private var nameField: Binding<String> {
+    /// The widget's own name, prefilled with the connection's.
+    ///
+    /// Prefilled by reading through to the connection rather than by copying
+    /// its label onto the widget: a copy taken on appear raced the catalogue
+    /// load and left the field blank for a connection that plainly had a
+    /// name. Clearing the field goes back to following the connection.
+    private func nameField(_ binding: Binding<NotchWidget>) -> Binding<String> {
         Binding(
-            get: { typedName ?? selectedConnection?.label ?? "" },
-            set: { typedName = $0 })
-    }
-
-    private func commitRename() async {
-        guard let connection = selectedConnection, let typed = typedName else { return }
-        let trimmed = typed.trimmingCharacters(in: .whitespaces)
-        // Back to following the server either way: on success it is about to
-        // say the same thing, and on failure the field should not keep showing
-        // a name that was never accepted.
-        defer { typedName = nil }
-        guard !trimmed.isEmpty, trimmed != connection.label else { return }
-        guard (try? await env.api.rename(connection: connection.id, to: trimmed)) != nil
-        else { return }
-        await model.load(env: env)
-        // Every tile reading this account, not just this one.
-        await env.refreshConnectionNames()
+            get: { binding.wrappedValue.name ?? selectedConnection?.label ?? "" },
+            set: { typed in
+                var next = binding.wrappedValue
+                let trimmed = typed.trimmingCharacters(in: .whitespaces)
+                next.name = trimmed.isEmpty ? nil : typed
+                binding.wrappedValue = next
+            })
     }
 
     private var descriptor: MetricDescriptor? {
@@ -160,15 +150,14 @@ struct WidgetConfigPanel: View {
                     }
                 } else {
                     row("Name") {
-                        // Renames the connection, not the widget: a tile says
-                        // which account it reads, so the name belongs to the
-                        // account and every tile using it changes together.
-                        TextField("", text: nameField)
+                        // Names this widget only. The connection keeps its
+                        // own name, and the other tiles reading it keep
+                        // showing that.
+                        TextField("", text: nameField(binding))
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)
                             .font(.system(size: 13))
                             .frame(width: 200)
-                            .onSubmit { Task { await commitRename() } }
                     }
                     Divider().opacity(0.4)
                     row("Account") {

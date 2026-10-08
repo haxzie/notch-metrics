@@ -44,9 +44,9 @@ now: there is no series to draw over thirty days and no previous window to
 compare against, so both controls changed nothing.
 
 Name the connection on a tile, not the app. Somebody with two Stripe
-accounts had two tiles both saying "Stripe". The name is editable from the
-widget's configuration, and renaming it changes every tile reading that
-account.
+accounts had two tiles both saying "Stripe". Each widget can be given its own
+name from its configuration, prefilled with the connection's; changing it
+renames that tile only, not the account.
 
 Refetch a widget when its configuration changes. Switching account or range
 updated the stored widget but left the tile showing the old number until the

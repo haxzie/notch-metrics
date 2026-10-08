@@ -25,8 +25,9 @@ public struct WidgetTile: View {
     /// highlight on a tile the user cannot move is a promise the UI does not
     /// keep.
     public let isEditing: Bool
-    /// What the account is called. Falls back to the app's name, which is all
-    /// there is for a gallery preview or a widget with nothing connected.
+    /// What the account is called. Shown when the widget has no name of its
+    /// own; falls back to the app's name, which is all there is for a gallery
+    /// preview or a widget with nothing connected.
     public var connectionName: String?
     /// Whether the pointer is over this tile.
     ///
@@ -125,7 +126,7 @@ public struct WidgetTile: View {
         HStack(spacing: 4) {
             ConnectorIcon(app: app, size: markSize)
             if widget.size != .small {
-                Text(connectionName ?? app.name)
+                Text(widget.name ?? connectionName ?? app.name)
                     .font(.system(size: symbolSize - 1, weight: .semibold))
                     .foregroundStyle(NotchTheme.tertiaryText)
                     .lineLimit(1)

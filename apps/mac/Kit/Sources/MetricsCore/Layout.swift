@@ -108,6 +108,13 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     public var metric: String?
     public var customMetricId: String?
     public var title: String?
+    /// What the tile calls its source, in place of the connection's name.
+    ///
+    /// The widget's own, not the connection's: the field is prefilled from
+    /// the account so two Stripe tiles can be told apart, but typing over it
+    /// must not rename the account under every other tile reading it. Nil
+    /// means "say what the connection is called".
+    public var name: String?
     public var size: WidgetSize
     public var col: Int
     public var row: Int
@@ -125,7 +132,8 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         id: String = UUID().uuidString, kind: WidgetKind = .providerMetric,
         appId: String = AppCatalog.unknownId,
         integrationId: String? = nil, metric: String? = nil, customMetricId: String? = nil,
-        title: String? = nil, size: WidgetSize = .wide, col: Int = 0, row: Int = 0,
+        title: String? = nil, name: String? = nil, size: WidgetSize = .wide, col: Int = 0,
+        row: Int = 0,
         position: Int = 0, granularity: Granularity = .day, range: TimeRange = .month,
         chart: ChartKind = .sparkline, format: WidgetFormat? = nil,
         chartStyle: WidgetChartStyle? = nil, visible: Bool = true
@@ -137,6 +145,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         self.metric = metric
         self.customMetricId = customMetricId
         self.title = title
+        self.name = name
         self.size = size
         self.col = col
         self.row = row
@@ -150,7 +159,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, appId, integrationId, metric, customMetricId, title, size
+        case id, kind, appId, integrationId, metric, customMetricId, title, name, size
         case col, row, position, granularity, range, chart, format, chartStyle, visible
     }
 
@@ -162,6 +171,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         metric = try c.decodeIfPresent(String.self, forKey: .metric)
         customMetricId = try c.decodeIfPresent(String.self, forKey: .customMetricId)
         title = try c.decodeIfPresent(String.self, forKey: .title)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
         size = try c.decodeIfPresent(WidgetSize.self, forKey: .size) ?? .wide
         col = try c.decodeIfPresent(Int.self, forKey: .col) ?? 0
         row = try c.decodeIfPresent(Int.self, forKey: .row) ?? 0

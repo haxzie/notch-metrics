@@ -63,7 +63,7 @@ public struct WidgetConfigurePane: View {
                 widget: widget, app: app, state: state, connectionName: connectionName)
                 .frame(width: tileSize.width, height: tileSize.height)
                 .animation(.snappy(duration: 0.22), value: widget.size)
-            Text(connectionName ?? app.name)
+            Text(widget.name ?? connectionName ?? app.name)
                 .font(.system(size: 10.5))
                 .foregroundStyle(NotchTheme.secondaryText)
                 .lineLimit(1)
