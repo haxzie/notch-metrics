@@ -140,15 +140,66 @@ describe("dodo payments pagination", () => {
   });
 });
 
+describe("dodo payments verify", () => {
+  it("offers everything to a key that can read both lists", async () => {
+    const ctx = stubContext({
+      "/payments": { items: [] },
+      "/subscriptions": { items: [sub({ amount: 100, currency: "EUR" })] },
+    });
+    const result = await dodopayments.verify(ctx, creds);
+    expect(result.availableMetrics).toEqual([
+      "revenue",
+      "recent_payments",
+      "mrr",
+      "active_subscribers",
+    ]);
+    expect(result.currency).toBe("EUR");
+  });
+
+  it("narrows to revenue and payments when the key lacks subscriptions:read", async () => {
+    // The real case: a live key scoped to payments and refunds. Dodo answers
+    // 403 INSUFFICIENT_PERMISSION on /subscriptions, which used to be
+    // reported as a bad key.
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          {
+            payment_id: "p",
+            total_amount: 1,
+            currency: "usd",
+            status: "succeeded",
+            created_at: "2026-10-01T00:00:00Z",
+          },
+        ],
+      },
+      "/subscriptions": { __status: 403 },
+    });
+    const result = await dodopayments.verify(ctx, creds);
+    expect(result.availableMetrics).toEqual(["revenue", "recent_payments"]);
+    expect(result.currency).toBe("USD");
+  });
+
+  it("rejects a key that can read nothing, naming the scopes", async () => {
+    const ctx = stubContext({
+      "/payments": { __status: 403 },
+      "/subscriptions": { __status: 403 },
+    });
+    await expect(dodopayments.verify(ctx, creds)).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining("subscriptions:read"),
+    });
+  });
+});
+
 describe("dodo payments errors", () => {
   it("maps 401 to auth_failed so polling stops", async () => {
-    const ctx = stubContext({ "/subscriptions": { __status: 401 } });
+    const ctx = stubContext({ "/payments": { __status: 401 } });
     await expect(dodopayments.verify(ctx, creds)).rejects.toMatchObject({ code: "auth_failed" });
   });
 
   it("carries Retry-After through a 429", async () => {
     const ctx = stubContext({
-      "/subscriptions": { __status: 429, __headers: { "retry-after": "30" } },
+      "/payments": { __status: 429, __headers: { "retry-after": "30" } },
     });
     await expect(dodopayments.verify(ctx, creds)).rejects.toMatchObject({
       code: "rate_limited",
@@ -166,13 +217,13 @@ describe("dodo payments errors", () => {
 
 describe("dodo payments host selection", () => {
   it("sends a test-mode key to the test host", async () => {
-    const ctx = stubContext({ "/subscriptions": { items: [] } });
+    const ctx = stubContext({ "/payments": { items: [] }, "/subscriptions": { items: [] } });
     await dodopayments.verify(ctx, { ...creds, mode: "test" });
     expect(ctx.calls[0]).toContain("test.dodopayments.com");
   });
 
   it("sends a live-mode key to the live host", async () => {
-    const ctx = stubContext({ "/subscriptions": { items: [] } });
+    const ctx = stubContext({ "/payments": { items: [] }, "/subscriptions": { items: [] } });
     await dodopayments.verify(ctx, creds);
     expect(ctx.calls[0]).toContain("live.dodopayments.com");
   });
