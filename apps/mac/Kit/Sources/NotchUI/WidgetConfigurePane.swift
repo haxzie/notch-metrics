@@ -16,6 +16,7 @@ public struct WidgetConfigurePane: View {
     let widget: NotchWidget
     let app: MetricApp
     let state: TileState
+    let connectionName: String?
     let panel: @MainActor (NotchWidget) -> AnyView
     let onResize: (WidgetSize) -> Void
 
@@ -23,12 +24,14 @@ public struct WidgetConfigurePane: View {
         widget: NotchWidget,
         app: MetricApp,
         state: TileState,
+        connectionName: String? = nil,
         panel: @escaping @MainActor (NotchWidget) -> AnyView,
         onResize: @escaping (WidgetSize) -> Void = { _ in }
     ) {
         self.widget = widget
         self.app = app
         self.state = state
+        self.connectionName = connectionName
         self.panel = panel
         self.onResize = onResize
     }
@@ -53,10 +56,11 @@ public struct WidgetConfigurePane: View {
     private var preview: some View {
         VStack(spacing: 10) {
             Spacer(minLength: 0)
-            WidgetTile(widget: widget, app: app, state: state)
+            WidgetTile(
+                widget: widget, app: app, state: state, connectionName: connectionName)
                 .frame(width: tileSize.width, height: tileSize.height)
                 .animation(.snappy(duration: 0.22), value: widget.size)
-            Text(app.name)
+            Text(connectionName ?? app.name)
                 .font(.system(size: 10.5))
                 .foregroundStyle(NotchTheme.secondaryText)
                 .lineLimit(1)

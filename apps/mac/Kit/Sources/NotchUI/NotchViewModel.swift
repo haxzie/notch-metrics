@@ -21,6 +21,14 @@ public final class NotchViewModel {
     /// App identity from the server's provider manifests, once they load.
     public var appOverrides: [String: MetricApp] = [:]
 
+    /// What each connection is called, by integration id.
+    ///
+    /// A tile says which *account* it reads, not which app: somebody with two
+    /// Stripe accounts had two tiles both saying "Stripe". Server state rather
+    /// than something on the widget, because renaming a connection has to
+    /// change every tile using it at once.
+    public var connectionNames: [String: String] = [:]
+
     /// The size of the panel as actually rendered, reported back by the view.
     ///
     /// The window is much larger than what is drawn — it is sized once to the

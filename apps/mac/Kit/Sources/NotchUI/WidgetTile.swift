@@ -25,6 +25,9 @@ public struct WidgetTile: View {
     /// highlight on a tile the user cannot move is a promise the UI does not
     /// keep.
     public let isEditing: Bool
+    /// What the account is called. Falls back to the app's name, which is all
+    /// there is for a gallery preview or a widget with nothing connected.
+    public var connectionName: String?
     /// Whether the pointer is over this tile.
     ///
     /// Passed in rather than tracked here. A local `.onHover` is a second
@@ -35,12 +38,13 @@ public struct WidgetTile: View {
 
     public init(
         widget: NotchWidget, app: MetricApp, state: TileState, isEditing: Bool = false,
-        isHovered: Bool = false
+        isHovered: Bool = false, connectionName: String? = nil
     ) {
         self.widget = widget
         self.app = app
         self.state = state
         self.isEditing = isEditing
+        self.connectionName = connectionName
         self.isHovered = isHovered
     }
 
@@ -121,7 +125,7 @@ public struct WidgetTile: View {
         HStack(spacing: 4) {
             ConnectorIcon(app: app, size: markSize)
             if widget.size != .small {
-                Text(app.name)
+                Text(connectionName ?? app.name)
                     .font(.system(size: symbolSize - 1, weight: .semibold))
                     .foregroundStyle(NotchTheme.tertiaryText)
                     .lineLimit(1)

@@ -20,6 +20,11 @@ struct WidgetConfigPanel: View {
     @State private var model = WidgetCatalogueModel()
     @State private var preview: TileState = .loading
     @State private var draft: NotchWidget?
+    /// The name being typed, or nil when the field is just showing the
+    /// server's. Optional rather than a String seeded on appear: seeding it
+    /// raced the catalogue load and left the field blank for a connection
+    /// that plainly had a name.
+    @State private var typedName: String?
 
     private var entry: ConnectorEntry? {
         guard let draft else { return nil }
@@ -43,6 +48,34 @@ struct WidgetConfigPanel: View {
 
     /// Whether this metric can be drawn as a chart at all.
     private var usesChart: Bool { descriptor?.supportsSeries != false }
+
+    /// The connection this widget reads, if the catalogue knows it.
+    private var selectedConnection: ConnectorConnection? {
+        guard let id = draft?.integrationId else { return nil }
+        return entry?.connections.first { $0.id == id }
+    }
+
+    /// Shows the server's name until somebody types over it.
+    private var nameField: Binding<String> {
+        Binding(
+            get: { typedName ?? selectedConnection?.label ?? "" },
+            set: { typedName = $0 })
+    }
+
+    private func commitRename() async {
+        guard let connection = selectedConnection, let typed = typedName else { return }
+        let trimmed = typed.trimmingCharacters(in: .whitespaces)
+        // Back to following the server either way: on success it is about to
+        // say the same thing, and on failure the field should not keep showing
+        // a name that was never accepted.
+        defer { typedName = nil }
+        guard !trimmed.isEmpty, trimmed != connection.label else { return }
+        guard (try? await env.api.rename(connection: connection.id, to: trimmed)) != nil
+        else { return }
+        await model.load(env: env)
+        // Every tile reading this account, not just this one.
+        await env.refreshConnectionNames()
+    }
 
     private var descriptor: MetricDescriptor? {
         guard let draft, let metric = draft.metric else { return nil }
@@ -128,6 +161,18 @@ struct WidgetConfigPanel: View {
                         }
                     }
                 } else {
+                    row("Name") {
+                        // Renames the connection, not the widget: a tile says
+                        // which account it reads, so the name belongs to the
+                        // account and every tile using it changes together.
+                        TextField("", text: nameField)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .font(.system(size: 13))
+                            .frame(width: 200)
+                            .onSubmit { Task { await commitRename() } }
+                    }
+                    Divider().opacity(0.4)
                     row("Account") {
                         Picker("", selection: Binding(
                             get: { binding.wrappedValue.integrationId ?? "" },

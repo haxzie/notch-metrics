@@ -172,9 +172,25 @@ final class AppEnvironment {
         try? await Task.sleep(for: .milliseconds(700))
     }
 
+    /// Names every tile's account, so a tile can say which one it reads.
+    ///
+    /// Separate from the metric fetch: the labels change when somebody renames
+    /// a connection, not when a number does, and a failure here should leave
+    /// the tiles showing numbers rather than take them down with it.
+    func refreshConnectionNames() async {
+        guard isSignedIn else { return }
+        guard let all = try? await api.connections() else { return }
+        notch.update(
+            connectionNames: Dictionary(
+                uniqueKeysWithValues: all.map { ($0.id, $0.label) }))
+    }
+
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
     /// added so a new tile fills in rather than sitting on "Loading".
     func refresh() async {
+        // Alongside, not awaited: the tiles should not wait on the labels to
+        // show their numbers.
+        Task { await refreshConnectionNames() }
         guard isSignedIn else {
             states = Self.placeholderStates(for: layoutModel.layout, signedIn: false)
             notch.update(states: states)

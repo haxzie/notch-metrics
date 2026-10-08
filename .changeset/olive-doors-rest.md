@@ -42,3 +42,8 @@ Hide the range and chart controls for metrics that cannot use them. A
 snapshot — GitHub's stargazers, forks, open issues — is whatever it is right
 now: there is no series to draw over thirty days and no previous window to
 compare against, so both controls changed nothing.
+
+Name the connection on a tile, not the app. Somebody with two Stripe
+accounts had two tiles both saying "Stripe". The name is editable from the
+widget's configuration, and renaming it changes every tile reading that
+account.

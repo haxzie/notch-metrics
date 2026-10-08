@@ -124,6 +124,10 @@ public final class NotchWindowController {
     }
 
     /// App names and colours from the server's provider manifests.
+    public func update(connectionNames: [String: String]) {
+        view?.connectionNames = connectionNames
+    }
+
     public func update(appOverrides: [String: MetricApp]) {
         view?.appOverrides = appOverrides
     }
