@@ -346,7 +346,12 @@ public final class NotchWindowController {
         collapse(animated: true)
     }
 
-    /// Holds the notch open and in edit mode while the gallery is up.
+    /// Holds the notch open and in edit mode while a tile is being dragged
+    /// out of the gallery.
+    ///
+    /// Only for the drag, not for the whole time the gallery is up: the
+    /// gallery collapses the notch when it opens and after each drop, so the
+    /// two are not both on screen at once.
     ///
     /// A drag from another window takes the pointer nowhere near the notch,
     /// so the exit watch would collapse the drop target the moment the drag

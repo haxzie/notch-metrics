@@ -62,7 +62,7 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
             window.setFrame(Self.frame(), display: true)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            env.notch.holdOpenForGallery(true)
+            env.notch.close()
             return
         }
 
@@ -106,7 +106,11 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
 
-        env.notch.holdOpenForGallery(true)
+        // Out of the way, not held open. The gallery is the thing being
+        // looked at now, and a notch pinned open above it — in edit mode,
+        // dotted well and all — was two panels competing for one screen.
+        // `beginDrag` brings it back the moment there is a tile to drop.
+        env.notch.close()
     }
 
     func close() {
@@ -183,6 +187,16 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
 
         window?.ignoresMouseEvents = false
         window?.animator().alphaValue = 1
+
+        // Back out of the way once the gallery is back. Deferred, because the
+        // drop is delivered on the same mouse-up this monitor saw, and
+        // collapsing the notch first would take the drop target away before
+        // the tile landed on it.
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let self, self.isOpen, !self.isDragging else { return }
+            self.env.notch.close()
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
