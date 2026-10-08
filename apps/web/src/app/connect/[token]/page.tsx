@@ -143,6 +143,18 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
           setProblem(body.message ?? "We could not finish the connection.");
           return;
         }
+        // The success state first, then hand back to the app. This used to go
+        // straight to `returnTo`, which is a `notchmetrics://` URL — so the
+        // app opened and the tab was left sitting on the list of repositories
+        // with no sign that anything had worked.
+        // Functional, because the connector is only known from the state this
+        // is replacing — and reading it from the render scope would mean
+        // declaring it above a callback that does not otherwise need it.
+        setLoad((prev) =>
+          prev.phase === "select"
+            ? { phase: "done", connector: prev.connector, label: body.accountLabel ?? undefined }
+            : prev,
+        );
         window.location.href = body.returnTo;
       } catch {
         setProblem("We could not finish the connection.");
@@ -178,10 +190,24 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
   if (load.phase === "done") {
     return (
       <Shell connector={connector}>
-        <h1 className="text-xl font-semibold">{connector.name} is connected</h1>
+        <span className="flex size-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-5"
+            aria-hidden="true"
+          >
+            <path d="m5 13 4 4L19 7" />
+          </svg>
+        </span>
+        <h1 className="text-xl font-semibold">Successfully connected</h1>
         <p className="text-sm text-white/60">
-          {load.label ? `Connected as ${load.label}. ` : ""}You can close this tab and go back to
-          the app.
+          {load.label ? `${connector.name} · ${load.label}. ` : `${connector.name} is ready. `}
+          You can close this tab and go back to the app.
         </p>
       </Shell>
     );
