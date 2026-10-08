@@ -14,7 +14,7 @@ to `main` that touches the relevant paths; everything here also works by hand.
 pnpm --filter @notch/api typecheck
 pnpm --filter @notch/api test
 pnpm --filter @notch/api migrate:remote     # BEFORE the deploy
-pnpm --filter @notch/api deploy
+pnpm --filter @notch/api run deploy      # `run` matters: bare `deploy` is pnpm's own command
 ```
 
 **Migrations first, always.** Every migration in this repository is additive,
