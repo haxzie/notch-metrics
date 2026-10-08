@@ -66,28 +66,11 @@ struct WidgetGalleryView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // In the sidebar rather than over the grid: it filters the whole
-            // catalogue, including which connectors are listed here, so it
-            // belongs with the list it changes.
-            HStack(spacing: 7) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                TextField("Search Widgets", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.black.opacity(0.22)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
-            .padding(.horizontal, 14)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+            Text("Add Widgets")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
@@ -160,8 +143,26 @@ struct WidgetGalleryView: View {
     // MARK: - Detail
 
     private var detail: some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            // Across the top of the grid, where it was. It reads as a filter
+            // on what is on show rather than on the sidebar's list, which is
+            // the way round people kept expecting.
+            HStack(spacing: 9) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                TextField("Search widgets…", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 50)
+
+            Divider().opacity(0.5)
+
+            content
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -244,14 +245,16 @@ private struct GalleryCard: View {
     private var app: MetricApp { AppCatalog.resolve(connector.id) }
 
     var body: some View {
+        // No background and no border of its own. `WidgetTile` already draws a
+        // rounded fill, a hairline and a clip — wrapping it in a second set
+        // put a card inside a card, which is what made these look stacked.
+        //
+        // Width comes from the grid cell rather than a fixed number, so the
+        // columns line up instead of each tile sitting narrower than the
+        // space allotted to it.
         WidgetTile(widget: draft, app: app, state: .value(GallerySample.series(for: metric)))
-            .frame(width: 176, height: 118)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.black.opacity(0.22)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            .frame(height: 118)
+            .frame(maxWidth: .infinity)
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .help(metric.methodology)
             // The payload the notch's drop destination decodes. A plain string
