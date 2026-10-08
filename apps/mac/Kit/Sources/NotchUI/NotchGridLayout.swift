@@ -283,6 +283,23 @@ public final class NotchLayoutModel {
         persist(layout)
     }
 
+    /// Moves every widget off one connection and onto another.
+    ///
+    /// Reconnecting mints a *new* integration rather than refreshing the old
+    /// one in place, so without this the widgets keep pointing at the dead
+    /// credential and the reconnect appears to have done nothing.
+    @discardableResult
+    public func repoint(from oldID: String, to newID: String) -> Int {
+        var moved = 0
+        for index in layout.widgets.indices
+        where layout.widgets[index].integrationId == oldID {
+            layout.widgets[index].integrationId = newID
+            moved += 1
+        }
+        if moved > 0 { persist(layout) }
+        return moved
+    }
+
     /// Replaces a widget that is already on the grid.
     ///
     /// Reflowed, because a size change has to make room the same way a handle

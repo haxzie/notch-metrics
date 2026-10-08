@@ -110,33 +110,58 @@ struct ConnectionsPane: View {
         }
     }
 
-    /// Sends the user back through the connector's own browser flow.
+    /// Sends the user back through the connector's browser flow, then moves
+    /// everything onto whatever that produced.
     ///
-    /// The same link as a first connection: re-authorising replaces the stored
-    /// credential on the row that is already there, so there is no separate
-    /// reconnect endpoint to call.
+    /// Completing a connect link always *mints* an integration — there is no
+    /// endpoint that refreshes one in place. So a reconnect leaves two rows:
+    /// the dead one every widget still points at, and a working one nothing
+    /// uses. This adopts the new row — widgets repointed, the old label kept,
+    /// the dead row disconnected — so the two are one again.
     private func reconnect(_ connection: Integration) async {
         reconnecting = connection.id
         defer { reconnecting = nil }
+
+        let before = Set(loaded().map(\.id))
         do {
             let link = try await env.api.connectLink(for: connection.provider)
             NSWorkspace.shared.open(link.url)
         } catch {
             return
         }
+
         // Polls rather than waiting on the `notchmetrics://connected`
-        // callback: the user may finish in a browser that never hands focus
+        // callback: somebody may finish in a browser that never hands focus
         // back, and the row would sit broken until the pane was reopened.
-        for _ in 0..<30 {
+        for _ in 0..<60 {
             try? await Task.sleep(for: .seconds(2))
             if Task.isCancelled { return }
             await model.load(env: env)
-            if case .loaded(let all) = model.state,
-               all.first(where: { $0.id == connection.id })?.status != "auth_failed"
-            {
-                return
-            }
+            guard
+                let fresh = loaded().first(where: {
+                    !before.contains($0.id) && $0.provider == connection.provider
+                })
+            else { continue }
+            await adopt(fresh, replacing: connection)
+            return
         }
+    }
+
+    private func adopt(_ fresh: Integration, replacing old: Integration) async {
+        env.layoutModel.repoint(from: old.id, to: fresh.id)
+        // The new row comes back named "… (2)", because the old one still
+        // holds the name. Taking it back is what makes this read as the same
+        // connection working again rather than as a replacement for it.
+        if fresh.label != old.label {
+            await model.rename(fresh, to: old.label, env: env)
+        }
+        await model.remove(old, env: env)
+        await env.refresh()
+    }
+
+    private func loaded() -> [Integration] {
+        if case .loaded(let all) = model.state { return all }
+        return []
     }
 }
 
