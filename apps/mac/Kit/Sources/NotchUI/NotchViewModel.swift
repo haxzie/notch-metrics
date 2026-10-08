@@ -29,6 +29,15 @@ public final class NotchViewModel {
     /// change every tile using it at once.
     public var connectionNames: [String: String] = [:]
 
+    /// Metrics whose number depends on the widget's time window, by
+    /// `NotchWidget.metricKey`.
+    ///
+    /// Those tiles write the window into their title. From the server's
+    /// catalogue and the installed plugins rather than stored on the widget:
+    /// the descriptor is the one place that knows, and a copy on every widget
+    /// would be wrong for every widget made before the copy existed.
+    public var timeWindowedMetrics: Set<String> = []
+
     /// The size of the panel as actually rendered, reported back by the view.
     ///
     /// The window is much larger than what is drawn — it is sized once to the

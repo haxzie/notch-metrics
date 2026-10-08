@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dodopayments } from "../src/providers/dodopayments/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { stubContext } from "./helpers.ts";
+import { scalar, stubContext } from "./helpers.ts";
 
 const creds = { api_key: "dodo_test_abcdefghijklmnopqrst", mode: "live" as const };
 
@@ -175,5 +175,38 @@ describe("dodo payments host selection", () => {
     const ctx = stubContext({ "/subscriptions": { items: [] } });
     await dodopayments.verify(ctx, creds);
     expect(ctx.calls[0]).toContain("live.dodopayments.com");
+  });
+});
+
+describe("dodo recent payments", () => {
+  it("lists succeeded payments with the customer", async () => {
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          {
+            payment_id: "p1",
+            total_amount: 1_900,
+            currency: "USD",
+            status: "succeeded",
+            created_at: "2026-10-05T10:00:00Z",
+            customer: { name: "Ada", email: "ada@example.com" },
+          },
+          {
+            payment_id: "p2",
+            total_amount: 1_900,
+            currency: "USD",
+            status: "processing",
+            created_at: "2026-10-04T10:00:00Z",
+          },
+        ],
+      },
+    });
+    const series = await dodopayments.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "recent_payments",
+    });
+    expect(series.items?.map((i) => i.id)).toEqual(["p1"]);
+    expect(scalar(series.items?.[0]).label).toBe("Ada");
+    expect(series.value).toBe(1_900);
   });
 });

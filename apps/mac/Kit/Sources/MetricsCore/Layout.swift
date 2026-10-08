@@ -187,6 +187,43 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
+extension NotchWidget {
+    /// The name on the tile before any time window is appended.
+    public var baseTitle: String {
+        title ?? metric ?? customMetricId ?? "Metric"
+    }
+
+    /// The label the tile shows.
+    ///
+    /// A widget whose number depends on a time window carries that window in
+    /// its title — `Revenue · 30d` — because "Revenue" alone does not say
+    /// whether it is today's, this month's or this year's, and the range is
+    /// otherwise only visible with the configure pane open. The middle dot
+    /// is the separator used everywhere else a qualifier follows a name,
+    /// such as "Connected · Acme Inc".
+    ///
+    /// Whether the window means anything is the caller's to say — it comes
+    /// from the metric's descriptor, which this package does not hold. A
+    /// snapshot such as MRR or stargazers has no window and gets no suffix;
+    /// a metric with a window fixed by its provider says so in its own label.
+    public func displayTitle(showingRange: Bool) -> String {
+        showingRange ? "\(baseTitle) · \(range.rawValue)" : baseTitle
+    }
+
+    /// Identifies the metric this widget reads, for looking up its descriptor.
+    ///
+    /// Provider metrics are keyed by app and metric id; custom metrics by
+    /// plugin id. Nil for a widget that reads nothing, such as a divider.
+    public var metricKey: String? {
+        switch kind {
+        case .customMetric:
+            return customMetricId.map { "custom/\($0)" }
+        default:
+            return metric.map { "\(appId)/\($0)" }
+        }
+    }
+}
+
 public struct NotchLayout: Codable, Sendable, Hashable {
     public static let columns = 6
 

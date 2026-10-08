@@ -16,6 +16,7 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   new_subscribers: ["signups", "new customers", "growth", "acquisition"],
   churned_subscribers: ["churn", "cancellations", "lost", "attrition"],
   trials: ["free trial", "trialling", "evaluating"],
+  recent_payments: ["payments", "transactions", "orders", "charges", "latest", "list", "feed"],
 
   visitors: ["users", "traffic", "uniques", "audience", "people"],
   pageviews: ["views", "hits", "traffic", "impressions"],

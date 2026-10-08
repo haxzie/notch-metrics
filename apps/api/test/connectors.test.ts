@@ -334,3 +334,12 @@ describe("catalogue caching", () => {
     expect(again.status).toBe(304);
   });
 });
+
+describe("connectors caching", () => {
+  it("tells caches the body varies by Authorization", async () => {
+    // Without this a URL-keyed cache serves a signed-in client the anonymous
+    // body — the one with no connections in it — for the next five minutes.
+    const response = await get("/v1/connectors");
+    expect(response.headers.get("vary")?.toLowerCase()).toContain("authorization");
+  });
+});

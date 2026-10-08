@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -103,6 +104,7 @@ interface DodoPayment {
   currency: string;
   status: string;
   created_at: string;
+  customer?: { name?: string | null; email?: string | null } | null;
 }
 
 /**
@@ -151,7 +153,7 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
       page_number: 0,
     });
 
-    const available: MetricId[] = ["mrr", "revenue", "active_subscribers"];
+    const available: MetricId[] = ["mrr", "revenue", "active_subscribers", "recent_payments"];
     const first = body.items?.[0];
 
     return {
@@ -172,6 +174,8 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
         return activeSubscribers(ctx, creds);
       case "revenue":
         return revenue(ctx, creds, request);
+      case "recent_payments":
+        return latestPayments(ctx, creds);
       default:
         throw new ProviderError("unsupported", `Dodo Payments does not provide ${request.metric}.`);
     }
@@ -275,4 +279,27 @@ async function revenue(
     previousValue,
     note: join(note, truncationNote(truncated)),
   };
+}
+
+/**
+ * The newest payments that actually took money. Dodo lists newest first, so
+ * one page over-fetched by a factor of two covers a run of failed attempts.
+ */
+async function latestPayments(ctx: AdapterContext, creds: DodoCredentials): Promise<RawSeries> {
+  const body = await get<DodoList<DodoPayment>>(ctx, creds, "/payments", {
+    page_size: RECENT_PAYMENTS_LIMIT * 2,
+    page_number: 0,
+  });
+  const rows = (body.items ?? [])
+    .filter((payment) => payment.status === "succeeded")
+    .map((payment) => ({
+      id: payment.payment_id,
+      t: new Date(payment.created_at),
+      label: payment.customer?.name || payment.customer?.email || "Customer",
+      detail: null,
+      amount: payment.total_amount,
+      currency: payment.currency.toUpperCase(),
+      status: payment.status,
+    }));
+  return recentPayments(ctx, rows);
 }

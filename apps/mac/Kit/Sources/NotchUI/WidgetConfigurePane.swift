@@ -17,6 +17,8 @@ public struct WidgetConfigurePane: View {
     let app: MetricApp
     let state: TileState
     let connectionName: String?
+    /// Whether the tile writes its time window into the title. See `WidgetTile`.
+    let showsRange: Bool
     let panel: @MainActor (NotchWidget) -> AnyView
     let onResize: (WidgetSize) -> Void
 
@@ -25,6 +27,7 @@ public struct WidgetConfigurePane: View {
         app: MetricApp,
         state: TileState,
         connectionName: String? = nil,
+        showsRange: Bool = false,
         panel: @escaping @MainActor (NotchWidget) -> AnyView,
         onResize: @escaping (WidgetSize) -> Void = { _ in }
     ) {
@@ -32,6 +35,7 @@ public struct WidgetConfigurePane: View {
         self.app = app
         self.state = state
         self.connectionName = connectionName
+        self.showsRange = showsRange
         self.panel = panel
         self.onResize = onResize
     }
@@ -60,7 +64,8 @@ public struct WidgetConfigurePane: View {
         VStack(spacing: 10) {
             Spacer(minLength: 0)
             WidgetTile(
-                widget: widget, app: app, state: state, connectionName: connectionName)
+                widget: widget, app: app, state: state, connectionName: connectionName,
+                showsRange: showsRange)
                 .frame(width: tileSize.width, height: tileSize.height)
                 .animation(.snappy(duration: 0.22), value: widget.size)
             Text(connectionName ?? app.name)

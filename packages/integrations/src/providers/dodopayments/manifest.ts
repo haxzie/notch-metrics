@@ -1,4 +1,5 @@
 import type { ProviderManifest } from "@notch/schemas";
+import { recentPaymentsDescriptor } from "../../list.ts";
 
 export const manifest: ProviderManifest = {
   id: "dodopayments",
@@ -67,6 +68,9 @@ export const manifest: ProviderManifest = {
       supportsCompare: false,
       methodology: "Subscriptions in status `active` right now.",
     },
+    recentPaymentsDescriptor(
+      "The latest succeeded payments, newest first, with the customer's name or email. The headline is their total in your currency.",
+    ),
   ],
   allowedHosts: ["live.dodopayments.com", "test.dodopayments.com"],
   status: "stable",

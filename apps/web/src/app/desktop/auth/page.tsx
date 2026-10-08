@@ -17,6 +17,15 @@ const CALLBACK = "notchmetrics://auth/callback";
 
 type Status = "working" | "needsSignIn" | "handed-off" | "failed";
 
+/** The login page, told to come back here with the challenge intact. */
+function loginUrl(): string {
+  const here =
+    typeof window === "undefined"
+      ? "/desktop/auth"
+      : window.location.pathname + window.location.search;
+  return `/login?next=${encodeURIComponent(here)}`;
+}
+
 export default function DesktopAuth() {
   const [status, setStatus] = useState<Status>("working");
   const [message, setMessage] = useState<string | null>(null);
@@ -42,7 +51,13 @@ export default function DesktopAuth() {
         });
 
         if (response.status === 401) {
+          // Straight to the login page, with this URL as the way back. The
+          // page used to stop here and show a "Sign in" button, which read
+          // as the sign-in page having failed to load rather than as a step
+          // on the way to it. The button below stays as the fallback for a
+          // browser that blocks the navigation.
           setStatus("needsSignIn");
+          window.location.replace(loginUrl());
           return;
         }
         if (!response.ok) throw new Error(String(response.status));
@@ -69,19 +84,15 @@ export default function DesktopAuth() {
 
       {status === "needsSignIn" && (
         <>
-          <h1 className="text-xl font-semibold">Sign in to continue</h1>
+          <h1 className="text-xl font-semibold">Taking you to sign in…</h1>
           <p className="text-sm text-white/60">
             Sign in and this page will finish connecting the app.
           </p>
           <a
-            href={`/login?next=${encodeURIComponent(
-              typeof window === "undefined"
-                ? "/desktop/auth"
-                : window.location.pathname + window.location.search,
-            )}`}
+            href={loginUrl()}
             className="brand-gradient rounded-full px-5 py-2.5 text-sm font-semibold text-black"
           >
-            Sign in
+            Continue
           </a>
         </>
       )}

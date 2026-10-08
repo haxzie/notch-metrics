@@ -182,6 +182,9 @@ export async function queryMetric(
       format: null,
       generatedAt: new Date().toISOString(),
       stale: false,
+      ...(raw.items
+        ? { items: raw.items.map((item) => ({ ...item, t: item.t.toISOString() })) }
+        : {}),
     };
 
     const result: MetricResult = { ok: true, series };

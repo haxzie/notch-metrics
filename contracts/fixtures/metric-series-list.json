@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "series": {
+    "integrationId": "int_4f2a9c",
+    "metric": "recent_payments",
+    "unit": "currency",
+    "currency": "USD",
+    "value": 14900,
+    "previousValue": null,
+    "delta": null,
+    "points": [
+      {
+        "t": "2026-10-05T12:00:00.000Z",
+        "v": 14900
+      }
+    ],
+    "granularity": "day",
+    "range": "30d",
+    "from": "2026-09-05T00:00:00.000Z",
+    "to": "2026-10-05T12:00:00.000Z",
+    "format": {
+      "decimals": 0,
+      "compact": true,
+      "prefix": "",
+      "suffix": ""
+    },
+    "generatedAt": "2026-10-05T12:00:00.000Z",
+    "stale": false,
+    "items": [
+      {
+        "id": "ch_1",
+        "t": "2026-10-05T11:42:00.000Z",
+        "label": "Ada Lovelace",
+        "detail": "Pro · yearly",
+        "amount": 9900,
+        "currency": "USD",
+        "status": "succeeded"
+      },
+      {
+        "id": "ch_2",
+        "t": "2026-10-05T09:10:00.000Z",
+        "label": "grace@example.com",
+        "detail": null,
+        "amount": 5000,
+        "currency": "USD",
+        "status": "refunded"
+      },
+      {
+        "id": "ch_3",
+        "t": "2026-10-04T22:05:00.000Z",
+        "label": "Linus",
+        "detail": "Team seat",
+        "amount": null,
+        "currency": null,
+        "status": null
+      }
+    ]
+  }
+}
