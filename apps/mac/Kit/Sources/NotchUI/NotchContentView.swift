@@ -527,7 +527,11 @@ public struct NotchContentView: View {
 
     /// Clear space under the configure pane, standing in for the grabber the
     /// grid has.
-    static let configureBottomInset: CGFloat = 16
+    ///
+    /// The same number as the inset down each side, not one of its own: the
+    /// pane has a visible boundary on three edges and the eye reads the gaps
+    /// together, so 16 against 18 looked like a mistake rather than a choice.
+    static var configureBottomInset: CGFloat { NotchWidgetCanvas.contentHorizontal }
 
     /// Both ears together, at the expanded top corner radius.
     static let earOverhang: CGFloat = 56
