@@ -143,7 +143,11 @@ public struct NotchContentView: View {
                 panel: view.configuratorPanel)
                 .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
                 .padding(.top, NotchWidgetCanvas.contentTop)
-                .padding(.bottom, NotchWidgetCanvas.contentBottom)
+                // Its own bottom inset. The grid gets that margin from the
+                // grabber sitting under it, and configuring has no grabber —
+                // so without this the last row of the form ran flush into the
+                // bottom edge of the panel.
+                .padding(.bottom, Self.configureBottomInset)
                 // In from the right, out by fading: the pane arrives as a
                 // place you moved to, and leaves without dragging the grid
                 // sideways behind it.
@@ -488,14 +492,19 @@ public struct NotchContentView: View {
         // Configuring is a fixed height of its own: it has a form in it, and
         // sizing it to whatever row count the grid happened to be left on
         // would cut the form off on a one-row notch.
-        let body =
+        //
+        // The two cases count different things below the body. The grid's
+        // margin comes from the grabber; configuring has no grabber and uses
+        // its own inset. Adding `grabberHeight` to both was counting a
+        // control that is not on screen, which is space the form could not
+        // use and padding the eye could not see.
+        let content: CGFloat =
             configuring != nil
-            ? Self.configureHeight
-            : NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
-        let content = NotchWidgetCanvas.contentTop
-            + body
-            + NotchWidgetCanvas.contentBottom
-            + Self.grabberHeight
+            ? NotchWidgetCanvas.contentTop + Self.configureHeight + Self.configureBottomInset
+            : NotchWidgetCanvas.contentTop
+                + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
+                + NotchWidgetCanvas.contentBottom
+                + Self.grabberHeight
         return CGSize(
             // Less the ears, which the panel frame adds back — the window is
             // a fixed 900 and a body at the cap would push them outside it,
@@ -510,7 +519,15 @@ public struct NotchContentView: View {
     static let grabberHeight: CGFloat = 19
 
     /// How tall the panel opens while a widget is being configured.
-    static let configureHeight: CGFloat = 268
+    ///
+    /// Enough for the preview beside two of the form's groups without the
+    /// third being clipped at the edge; the right-hand column scrolls for the
+    /// rest.
+    static let configureHeight: CGFloat = 300
+
+    /// Clear space under the configure pane, standing in for the grabber the
+    /// grid has.
+    static let configureBottomInset: CGFloat = 16
 
     /// Both ears together, at the expanded top corner radius.
     static let earOverhang: CGFloat = 56

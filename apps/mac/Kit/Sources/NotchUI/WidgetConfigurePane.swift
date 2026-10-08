@@ -73,15 +73,20 @@ public struct WidgetConfigurePane: View {
         "\(app.name) · \(widget.size.rawValue)"
     }
 
-    /// Scaled from the notch's own cell so the proportions are honest, capped
-    /// so a 6x2 does not push the panel wider than the screen.
+    /// Close to the notch's own cell, capped so a 6x2 does not push the panel
+    /// wider than the column.
+    ///
+    /// At 46 the preview was a little over half scale, and since the text
+    /// inside does not scale with it the headline figure truncated — a
+    /// preview showing "$2…" for a tile that renders "$20.69" is worse than
+    /// no preview.
     private var tileSize: CGSize {
-        let unit: CGFloat = 46
-        let gap: CGFloat = 8
-        let cols = min(CGFloat(widget.size.cols), 4)
+        let unit: CGFloat = 64
+        let gap: CGFloat = 9
+        let cols = min(CGFloat(widget.size.cols), 3)
         let rows = CGFloat(widget.size.rows)
         return CGSize(
             width: cols * unit + (cols - 1) * gap,
-            height: min(rows * unit + (rows - 1) * gap, 150))
+            height: min(rows * unit + (rows - 1) * gap, 168))
     }
 }
