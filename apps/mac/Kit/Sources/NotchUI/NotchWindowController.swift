@@ -35,9 +35,13 @@ public final class NotchWindowController {
     /// Opens the configure pane, remembering what the widget looked like so
     /// Cancel has something to put back.
     public func beginConfiguring(_ id: String) {
-        guard let view, let widget = model.layout.widgets.first(where: { $0.id == id })
-        else { return }
-        view.configuringSnapshot = widget
+        guard let view else { return }
+        // The snapshot is best-effort; the pane opens either way. Refusing to
+        // open because the widget could not be resolved *here* made this fail
+        // silently whenever it was called before the layout had loaded, and a
+        // Cancel with nothing to restore is a far smaller problem than a
+        // configure button that does nothing.
+        view.configuringSnapshot = model.layout.widgets.first { $0.id == id }
         view.configuringID = id
     }
     public var onDropWidget: (String, Int) -> Bool = { _, _ in false }

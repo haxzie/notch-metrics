@@ -65,7 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or clicking a tile's sliders, neither of which a screenshot can do.
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONFIG"] == "1" {
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(600))
+                // Long enough for the layout to have loaded: beginConfiguring
+                // resolves the widget up front, so firing before the layout
+                // arrives silently does nothing.
+                try? await Task.sleep(for: .seconds(3))
                 if let first = env.layoutModel.layout.widgets.first {
                     beginConfiguring(first.id)
                 }

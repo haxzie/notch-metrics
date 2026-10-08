@@ -60,6 +60,13 @@ public final class NotchViewModel {
     /// away, so Cancel needs a copy taken on the way in.
     public var configuringSnapshot: NotchWidget?
 
+    /// How tall the configure form is, as measured by the form itself.
+    ///
+    /// Zero until it has laid out once. The pane is sized from this rather
+    /// than from a guess, because the form belongs to the app target and will
+    /// grow a row the moment somebody adds a setting.
+    public var configureContentHeight: CGFloat = 0
+
     /// The controls for the widget being configured.
     ///
     /// Supplied by the app target, which is the only place that knows about

@@ -148,6 +148,9 @@ public struct NotchContentView: View {
                 // so without this the last row of the form ran flush into the
                 // bottom edge of the panel.
                 .padding(.bottom, Self.configureBottomInset)
+                .onPreferenceChange(ConfigurePanelHeightKey.self) { height in
+                    MainActor.assumeIsolated { view.configureContentHeight = height }
+                }
                 // In from the right, out by fading: the pane arrives as a
                 // place you moved to, and leaves without dragging the grid
                 // sideways behind it.
@@ -539,7 +542,7 @@ public struct NotchContentView: View {
         // use and padding the eye could not see.
         let content: CGFloat =
             configuring != nil
-            ? NotchWidgetCanvas.contentTop + Self.configureHeight + Self.configureBottomInset
+            ? NotchWidgetCanvas.contentTop + configureBodyHeight + Self.configureBottomInset
             : NotchWidgetCanvas.contentTop
                 + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
                 + NotchWidgetCanvas.contentBottom
@@ -557,12 +560,22 @@ public struct NotchContentView: View {
 
     static let grabberHeight: CGFloat = 19
 
-    /// How tall the panel opens while a widget is being configured.
+    /// How tall the configure pane opens: whatever the form measured, clamped.
     ///
-    /// Enough for the preview beside two of the form's groups without the
-    /// third being clipped at the edge; the right-hand column scrolls for the
-    /// rest.
-    static let configureHeight: CGFloat = 300
+    /// Measured rather than fixed, so the whole form fits instead of the last
+    /// group sitting below a fold. The floor keeps the pane from collapsing on
+    /// the first layout pass, before the form has reported anything; the
+    /// ceiling stops a form that grows without limit from filling the screen,
+    /// and the column still scrolls if it ever hits that.
+    private var configureBodyHeight: CGFloat {
+        let measured = view.configureContentHeight
+        guard measured > 0 else { return Self.configureFallbackHeight }
+        return min(max(measured, Self.configureFallbackHeight), Self.configureMaxHeight)
+    }
+
+    /// Used until the form has laid out once.
+    static let configureFallbackHeight: CGFloat = 300
+    static let configureMaxHeight: CGFloat = 560
 
     /// Clear space under the configure pane, standing in for the grabber the
     /// grid has.

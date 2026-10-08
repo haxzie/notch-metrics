@@ -10,7 +10,12 @@ import SwiftUI
 /// notch apps come apart — the window and the content disagree about their size
 /// for a frame at a time, and the result jitters.
 public final class NotchPanel: NSPanel {
-    public static let maxSize = CGSize(width: 900, height: 460)
+    /// The window is sized to this once and never resized — expansion is a
+    /// content-layout change inside it — so the height only has to be a
+    /// ceiling nothing legitimately needs to exceed. 460 was below what the
+    /// configure form actually measures, which capped the pane before it
+    /// could fit.
+    public static let maxSize = CGSize(width: 900, height: 680)
 
     public override var canBecomeKey: Bool { true }
     /// Never main. Becoming the main window would steal focus from whatever
