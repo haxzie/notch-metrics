@@ -86,7 +86,12 @@ public struct WidgetTile: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(isEditing ? NotchTheme.tileFillEditing : NotchTheme.tileFill)
+                // The same translucent fill in edit mode as out of it. Edit
+                // mode used to swap in a near-solid dark, which made the
+                // tiles turn opaque the moment you started arranging them —
+                // so the thing you were rearranging did not look like the
+                // thing you would end up with.
+                .fill(NotchTheme.tileFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)

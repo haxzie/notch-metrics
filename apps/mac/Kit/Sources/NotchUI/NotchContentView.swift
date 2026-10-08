@@ -329,9 +329,17 @@ public struct NotchContentView: View {
             if let snapshot = view.configuringSnapshot { model.update(snapshot) }
             withAnimation(.snappy(duration: 0.26)) { endConfiguring() }
         } label: {
-            Text("Cancel")
-                .font(.system(size: 11, weight: .medium))
-                .padding(.horizontal, 10)
+            HStack(spacing: 4) {
+                // The chevron says where the button goes; "Cancel" says what
+                // it does to the changes. Both, because leaving the pane and
+                // discarding the edits are one action here.
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Cancel")
+                    .font(.system(size: 11, weight: .medium))
+            }
+                .padding(.leading, 8)
+                .padding(.trailing, 10)
                 .padding(.vertical, 5)
                 .background(Capsule().fill(Color.white.opacity(0.1)))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))

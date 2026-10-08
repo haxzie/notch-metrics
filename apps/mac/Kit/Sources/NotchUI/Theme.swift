@@ -29,7 +29,6 @@ public enum NotchTheme {
     /// The normal fill is 5.5% white, which is right over the panel's glass
     /// and wrong over the dot grid — every tile became a window onto the dots
     /// and the grid read as being *on* the cards rather than behind them.
-    public static let tileFillEditing = Color(red: 0.10, green: 0.09, blue: 0.12).opacity(0.93)
     public static let tileStroke = Color.white.opacity(0.09)
     public static let panelStroke = Color.white.opacity(0.14)
 
