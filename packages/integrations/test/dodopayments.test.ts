@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dodopayments } from "../src/providers/dodopayments/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { stubContext } from "./helpers.ts";
+import { scalar, stubContext } from "./helpers.ts";
 
 const creds = { api_key: "dodo_test_abcdefghijklmnopqrst", mode: "live" as const };
 
@@ -140,15 +140,66 @@ describe("dodo payments pagination", () => {
   });
 });
 
+describe("dodo payments verify", () => {
+  it("offers everything to a key that can read both lists", async () => {
+    const ctx = stubContext({
+      "/payments": { items: [] },
+      "/subscriptions": { items: [sub({ amount: 100, currency: "EUR" })] },
+    });
+    const result = await dodopayments.verify(ctx, creds);
+    expect(result.availableMetrics).toEqual([
+      "revenue",
+      "recent_payments",
+      "mrr",
+      "active_subscribers",
+    ]);
+    expect(result.currency).toBe("EUR");
+  });
+
+  it("narrows to revenue and payments when the key lacks subscriptions:read", async () => {
+    // The real case: a live key scoped to payments and refunds. Dodo answers
+    // 403 INSUFFICIENT_PERMISSION on /subscriptions, which used to be
+    // reported as a bad key.
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          {
+            payment_id: "p",
+            total_amount: 1,
+            currency: "usd",
+            status: "succeeded",
+            created_at: "2026-10-01T00:00:00Z",
+          },
+        ],
+      },
+      "/subscriptions": { __status: 403 },
+    });
+    const result = await dodopayments.verify(ctx, creds);
+    expect(result.availableMetrics).toEqual(["revenue", "recent_payments"]);
+    expect(result.currency).toBe("USD");
+  });
+
+  it("rejects a key that can read nothing, naming the scopes", async () => {
+    const ctx = stubContext({
+      "/payments": { __status: 403 },
+      "/subscriptions": { __status: 403 },
+    });
+    await expect(dodopayments.verify(ctx, creds)).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining("subscriptions:read"),
+    });
+  });
+});
+
 describe("dodo payments errors", () => {
   it("maps 401 to auth_failed so polling stops", async () => {
-    const ctx = stubContext({ "/subscriptions": { __status: 401 } });
+    const ctx = stubContext({ "/payments": { __status: 401 } });
     await expect(dodopayments.verify(ctx, creds)).rejects.toMatchObject({ code: "auth_failed" });
   });
 
   it("carries Retry-After through a 429", async () => {
     const ctx = stubContext({
-      "/subscriptions": { __status: 429, __headers: { "retry-after": "30" } },
+      "/payments": { __status: 429, __headers: { "retry-after": "30" } },
     });
     await expect(dodopayments.verify(ctx, creds)).rejects.toMatchObject({
       code: "rate_limited",
@@ -166,14 +217,47 @@ describe("dodo payments errors", () => {
 
 describe("dodo payments host selection", () => {
   it("sends a test-mode key to the test host", async () => {
-    const ctx = stubContext({ "/subscriptions": { items: [] } });
+    const ctx = stubContext({ "/payments": { items: [] }, "/subscriptions": { items: [] } });
     await dodopayments.verify(ctx, { ...creds, mode: "test" });
     expect(ctx.calls[0]).toContain("test.dodopayments.com");
   });
 
   it("sends a live-mode key to the live host", async () => {
-    const ctx = stubContext({ "/subscriptions": { items: [] } });
+    const ctx = stubContext({ "/payments": { items: [] }, "/subscriptions": { items: [] } });
     await dodopayments.verify(ctx, creds);
     expect(ctx.calls[0]).toContain("live.dodopayments.com");
+  });
+});
+
+describe("dodo recent payments", () => {
+  it("lists succeeded payments with the customer", async () => {
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          {
+            payment_id: "p1",
+            total_amount: 1_900,
+            currency: "USD",
+            status: "succeeded",
+            created_at: "2026-10-05T10:00:00Z",
+            customer: { name: "Ada", email: "ada@example.com" },
+          },
+          {
+            payment_id: "p2",
+            total_amount: 1_900,
+            currency: "USD",
+            status: "processing",
+            created_at: "2026-10-04T10:00:00Z",
+          },
+        ],
+      },
+    });
+    const series = await dodopayments.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "recent_payments",
+    });
+    expect(series.items?.map((i) => i.id)).toEqual(["p1"]);
+    expect(scalar(series.items?.[0]).label).toBe("Ada");
+    expect(series.value).toBe(1_900);
   });
 });

@@ -36,6 +36,7 @@ const BRANDS = {
   dodopayments: "Dodo Payments",
   lemonsqueezy: "Lemon Squeezy",
   paddle: "Paddle",
+  revenuecat: "RevenueCat",
   posthog: "PostHog",
   plausible: "Plausible Analytics",
   mixpanel: "Mixpanel",

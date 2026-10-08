@@ -97,6 +97,34 @@ public struct MetricDelta: Codable, Sendable, Hashable {
     }
 }
 
+/// One row of a list widget. Mirrors `MetricListItem` in `packages/schemas`.
+public struct MetricListItem: Codable, Sendable, Hashable, Identifiable {
+    public let id: String
+    /// ISO-8601 instant the row happened at.
+    public let t: String
+    public let label: String
+    public let detail: String?
+    /// Minor units of `currency`; nil for a row with no amount.
+    public let amount: Double?
+    public let currency: String?
+    public let status: String?
+
+    public init(
+        id: String, t: String, label: String, detail: String? = nil, amount: Double? = nil,
+        currency: String? = nil, status: String? = nil
+    ) {
+        self.id = id
+        self.t = t
+        self.label = label
+        self.detail = detail
+        self.amount = amount
+        self.currency = currency
+        self.status = status
+    }
+
+    public var date: Date? { ISO8601.parse(t) }
+}
+
 public struct MetricSeries: Codable, Sendable, Hashable {
     public let integrationId: String?
     public let metric: String
@@ -114,13 +142,17 @@ public struct MetricSeries: Codable, Sendable, Hashable {
     public let format: MetricFormat?
     public let generatedAt: String
     public let stale: Bool
+    /// Rows, for a list metric. Nil for a number — and nil, not empty, for
+    /// a response from a Worker that predates lists, so the tile can tell
+    /// "nothing yet" from "not a list".
+    public let items: [MetricListItem]?
 
     public init(
         integrationId: String?, metric: String, unit: MetricUnit, currency: String?,
         value: Double, previousValue: Double? = nil, delta: MetricDelta? = nil,
         points: [MetricPoint] = [], granularity: Granularity = .day, range: TimeRange = .month,
         from: String = "", to: String = "", format: MetricFormat? = nil,
-        generatedAt: String = "", stale: Bool = false
+        generatedAt: String = "", stale: Bool = false, items: [MetricListItem]? = nil
     ) {
         self.integrationId = integrationId
         self.metric = metric
@@ -137,6 +169,7 @@ public struct MetricSeries: Codable, Sendable, Hashable {
         self.format = format
         self.generatedAt = generatedAt
         self.stale = stale
+        self.items = items
     }
 }
 

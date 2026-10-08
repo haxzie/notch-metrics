@@ -142,6 +142,7 @@ public struct NotchContentView: View {
                 app: AppCatalog.resolve(widget.appId, overrides: appOverrides),
                 state: states[widget.id] ?? .loading,
                 connectionName: widget.integrationId.flatMap { view.connectionNames[$0] },
+                showsRange: widget.metricKey.map(view.timeWindowedMetrics.contains) ?? false,
                 panel: view.configuratorPanel,
                 onResize: { size in
                     var next = widget
@@ -174,6 +175,7 @@ public struct NotchContentView: View {
         NotchWidgetCanvas(
             model: model, states: states, appOverrides: appOverrides,
             connectionNames: view.connectionNames,
+            timeWindowedMetrics: view.timeWindowedMetrics,
             onConfigureWidget: onConfigureWidget,
             onDropWidget: view.onDropWidget)
             // The well, not the tiles, is what has to clear the panel edge —
@@ -633,6 +635,8 @@ public struct NotchWidgetCanvas: View {
     public let appOverrides: [String: MetricApp]
     /// What each connection is called, by integration id.
     public var connectionNames: [String: String] = [:]
+    /// Metrics that carry their time window in the title. See `NotchViewModel`.
+    public var timeWindowedMetrics: Set<String> = []
     /// Opens the app on a widget's configuration.
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
     /// A payload dropped from the gallery, with the reading-order index it
@@ -667,6 +671,7 @@ public struct NotchWidgetCanvas: View {
         states: [String: TileState],
         appOverrides: [String: MetricApp] = [:],
         connectionNames: [String: String] = [:],
+        timeWindowedMetrics: Set<String> = [],
         onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
         onDropWidget: @escaping (String, Int) -> Bool = { _, _ in false }
     ) {
@@ -674,6 +679,7 @@ public struct NotchWidgetCanvas: View {
         self.states = states
         self.appOverrides = appOverrides
         self.connectionNames = connectionNames
+        self.timeWindowedMetrics = timeWindowedMetrics
         self.onConfigureWidget = onConfigureWidget
         self.onDropWidget = onDropWidget
     }
@@ -730,7 +736,8 @@ public struct NotchWidgetCanvas: View {
                         state: states[widget.id] ?? .loading,
                         isEditing: model.isEditing,
                         isHovered: hoveredID == widget.id,
-                        connectionName: widget.integrationId.flatMap { connectionNames[$0] }
+                        connectionName: widget.integrationId.flatMap { connectionNames[$0] },
+                        showsRange: widget.metricKey.map(timeWindowedMetrics.contains) ?? false
                     )
                     .frame(width: frame.width, height: frame.height)
                     // Inside the animation below, deliberately. Applied after

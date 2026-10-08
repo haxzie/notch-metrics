@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lemonsqueezy } from "../src/providers/lemonsqueezy/index.ts";
-import { stubContext } from "./helpers.ts";
+import { scalar, stubContext } from "./helpers.ts";
 
 const creds = { api_key: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9abc", store_id: undefined };
 
@@ -233,5 +233,34 @@ describe("lemon squeezy verify", () => {
     };
     await lemonsqueezy.verify(ctx, creds);
     expect(seen).toMatchObject({ accept: "application/vnd.api+json" });
+  });
+});
+
+describe("lemon squeezy recent payments", () => {
+  it("lists paid orders with the buyer and the first product", async () => {
+    const ctx = stubContext({
+      "/orders": {
+        data: [
+          {
+            id: "o1",
+            attributes: {
+              ...order({ total: 2_900, at: "2026-10-05T10:00:00Z" }).attributes,
+              user_name: "Ada",
+              user_email: "ada@example.com",
+              first_order_item: { product_name: "Pro", variant_name: "Yearly" },
+            },
+          },
+          order({ total: 500, at: "2026-10-04T10:00:00Z", status: "pending" }),
+        ],
+      },
+    });
+    const series = await lemonsqueezy.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "recent_payments",
+    });
+    expect(series.items).toHaveLength(1);
+    expect(scalar(series.items?.[0]).label).toBe("Ada");
+    expect(scalar(series.items?.[0]).detail).toBe("Pro · Yearly");
+    expect(series.value).toBe(2_900);
   });
 });

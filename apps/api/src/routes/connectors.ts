@@ -79,9 +79,14 @@ connectors.get("/", async (c) => {
     200,
     // Only safe to cache publicly when the response carries nothing
     // user-specific.
+    //
+    // `vary: authorization` on the public one, because a cache that keys on
+    // the URL alone — Foundation's URLCache does — would otherwise hand a
+    // signed-in client the anonymous body for the next five minutes, and
+    // that body says the user has no connections.
     identity
-      ? { "cache-control": "private, max-age=30" }
-      : { etag, "cache-control": CACHE_CONTROL },
+      ? { "cache-control": "private, max-age=30", vary: "authorization" }
+      : { etag, "cache-control": CACHE_CONTROL, vary: "authorization" },
   );
 });
 

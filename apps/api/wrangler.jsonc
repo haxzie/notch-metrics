@@ -23,7 +23,7 @@
     {
       "binding": "DB",
       "database_name": "notch",
-      "database_id": "PLACEHOLDER_RUN_CF_BOOTSTRAP",
+      "database_id": "a0bc9f3e-0399-4327-bb24-79c3fed272ed",
       // Where `wrangler d1 migrations apply` looks. Generated into this app by
       // packages/db's drizzle.config.ts, because wrangler resolves the path
       // relative to this file and silently reports "no migrations" otherwise.
@@ -93,7 +93,7 @@
         {
           "binding": "DB",
           "database_name": "notch",
-          "database_id": "PLACEHOLDER_RUN_CF_BOOTSTRAP",
+          "database_id": "a0bc9f3e-0399-4327-bb24-79c3fed272ed",
           "migrations_dir": "migrations"
         }
       ],

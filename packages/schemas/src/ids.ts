@@ -25,6 +25,7 @@ export const ProviderId = z.enum([
   "lemonsqueezy",
   "polar",
   "paddle",
+  "revenuecat",
   // Product analytics
   "posthog",
   "plausible",
@@ -99,6 +100,7 @@ export const MetricId = z.enum([
   "new_subscribers",
   "churned_subscribers",
   "trials",
+  "recent_payments",
   // Product analytics
   "visitors",
   "pageviews",

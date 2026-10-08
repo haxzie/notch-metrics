@@ -8,6 +8,7 @@ import { dodopayments } from "./providers/dodopayments/index.ts";
 import { lemonsqueezy } from "./providers/lemonsqueezy/index.ts";
 import { polar } from "./providers/polar/index.ts";
 import { paddle } from "./providers/paddle/index.ts";
+import { revenuecat } from "./providers/revenuecat/index.ts";
 
 // Product analytics
 import { posthog } from "./providers/posthog/index.ts";
@@ -51,6 +52,7 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   lemonsqueezy,
   polar,
   paddle,
+  revenuecat,
   posthog,
   plausible,
   mixpanel,

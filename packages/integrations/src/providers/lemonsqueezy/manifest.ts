@@ -1,4 +1,5 @@
 import type { ProviderManifest } from "@notch/schemas";
+import { recentPaymentsDescriptor } from "../../list.ts";
 
 export const manifest: ProviderManifest = {
   id: "lemonsqueezy",
@@ -72,6 +73,9 @@ export const manifest: ProviderManifest = {
       methodology:
         "`refunded_amount` on orders in the window, bucketed by the order date rather than the refund date, which the API does not expose.",
     },
+    recentPaymentsDescriptor(
+      "The latest orders that took payment, newest first, with the buyer's name or email and the first product on the order. The headline is their total in your currency.",
+    ),
   ],
   allowedHosts: ["api.lemonsqueezy.com"],
   status: "stable",

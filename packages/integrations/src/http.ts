@@ -92,7 +92,14 @@ export function createHttp(options: {
 /** Turns a provider's HTTP status into our taxonomy, honouring Retry-After. */
 export function errorForStatus(host: string, response: HttpResponse): ProviderError {
   if (response.status === 401 || response.status === 403) {
-    return new ProviderError("auth_failed", `${host} rejected the credentials`);
+    // The status is part of the message on purpose. 401 and 403 are both
+    // "rejected" to the user, but a 403 from a host that normally says 401
+    // is how a WAF in front of the provider shows up, and that is a
+    // different afternoon from a mistyped key.
+    return new ProviderError(
+      "auth_failed",
+      `${host} rejected the credentials (${response.status})`,
+    );
   }
   if (response.status === 429) {
     const retry = Number(response.headers.get("retry-after") ?? "60");

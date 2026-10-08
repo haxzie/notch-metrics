@@ -63,6 +63,7 @@
                   "new_subscribers",
                   "churned_subscribers",
                   "trials",
+                  "recent_payments",
                   "visitors",
                   "pageviews",
                   "sessions",

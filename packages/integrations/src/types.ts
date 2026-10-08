@@ -42,6 +42,18 @@ export interface MetricRequest {
   wantSeries: boolean;
 }
 
+/** A row of a list metric. See `MetricListItem` in `@notch/schemas`. */
+export interface RawListItem {
+  id: string;
+  t: Date;
+  label: string;
+  detail: string | null;
+  /** Minor units of `currency`; null for a row with no amount. */
+  amount: number | null;
+  currency: string | null;
+  status: string | null;
+}
+
 export interface RawSeries {
   unit: "currency" | "count" | "ratio";
   /** Required when unit is `currency`; null when the account mixes currencies. */
@@ -61,6 +73,8 @@ export interface RawSeries {
   asOf?: Date;
   /** Surfaced to the user, e.g. "EUR and GBP charges were excluded." */
   note?: string;
+  /** Rows, for a list metric such as `recent_payments`. Absent for a number. */
+  items?: RawListItem[];
 }
 
 export type ProviderErrorCode =

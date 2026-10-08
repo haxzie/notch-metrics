@@ -110,7 +110,7 @@ describe("stripe verify", () => {
     const result = await stripe.verify(ctx, creds);
     expect(result.accountLabel).toBe("Acme");
     expect(result.currency).toBe("USD");
-    expect(result.availableMetrics).toEqual(["revenue", "refunds"]);
+    expect(result.availableMetrics).toEqual(["revenue", "refunds", "recent_payments"]);
   });
 
   it("offers everything when the key is unrestricted", async () => {
@@ -138,5 +138,47 @@ describe("credentials", () => {
   it("rejects something that is not a Stripe key", () => {
     expect(stripe.credentialSchema.safeParse({ secret_key: "hunter2" }).success).toBe(false);
     expect(stripe.credentialSchema.safeParse({ secret_key: "rk_live_abc" }).success).toBe(true);
+  });
+});
+
+describe("stripe recent payments", () => {
+  it("lists succeeded charges with the payer's name and marks refunds", async () => {
+    const ctx = stubContext({
+      "/charges": {
+        data: [
+          {
+            id: "ch_1",
+            amount: 4_900,
+            currency: "usd",
+            created: 1_759_600_000,
+            status: "succeeded",
+            description: "Pro plan",
+            billing_details: { name: "Ada Lovelace", email: "ada@example.com" },
+          },
+          { id: "ch_2", amount: 100, currency: "usd", created: 1_759_500_000, status: "failed" },
+          {
+            id: "ch_3",
+            amount: 2_000,
+            currency: "usd",
+            created: 1_759_400_000,
+            status: "succeeded",
+            refunded: true,
+            amount_refunded: 2_000,
+            receipt_email: "grace@example.com",
+            billing_details: { name: null, email: null },
+          },
+        ],
+        has_more: false,
+      },
+    });
+    const series = await stripe.fetchMetric(ctx, creds, { ...request, metric: "recent_payments" });
+    const items = series.items ?? [];
+    expect(items.map((i) => i.id)).toEqual(["ch_1", "ch_3"]);
+    expect(scalar(items[0]).label).toBe("Ada Lovelace");
+    expect(scalar(items[0]).detail).toBe("Pro plan");
+    expect(scalar(items[0]).currency).toBe("USD");
+    expect(scalar(items[1]).label).toBe("grace@example.com");
+    expect(scalar(items[1]).status).toBe("refunded");
+    expect(series.value).toBe(6_900);
   });
 });

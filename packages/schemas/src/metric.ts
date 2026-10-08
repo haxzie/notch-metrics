@@ -22,6 +22,29 @@ export const MetricFormat = z.object({
 });
 export type MetricFormat = z.infer<typeof MetricFormat>;
 
+/**
+ * One row of a list widget — a payment, an order, a signup.
+ *
+ * A list is still a `MetricSeries`: it has a headline value and sits in the
+ * same cache, the same batch and the same error envelope as a number. What
+ * it adds is `items`, which the tile renders as rows instead of a figure.
+ */
+export const MetricListItem = z.object({
+  id: z.string(),
+  /** ISO-8601 instant the row happened at. */
+  t: z.string(),
+  /** Who or what: a customer name, an email, a product. */
+  label: z.string(),
+  /** A second line, when there is one — the product under the customer. */
+  detail: z.string().nullable(),
+  /** Minor units of `currency`. Null for a row without an amount. */
+  amount: z.number().nullable(),
+  currency: CurrencyCode.nullable(),
+  /** The provider's own word for the row's state, e.g. `refunded`. */
+  status: z.string().nullable(),
+});
+export type MetricListItem = z.infer<typeof MetricListItem>;
+
 export const MetricDelta = z.object({
   /** Same units as `value`. */
   absolute: z.number(),
@@ -56,6 +79,14 @@ export const MetricSeries = z.object({
   generatedAt: z.string(),
   /** True when served past its TTL because a refresh failed or is in flight. */
   stale: z.boolean().default(false),
+  /**
+   * Rows, for a list metric. Absent for a number.
+   *
+   * Optional rather than defaulted to `[]`, so an older app ignores the
+   * field and a newer one can tell "a list with nothing in it" from "not a
+   * list".
+   */
+  items: z.array(MetricListItem).optional(),
 });
 export type MetricSeries = z.infer<typeof MetricSeries>;
 
