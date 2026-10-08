@@ -63,20 +63,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The configure pane is otherwise only reachable by dropping a widget
         // or clicking a tile's sliders, neither of which a screenshot can do.
-        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONFIG"] == "1" {
+        if let wanted = ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONFIG"], !wanted.isEmpty {
             Task { @MainActor in
                 // Long enough for the layout to have loaded: beginConfiguring
                 // resolves the widget up front, so firing before the layout
                 // arrives silently does nothing.
                 try? await Task.sleep(for: .seconds(3))
-                // Prefers one with no account: that is the state a freshly
-                // dropped widget is in, and the one worth looking at.
+                // `1` picks whichever widget has no account — the state a
+                // freshly dropped one is in. Any other value is a metric id,
+                // for looking at a particular widget's controls.
                 let widgets = env.layoutModel.layout.widgets
-                if let target = widgets.first(where: { $0.integrationId == nil })
-                    ?? widgets.first
-                {
-                    beginConfiguring(target.id)
-                }
+                let target =
+                    wanted == "1"
+                    ? widgets.first { $0.integrationId == nil } ?? widgets.first
+                    : widgets.first { $0.metric == wanted }
+                if let target { beginConfiguring(target.id) }
             }
         }
     }

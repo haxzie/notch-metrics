@@ -26,6 +26,24 @@ struct WidgetConfigPanel: View {
         return model.entry(draft.appId)
     }
 
+    /// Whether a time window means anything for this metric.
+    ///
+    /// A snapshot — GitHub's stargazers, forks, open issues — is whatever it
+    /// is right now. There is no series to draw over 30 days and no previous
+    /// window to compare against, so a range picker on one of those is a
+    /// control that changes nothing.
+    ///
+    /// Defaults to showing it: before the catalogue has loaded there is no
+    /// descriptor to ask, and a control that appears a moment late is better
+    /// than one that disappears a moment late.
+    private var usesTimeWindow: Bool {
+        guard let descriptor else { return true }
+        return descriptor.supportsSeries || descriptor.supportsCompare
+    }
+
+    /// Whether this metric can be drawn as a chart at all.
+    private var usesChart: Bool { descriptor?.supportsSeries != false }
+
     private var descriptor: MetricDescriptor? {
         guard let draft, let metric = draft.metric else { return nil }
         return entry?.metrics.first { $0.id == metric }
@@ -172,23 +190,24 @@ struct WidgetConfigPanel: View {
                 .labelsHidden()
                 .fixedSize()
             }
-            Divider().opacity(0.4)
-            row("Chart") {
-                Picker("", selection: Binding(
-                    get: { binding.wrappedValue.chart },
-                    set: { chart in
-                        var next = binding.wrappedValue
-                        next.chart = chart
-                        binding.wrappedValue = next
+            if usesChart {
+                Divider().opacity(0.4)
+                row("Chart") {
+                    Picker("", selection: Binding(
+                        get: { binding.wrappedValue.chart },
+                        set: { chart in
+                            var next = binding.wrappedValue
+                            next.chart = chart
+                            binding.wrappedValue = next
+                        }
+                    )) {
+                        Text("None").tag(ChartKind.none)
+                        Text("Sparkline").tag(ChartKind.sparkline)
+                        Text("Bars").tag(ChartKind.bars)
                     }
-                )) {
-                    Text("None").tag(ChartKind.none)
-                    Text("Sparkline").tag(ChartKind.sparkline)
-                    Text("Bars").tag(ChartKind.bars)
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .labelsHidden()
-                .fixedSize()
-                .disabled(descriptor?.supportsSeries == false)
             }
         }
     }
@@ -196,25 +215,27 @@ struct WidgetConfigPanel: View {
     @ViewBuilder
     private func dataSection(_ binding: Binding<NotchWidget>) -> some View {
         section("Data") {
-            row("Range") {
-                Picker("", selection: Binding(
-                    get: { binding.wrappedValue.range },
-                    set: { range in
-                        var next = binding.wrappedValue
-                        next.range = range
-                        binding.wrappedValue = next
-                        Task { await refreshPreview() }
+            if usesTimeWindow {
+                row("Range") {
+                    Picker("", selection: Binding(
+                        get: { binding.wrappedValue.range },
+                        set: { range in
+                            var next = binding.wrappedValue
+                            next.range = range
+                            binding.wrappedValue = next
+                            Task { await refreshPreview() }
+                        }
+                    )) {
+                        ForEach(TimeRange.allCases, id: \.self) { range in
+                            Text(range.rawValue).tag(range)
+                        }
                     }
-                )) {
-                    ForEach(TimeRange.allCases, id: \.self) { range in
-                        Text(range.rawValue).tag(range)
-                    }
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .labelsHidden()
-                .fixedSize()
+                if descriptor != nil { Divider().opacity(0.4) }
             }
             if let descriptor {
-                Divider().opacity(0.4)
                 note(descriptor.methodology)
             }
         }

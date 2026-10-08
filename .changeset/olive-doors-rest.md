@@ -37,3 +37,8 @@ split: the tile on the left, its controls on the right, with the grid
 sliding out and the pane sliding in. A second window thrown on screen over
 whatever the user was working in — with its own focus and activation to
 manage — was the wrong shape for changing the thing already on screen.
+
+Hide the range and chart controls for metrics that cannot use them. A
+snapshot — GitHub's stargazers, forks, open issues — is whatever it is right
+now: there is no series to draw over thirty days and no previous window to
+compare against, so both controls changed nothing.
