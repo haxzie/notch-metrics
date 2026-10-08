@@ -45,7 +45,10 @@ public struct WidgetConfigurePane: View {
             // was a second edge saying the same thing.
             panel(widget)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(.leading, 16)
+                // 6 against the preview's own 6: the two halves are closer
+                // now that no rule separates them, and the old 30pt between
+                // them read as a gap rather than a join.
+                .padding(.leading, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -77,7 +80,7 @@ public struct WidgetConfigurePane: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
-        .padding(.trailing, 14)
+        .padding(.trailing, 6)
     }
 
     /// The presets only, floating. Every span in between is still reachable
