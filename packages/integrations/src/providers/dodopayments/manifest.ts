@@ -47,16 +47,31 @@ export const manifest: ProviderManifest = {
       methodology:
         "Active subscriptions, each `recurring_pre_tax_amount` normalised to a monthly amount using its payment frequency. A snapshot of the book right now, not a total over the window.",
     },
+    // "Total" and "One-time", not "Revenue" and "Sales": Dodo sells both
+    // subscriptions and single purchases through the same payments list, and
+    // a tile that just said "Revenue" left the user guessing which of the
+    // two it counted.
     {
       id: "revenue",
-      label: "Revenue",
+      label: "Total revenue",
       shortLabel: "Revenue",
       unit: "currency",
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Succeeded payments in the window, by `total_amount`. Gross — before refunds and fees.",
+        "Every succeeded payment in the window, subscription renewals and one-time purchases together, by `total_amount`. Gross — before refunds and fees.",
+    },
+    {
+      id: "one_time_sales",
+      label: "One-time sales",
+      shortLabel: "One-time",
+      unit: "currency",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology:
+        "Succeeded payments in the window that are not tied to a subscription, by `total_amount`. Gross — before refunds and fees.",
     },
     {
       id: "active_subscribers",

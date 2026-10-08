@@ -130,6 +130,21 @@ interface DodoPayment {
   status: string;
   created_at: string;
   customer?: { name?: string | null; email?: string | null } | null;
+  /** Null for a one-time purchase. */
+  subscription_id?: string | null;
+  /** Set alongside `subscription_id` when one checkout bought several. */
+  subscription_ids?: string[] | null;
+}
+
+/**
+ * A payment with no subscription behind it.
+ *
+ * Both fields, because Dodo added `subscription_ids` for multi-subscription
+ * checkouts and a payment can carry either. Checking only the singular would
+ * count a bundle renewal as a one-time sale.
+ */
+function isOneTime(payment: DodoPayment): boolean {
+  return !payment.subscription_id && !(payment.subscription_ids?.length ?? 0);
 }
 
 /**
@@ -180,7 +195,7 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
     const subscriptions = await probe<DodoSubscription>(ctx, creds, "/subscriptions");
 
     const available: MetricId[] = [];
-    if (payments.allowed) available.push("revenue", "recent_payments");
+    if (payments.allowed) available.push("revenue", "one_time_sales", "recent_payments");
     if (subscriptions.allowed) available.push("mrr", "active_subscribers");
     if (available.length === 0) {
       throw new ProviderError(
@@ -211,7 +226,9 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
       case "active_subscribers":
         return activeSubscribers(ctx, creds);
       case "revenue":
-        return revenue(ctx, creds, request);
+        return revenue(ctx, creds, request, () => true);
+      case "one_time_sales":
+        return revenue(ctx, creds, request, isOneTime);
       case "recent_payments":
         return latestPayments(ctx, creds);
       default:
@@ -276,10 +293,16 @@ async function activeSubscribers(ctx: AdapterContext, creds: DodoCredentials): P
   };
 }
 
+/**
+ * Succeeded payments in the window, summed — optionally only those `include`
+ * says yes to. Total revenue and one-time sales are the same walk with a
+ * different filter; the list has no server-side way to ask for either.
+ */
 async function revenue(
   ctx: AdapterContext,
   creds: DodoCredentials,
   request: MetricRequest,
+  include: (payment: DodoPayment) => boolean,
 ): Promise<RawSeries> {
   const from = request.comparePrevious
     ? new Date(request.from.getTime() - (request.to.getTime() - request.from.getTime()))
@@ -292,7 +315,7 @@ async function revenue(
 
   // Gross, and only money that actually arrived. `processing` has not been
   // captured and `requires_capture` may never be.
-  const succeeded = items.filter((row) => row.status === "succeeded");
+  const succeeded = items.filter((row) => row.status === "succeeded" && include(row));
   const { kept, note } = splitByCurrency(succeeded, ctx.preferredCurrency);
 
   const events = kept.map((row) => ({ at: new Date(row.created_at), amount: row.total_amount }));

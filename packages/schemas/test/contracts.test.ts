@@ -10,6 +10,7 @@ const BY_NAME: Record<string, z.ZodType> = {
   "metric-series": S.MetricResult,
   "metric-series-empty": S.MetricResult,
   "metric-series-no-currency": S.MetricResult,
+  "metric-series-list": S.MetricResult,
   "metric-error": S.MetricResult,
   "metric-batch": S.MetricBatchResponse,
   "provider-manifest-list": S.ProviderManifestList,

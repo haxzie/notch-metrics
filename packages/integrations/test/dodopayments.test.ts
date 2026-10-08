@@ -26,13 +26,22 @@ function sub(options: { amount: number; interval?: string; count?: number; curre
   };
 }
 
-function payment(options: { amount: number; at: string; status?: string; currency?: string }) {
+function payment(options: {
+  amount: number;
+  at: string;
+  status?: string;
+  currency?: string;
+  subscription?: string | null;
+  subscriptions?: string[];
+}) {
   return {
     payment_id: `pay_${options.at}`,
     total_amount: options.amount,
     currency: options.currency ?? "USD",
     status: options.status ?? "succeeded",
     created_at: options.at,
+    subscription_id: options.subscription ?? null,
+    subscription_ids: options.subscriptions ?? [],
   };
 }
 
@@ -124,6 +133,57 @@ describe("dodo payments revenue", () => {
   });
 });
 
+describe("dodo payments one-time sales", () => {
+  const oneTimeRequest = { ...request, metric: "one_time_sales" as const };
+
+  it("counts only payments with no subscription behind them", async () => {
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          payment({ amount: 1_000, at: "2026-09-10T10:00:00Z" }),
+          payment({ amount: 2_000, at: "2026-09-11T10:00:00Z", subscription: "sub_1" }),
+          // A multi-subscription checkout sets the plural and not the
+          // singular; it is still a renewal, not a sale.
+          payment({ amount: 4_000, at: "2026-09-12T10:00:00Z", subscriptions: ["sub_2"] }),
+          payment({ amount: 8_000, at: "2026-09-13T10:00:00Z", status: "processing" }),
+        ],
+      },
+    });
+    expect((await dodopayments.fetchMetric(ctx, creds, oneTimeRequest)).value).toBe(1_000);
+  });
+
+  it("leaves total revenue counting both", async () => {
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          payment({ amount: 1_000, at: "2026-09-10T10:00:00Z" }),
+          payment({ amount: 2_000, at: "2026-09-11T10:00:00Z", subscription: "sub_1" }),
+        ],
+      },
+    });
+    const series = await dodopayments.fetchMetric(ctx, creds, { ...request, metric: "revenue" });
+    expect(series.value).toBe(3_000);
+  });
+
+  it("treats a payment that predates the subscription fields as one-time", async () => {
+    // Older records omit both fields rather than sending null.
+    const ctx = stubContext({
+      "/payments": {
+        items: [
+          {
+            payment_id: "p",
+            total_amount: 700,
+            currency: "USD",
+            status: "succeeded",
+            created_at: "2026-09-10T10:00:00Z",
+          },
+        ],
+      },
+    });
+    expect((await dodopayments.fetchMetric(ctx, creds, oneTimeRequest)).value).toBe(700);
+  });
+});
+
 describe("dodo payments pagination", () => {
   it("stops on a short page rather than waiting for a cursor", async () => {
     // Dodo sends no cursor and no has_more. A walk waiting for one is an
@@ -149,6 +209,7 @@ describe("dodo payments verify", () => {
     const result = await dodopayments.verify(ctx, creds);
     expect(result.availableMetrics).toEqual([
       "revenue",
+      "one_time_sales",
       "recent_payments",
       "mrr",
       "active_subscribers",
@@ -175,7 +236,7 @@ describe("dodo payments verify", () => {
       "/subscriptions": { __status: 403 },
     });
     const result = await dodopayments.verify(ctx, creds);
-    expect(result.availableMetrics).toEqual(["revenue", "recent_payments"]);
+    expect(result.availableMetrics).toEqual(["revenue", "one_time_sales", "recent_payments"]);
     expect(result.currency).toBe("USD");
   });
 

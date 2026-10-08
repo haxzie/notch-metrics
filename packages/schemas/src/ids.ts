@@ -95,6 +95,7 @@ export const MetricId = z.enum([
   "mrr",
   "arr",
   "revenue",
+  "one_time_sales",
   "refunds",
   "active_subscribers",
   "new_subscribers",
