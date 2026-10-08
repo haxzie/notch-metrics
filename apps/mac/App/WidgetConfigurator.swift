@@ -74,6 +74,10 @@ struct WidgetConfiguratorView: View {
             }
             .padding(20)
         }
+        // Reserves the title bar's height rather than guessing at a top
+        // padding: the content now runs underneath it, and scrolling up under
+        // a transparent title bar is the look — colliding with it is not.
+        .safeAreaInset(edge: .top) { Color.clear.frame(height: 24) }
         // Without this the scroll view paints an opaque backing and the
         // window's glass is invisible behind it — which is most of what made
         // the first version of this look like a dialog box from another app.
@@ -358,10 +362,12 @@ final class WidgetConfiguratorWindowController: NSObject, NSWindowDelegate {
 
         let window = NSWindow(
             contentRect: CGRect(x: 0, y: 0, width: 400, height: 700),
-            // No `.fullSizeContentView`: with it the first section header laid
-            // out underneath the traffic lights, which is what made this
-            // window look broken before anything in it had been read.
-            styleMask: [.titled, .closable, .resizable],
+            // `.fullSizeContentView` so the material runs the full height of
+            // the window. Without it the effect view stops below the title
+            // bar, and since the window itself is clear that strip showed
+            // straight through — a transparent band above a frosted body.
+            // Clearing the title bar is the content's job, below.
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false)
         window.title = "Configure Widget"
@@ -372,14 +378,11 @@ final class WidgetConfiguratorWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
 
-        let root = ZStack {
-            VisualEffectBackground(material: .hudWindow)
+        window.contentView = glassContentView {
             WidgetConfiguratorView(widgetId: widgetId)
+                .environment(env)
+                .ignoresSafeArea()
         }
-        .environment(env)
-        .ignoresSafeArea()
-
-        window.contentView = NSHostingView(rootView: root)
         // Beside the notch rather than centred: the tile it configures is at
         // the top of the screen and a window in the middle makes you look away
         // from the thing you are changing.

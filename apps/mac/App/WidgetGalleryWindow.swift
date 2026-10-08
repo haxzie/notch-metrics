@@ -1,29 +1,40 @@
 import AppKit
 import SwiftUI
 
-/// A `NSVisualEffectView` behind SwiftUI content.
+/// Wraps SwiftUI content in a window-wide `NSVisualEffectView`.
 ///
-/// `.ultraThinMaterial` inside SwiftUI blurs what is *behind it in the window*,
-/// which over an opaque window background is nothing at all. Only a visual
-/// effect view with `.behindWindow` samples the desktop, and sampling the
-/// desktop is the entire look.
-struct VisualEffectBackground: NSViewRepresentable {
-    var material: NSVisualEffectView.Material = .hudWindow
+/// The material has to be the window's *content view*, not a layer inside the
+/// SwiftUI tree. Inside the tree it is subject to the title bar's safe area,
+/// so with a transparent title bar that strip stayed unfrosted — a black band
+/// with a seam under it, sitting above a frosted body. As the content view it
+/// fills the whole window, title bar included.
+///
+/// `.ultraThinMaterial` is no use here either way: it blurs what is behind it
+/// *in the window*, which over a clear background is nothing. Only
+/// `.behindWindow` samples the desktop, and that is the entire look.
+@MainActor
+func glassContentView(
+    material: NSVisualEffectView.Material = .hudWindow,
+    @ViewBuilder _ root: () -> some View
+) -> NSView {
+    let effect = NSVisualEffectView()
+    effect.material = material
+    effect.blendingMode = .behindWindow
+    // `.active`, not `.followsWindowActiveState`: the gallery is dragged
+    // *from*, so it spends the whole interaction inactive — and a panel that
+    // goes flat grey the moment you start using it looks broken.
+    effect.state = .active
 
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        // `.active`, not `.followsWindowActiveState`: the gallery is dragged
-        // *from*, so it spends the whole interaction inactive — and a panel
-        // that goes flat grey the moment you start using it looks broken.
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.material = material
-    }
+    let hosting = NSHostingView(rootView: root())
+    hosting.translatesAutoresizingMaskIntoConstraints = false
+    effect.addSubview(hosting)
+    NSLayoutConstraint.activate([
+        hosting.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+        hosting.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+        hosting.topAnchor.constraint(equalTo: effect.topAnchor),
+        hosting.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+    ])
+    return effect
 }
 
 /// Owns the gallery window.
@@ -71,14 +82,11 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
 
-        let root = ZStack {
-            VisualEffectBackground()
+        window.contentView = glassContentView {
             WidgetGalleryView()
+                .environment(env)
+                .ignoresSafeArea()
         }
-        .environment(env)
-        .ignoresSafeArea()
-
-        window.contentView = NSHostingView(rootView: root)
         window.center()
         self.window = window
 
