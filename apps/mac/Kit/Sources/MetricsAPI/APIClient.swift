@@ -87,6 +87,13 @@ public actor APIClient {
         // without the user-specific parts.
         if let token = try? await tokens.validToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            // Never answered from URLCache. The cache keys on the URL alone,
+            // and the catalogue is served `public, max-age=300` to anonymous
+            // callers — so a signed-in fetch within five minutes of a
+            // signed-out one got the anonymous body back, which lists no
+            // connections. Every dropped widget then landed on "Pick a
+            // connection" for an account that was plainly connected.
+            request.cachePolicy = .reloadIgnoringLocalCacheData
         }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -132,6 +132,11 @@ public final class NotchWindowController {
         view?.appOverrides = appOverrides
     }
 
+    /// Which metrics carry their time window in the tile's title.
+    public func update(timeWindowedMetrics: Set<String>) {
+        view?.timeWindowedMetrics = timeWindowedMetrics
+    }
+
     private func scheduleRebuild() {
         // Debounced. Waking a display, attaching a dock, or changing
         // resolution fires didChangeScreenParameters five to ten times in a

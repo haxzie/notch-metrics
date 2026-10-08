@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -58,6 +59,31 @@ async function get<T>(
 }
 
 /**
+ * One row of a list, or the fact that this key may not read it.
+ *
+ * 403 and 401 are different answers from Dodo: 401 is a key it does not
+ * know, 403 is a key it knows that lacks the scope for this resource.
+ * `errorForStatus` folds both into `auth_failed`, which is right for a
+ * metric fetch and wrong here, where the scope decides what to offer.
+ */
+async function probe<T extends { currency: string }>(
+  ctx: AdapterContext,
+  creds: DodoCredentials,
+  path: string,
+): Promise<{ allowed: boolean; first: T | undefined }> {
+  const url = new URL(`${baseUrl(creds)}${path}`);
+  url.searchParams.set("page_size", "1");
+  url.searchParams.set("page_number", "0");
+  const response = await ctx.http(url.toString(), {
+    headers: { authorization: `Bearer ${creds.api_key}` },
+  });
+  if (response.status === 403) return { allowed: false, first: undefined };
+  if (!response.ok) throw errorForStatus(host(creds), response);
+  const body = await response.json<DodoList<T>>();
+  return { allowed: true, first: body.items?.[0] };
+}
+
+/**
  * Walks `page_number` until a short page.
  *
  * Termination is on the page being shorter than `page_size`, because Dodo
@@ -103,6 +129,7 @@ interface DodoPayment {
   currency: string;
   status: string;
   created_at: string;
+  customer?: { name?: string | null; email?: string | null } | null;
 }
 
 /**
@@ -144,22 +171,35 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
   credentialSchema,
 
   async verify(ctx, creds): Promise<VerifyResult> {
-    // There is no `/me` on this API, so the cheapest proof that the key works
-    // against this host is a one-row list.
-    const body = await get<DodoList<DodoSubscription>>(ctx, creds, "/subscriptions", {
-      page_size: 1,
-      page_number: 0,
-    });
+    // There is no `/me` on this API, so the proof that the key works against
+    // this host is a one-row list — and Dodo keys carry scopes per resource,
+    // so each list is probed on its own. A key with `payments:read` and no
+    // `subscriptions:read` is a perfectly good key for revenue; rejecting it
+    // outright told somebody their key was wrong when it was merely narrow.
+    const payments = await probe<DodoPayment>(ctx, creds, "/payments");
+    const subscriptions = await probe<DodoSubscription>(ctx, creds, "/subscriptions");
 
-    const available: MetricId[] = ["mrr", "revenue", "active_subscribers"];
-    const first = body.items?.[0];
+    const available: MetricId[] = [];
+    if (payments.allowed) available.push("revenue", "recent_payments");
+    if (subscriptions.allowed) available.push("mrr", "active_subscribers");
+    if (available.length === 0) {
+      throw new ProviderError(
+        "unsupported",
+        "This key can read neither payments nor subscriptions. Give it payments:read and subscriptions:read.",
+      );
+    }
+    if (!subscriptions.allowed) {
+      ctx.log("dodo key lacks subscriptions:read; offering revenue and payments only");
+    }
+
+    const currency = subscriptions.first?.currency ?? payments.first?.currency ?? null;
 
     return {
       // The API exposes no account or business name, so the mode is the only
       // thing that distinguishes two connections. The detail only — the
       // provider's name is added by `connectionName`.
       accountLabel: creds.mode === "test" ? "Test" : null,
-      currency: first?.currency?.toUpperCase() ?? null,
+      currency: currency?.toUpperCase() ?? null,
       availableMetrics: available,
     };
   },
@@ -172,6 +212,8 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
         return activeSubscribers(ctx, creds);
       case "revenue":
         return revenue(ctx, creds, request);
+      case "recent_payments":
+        return latestPayments(ctx, creds);
       default:
         throw new ProviderError("unsupported", `Dodo Payments does not provide ${request.metric}.`);
     }
@@ -275,4 +317,27 @@ async function revenue(
     previousValue,
     note: join(note, truncationNote(truncated)),
   };
+}
+
+/**
+ * The newest payments that actually took money. Dodo lists newest first, so
+ * one page over-fetched by a factor of two covers a run of failed attempts.
+ */
+async function latestPayments(ctx: AdapterContext, creds: DodoCredentials): Promise<RawSeries> {
+  const body = await get<DodoList<DodoPayment>>(ctx, creds, "/payments", {
+    page_size: RECENT_PAYMENTS_LIMIT * 2,
+    page_number: 0,
+  });
+  const rows = (body.items ?? [])
+    .filter((payment) => payment.status === "succeeded")
+    .map((payment) => ({
+      id: payment.payment_id,
+      t: new Date(payment.created_at),
+      label: payment.customer?.name || payment.customer?.email || "Customer",
+      detail: null,
+      amount: payment.total_amount,
+      currency: payment.currency.toUpperCase(),
+      status: payment.status,
+    }));
+  return recentPayments(ctx, rows);
 }

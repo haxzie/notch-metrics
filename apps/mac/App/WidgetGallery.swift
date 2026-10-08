@@ -244,6 +244,11 @@ private struct GalleryCard: View {
 
     private var app: MetricApp { AppCatalog.resolve(connector.id) }
 
+    /// The same test the configure pane uses to decide whether to offer a
+    /// Range control. The preview should carry the window for exactly the
+    /// metrics whose tile will.
+    private var usesTimeWindow: Bool { metric.supportsSeries || metric.supportsCompare }
+
     var body: some View {
         // No background and no border of its own. `WidgetTile` already draws a
         // rounded fill, a hairline and a clip — wrapping it in a second set
@@ -252,7 +257,9 @@ private struct GalleryCard: View {
         // Width comes from the grid cell rather than a fixed number, so the
         // columns line up instead of each tile sitting narrower than the
         // space allotted to it.
-        WidgetTile(widget: draft, app: app, state: .value(GallerySample.series(for: metric)))
+        WidgetTile(
+            widget: draft, app: app, state: .value(GallerySample.series(for: metric)),
+            showsRange: usesTimeWindow)
             .frame(height: 118)
             .frame(maxWidth: .infinity)
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -272,7 +279,8 @@ private struct GalleryCard: View {
             } preview: {
                 WidgetTile(
                     widget: draft, app: app,
-                    state: .value(GallerySample.series(for: metric))
+                    state: .value(GallerySample.series(for: metric)),
+                    showsRange: usesTimeWindow
                 )
                 .frame(width: 176, height: 110)
             }
@@ -329,6 +337,21 @@ enum GallerySample {
                 t: "2026-01-\(String(format: "%02d", index % 28 + 1))T00:00:00Z",
                 v: base * (0.55 + next() * 0.75))
         }
+        // A list previews as rows, because a figure says nothing about what
+        // the widget will look like once it is on the grid.
+        let rows: [MetricListItem]? =
+            metric.id == "recent_payments"
+            ? [
+                MetricListItem(
+                    id: "1", t: "2026-01-28T11:40:00Z", label: "Ada Lovelace", detail: "Pro",
+                    amount: 9_900, currency: "USD", status: "succeeded"),
+                MetricListItem(
+                    id: "2", t: "2026-01-28T09:12:00Z", label: "grace@example.com",
+                    detail: "Starter", amount: 1_900, currency: "USD", status: "succeeded"),
+                MetricListItem(
+                    id: "3", t: "2026-01-27T22:05:00Z", label: "Linus T.", detail: "Team",
+                    amount: 29_900, currency: "USD", status: "succeeded"),
+            ] : nil
         return MetricSeries(
             integrationId: nil,
             metric: metric.id,
@@ -339,7 +362,8 @@ enum GallerySample {
             delta: MetricDelta(absolute: base * 0.2, percent: 25.6),
             points: metric.supportsSeries ? points : [],
             granularity: metric.granularities.first ?? .day,
-            range: .month)
+            range: .month,
+            items: rows)
     }
 }
 

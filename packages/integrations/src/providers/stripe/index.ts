@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -104,6 +105,19 @@ interface Subscription {
   };
 }
 
+interface Charge {
+  id: string;
+  amount: number;
+  amount_refunded?: number;
+  currency: string;
+  created: number;
+  status: string;
+  refunded?: boolean;
+  description?: string | null;
+  receipt_email?: string | null;
+  billing_details?: { name?: string | null; email?: string | null } | null;
+}
+
 interface BalanceTransaction {
   id: string;
   amount: number;
@@ -126,7 +140,7 @@ export const stripe: ProviderAdapter<StripeCredentials> = {
     // A restricted key may read charges but not subscriptions. Narrowing what
     // we offer beats failing the whole connection and telling the user their
     // perfectly good key is broken.
-    const available: MetricId[] = ["revenue", "refunds"];
+    const available: MetricId[] = ["revenue", "refunds", "recent_payments"];
     try {
       await get<StripeList<Subscription>>(ctx, creds, "/subscriptions", { limit: 1 });
       available.push("mrr", "active_subscribers", "new_subscribers", "churned_subscribers");
@@ -156,6 +170,8 @@ export const stripe: ProviderAdapter<StripeCredentials> = {
         return subscriptionCounts(ctx, creds, request, "created");
       case "churned_subscribers":
         return subscriptionCounts(ctx, creds, request, "canceled");
+      case "recent_payments":
+        return latestCharges(ctx, creds);
       default:
         // Exhaustive by construction: registry.test.ts asserts every metric the
         // manifest declares reaches a case above.
@@ -163,6 +179,39 @@ export const stripe: ProviderAdapter<StripeCredentials> = {
     }
   },
 };
+
+/**
+ * The newest charges that actually took money.
+ *
+ * Charges rather than balance transactions: a balance transaction knows the
+ * amount and nothing about who paid. Over-fetched by a page so that a run
+ * of failed card attempts does not leave the list short.
+ */
+async function latestCharges(ctx: AdapterContext, creds: StripeCredentials): Promise<RawSeries> {
+  const body = await get<StripeList<Charge>>(ctx, creds, "/charges", {
+    limit: RECENT_PAYMENTS_LIMIT * 2,
+  });
+  const rows = body.data
+    .filter((charge) => charge.status === "succeeded")
+    .map((charge) => ({
+      id: charge.id,
+      t: new Date(charge.created * 1000),
+      label:
+        charge.billing_details?.name ||
+        charge.billing_details?.email ||
+        charge.receipt_email ||
+        "Customer",
+      detail: charge.description ?? null,
+      amount: charge.amount,
+      currency: charge.currency.toUpperCase(),
+      status: charge.refunded
+        ? "refunded"
+        : (charge.amount_refunded ?? 0) > 0
+          ? "partially refunded"
+          : charge.status,
+    }));
+  return recentPayments(ctx, rows);
+}
 
 function tooLarge(): ProviderError {
   return new ProviderError(

@@ -68,6 +68,8 @@ public enum AppCatalog {
         MetricApp(
             id: "paddle", name: "Paddle", symbol: "banknote.fill", accentHex: "FDDD35"),
         MetricApp(
+            id: "revenuecat", name: "RevenueCat", symbol: "cat.fill", accentHex: "F2545B"),
+        MetricApp(
             id: "posthog", name: "PostHog", symbol: "chart.dots.scatter", accentHex: "F54E00"),
         MetricApp(
             id: "plausible", name: "Plausible", symbol: "chart.xyaxis.line", accentHex: "5850EC"),

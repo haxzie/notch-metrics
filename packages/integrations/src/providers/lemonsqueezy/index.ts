@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -49,6 +50,9 @@ interface OrderAttributes {
   refunded: boolean;
   refunded_amount: number;
   created_at: string;
+  user_name?: string | null;
+  user_email?: string | null;
+  first_order_item?: { product_name?: string | null; variant_name?: string | null } | null;
 }
 
 interface SubscriptionAttributes {
@@ -198,7 +202,13 @@ export const lemonsqueezy: ProviderAdapter<LemonSqueezyCredentials> = {
     return {
       accountLabel: label,
       currency: chosen?.attributes.currency?.toUpperCase() ?? null,
-      availableMetrics: ["mrr", "revenue", "active_subscribers", "refunds"] satisfies MetricId[],
+      availableMetrics: [
+        "mrr",
+        "revenue",
+        "active_subscribers",
+        "refunds",
+        "recent_payments",
+      ] satisfies MetricId[],
     };
   },
 
@@ -211,6 +221,8 @@ export const lemonsqueezy: ProviderAdapter<LemonSqueezyCredentials> = {
       case "revenue":
       case "refunds":
         return fromOrders(ctx, creds, request);
+      case "recent_payments":
+        return latestOrders(ctx, creds);
       default:
         throw new ProviderError("unsupported", `Lemon Squeezy does not provide ${request.metric}.`);
     }
@@ -360,4 +372,34 @@ async function fromOrders(
     previousValue,
     note: join(note, truncationNote(truncated)),
   };
+}
+
+/** The newest paid orders. Orders come back newest first, so one page does. */
+async function latestOrders(
+  ctx: AdapterContext,
+  creds: LemonSqueezyCredentials,
+): Promise<RawSeries> {
+  const body = await get<Page<OrderAttributes>>(ctx, creds, "/orders", {
+    ...storeFilter(creds),
+    "page[number]": 1,
+    "page[size]": RECENT_PAYMENTS_LIMIT * 2,
+  });
+  const rows = (body.data ?? [])
+    .filter((row) => PAID.has(row.attributes.status))
+    .map((row) => {
+      const item = row.attributes.first_order_item;
+      const product = [item?.product_name, item?.variant_name]
+        .filter((part): part is string => Boolean(part))
+        .join(" · ");
+      return {
+        id: row.id,
+        t: new Date(row.attributes.created_at),
+        label: row.attributes.user_name || row.attributes.user_email || "Customer",
+        detail: product || null,
+        amount: row.attributes.total,
+        currency: row.attributes.currency.toUpperCase(),
+        status: row.attributes.status,
+      };
+    });
+  return recentPayments(ctx, rows);
 }

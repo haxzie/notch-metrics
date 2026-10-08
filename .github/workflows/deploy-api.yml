@@ -45,4 +45,8 @@ jobs:
         # schema that does not have its tables yet.
         run: pnpm --filter @notch/api migrate:remote
 
-      - run: pnpm --filter @notch/api deploy
+      # `run` is not optional. Without it pnpm resolves `deploy` to its own
+      # built-in (the one that packs a workspace into a directory) and fails
+      # with "This command requires one parameter" rather than running the
+      # script of that name.
+      - run: pnpm --filter @notch/api run deploy

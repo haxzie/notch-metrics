@@ -36,10 +36,16 @@ public struct WidgetTile: View {
     /// the highlight landed on one tile while the badges landed on another.
     /// One source, resolved from the pointer against the grid.
     public let isHovered: Bool
+    /// Whether the metric's number depends on the widget's time window, in
+    /// which case the window is written into the title. Comes from the
+    /// metric's descriptor, which only the app holds; false until it says so,
+    /// because a snapshot gaining a range it does not use is the worse
+    /// mistake.
+    public let showsRange: Bool
 
     public init(
         widget: NotchWidget, app: MetricApp, state: TileState, isEditing: Bool = false,
-        isHovered: Bool = false, connectionName: String? = nil
+        isHovered: Bool = false, connectionName: String? = nil, showsRange: Bool = false
     ) {
         self.widget = widget
         self.app = app
@@ -47,6 +53,7 @@ public struct WidgetTile: View {
         self.isEditing = isEditing
         self.connectionName = connectionName
         self.isHovered = isHovered
+        self.showsRange = showsRange
     }
 
     private var accent: Color { NotchTheme.accent(for: app) }
@@ -61,20 +68,29 @@ public struct WidgetTile: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             source
-            Text(title)
+            titleText
                 .font(.system(size: labelSize, weight: .regular))
                 .foregroundStyle(NotchTheme.secondaryText)
                 .lineLimit(1)
                 .padding(.top, labelGap)
+                .accessibilityLabel(title)
 
             // A Spacer either side rather than one above: the number sits in
             // the middle of whatever height is left under the label, which
             // keeps it on the same line across tiles of different heights.
             // Pinned to the bottom, a 2x2 and a 2x1 side by side had their
             // figures at different heights and the row read as misaligned.
-            Spacer(minLength: 0)
-            value
-            Spacer(minLength: 0)
+            if case .value(let series) = state, let items = series.items {
+                // A list fills the tile from the label down. The headline
+                // figure is dropped: the rows are the number, itemised.
+                list(items, stale: series.stale)
+                    .padding(.top, 6)
+                Spacer(minLength: 0)
+            } else {
+                Spacer(minLength: 0)
+                value
+                Spacer(minLength: 0)
+            }
 
             // Always the bottom edge, never under the number. The chart used
             // to live inside the value stack, so it floated with the figure
@@ -206,6 +222,70 @@ public struct WidgetTile: View {
         }
     }
 
+    /// The rows of a list widget, as many as the tile has room for.
+    ///
+    /// Clipped to a count rather than left to overflow: a row cut in half
+    /// by the tile's corner reads as a rendering fault, and a row that is
+    /// not there reads as a shorter list.
+    @ViewBuilder
+    private func list(_ items: [MetricListItem], stale: Bool) -> some View {
+        if items.isEmpty {
+            Text("Nothing yet")
+                .font(.system(size: 11))
+                .foregroundStyle(NotchTheme.tertiaryText)
+        } else {
+            VStack(alignment: .leading, spacing: listRowSpacing) {
+                ForEach(items.prefix(listRows)) { item in
+                    row(item, stale: stale)
+                }
+            }
+        }
+    }
+
+    private func row(_ item: MetricListItem, stale: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(item.label)
+                .font(.system(size: listFontSize, weight: .medium))
+                .foregroundStyle(stale ? NotchTheme.secondaryText : NotchTheme.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if let detail = item.detail, widget.size.cols >= 3 {
+                Text(detail)
+                    .font(.system(size: listFontSize - 1))
+                    .foregroundStyle(NotchTheme.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(-1)
+            }
+            Spacer(minLength: 4)
+            if let amount = item.amount {
+                Text(MetricFormatter.amount(amount, code: item.currency ?? "USD"))
+                    .font(.system(size: listFontSize, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    // A refund still lists — it happened — but reads as one.
+                    .foregroundStyle(
+                        item.status?.contains("refund") == true
+                            ? NotchTheme.negative : NotchTheme.primaryText)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            if let date = item.date, !isTiny {
+                Text(MetricFormatter.age(date))
+                    .font(.system(size: listFontSize - 2))
+                    .foregroundStyle(NotchTheme.tertiaryText)
+                    .monospacedDigit()
+                    .frame(width: 24, alignment: .trailing)
+            }
+        }
+        .help([item.label, item.detail, item.status].compactMap { $0 }.joined(separator: " · "))
+    }
+
+    /// Rows per tile height: two on a one-row tile, then three more per row.
+    /// Derived from the same 84pt-per-row the grid uses, less the header.
+    private var listRows: Int { widget.size.rows == 1 ? 2 : 2 + (widget.size.rows - 1) * 3 }
+    private var listRowSpacing: CGFloat { isTiny ? 2 : 4 }
+    private var listFontSize: CGFloat { isTiny ? 9 : 11 }
+
     @ViewBuilder
     private func chart(for series: MetricSeries) -> some View {
         let values = series.points.map(\.v)
@@ -221,8 +301,19 @@ public struct WidgetTile: View {
         }
     }
 
-    private var title: String {
-        widget.title ?? widget.metric ?? widget.customMetricId ?? "Metric"
+    private var title: String { widget.displayTitle(showingRange: showsRange) }
+
+    /// The name at full strength and the window a step quieter.
+    ///
+    /// Both in the label's colour, but the range at 70% of it: the name is
+    /// what the eye looks for and the window is a qualifier on it. At equal
+    /// weight "Revenue · 30d" read as one three-word title and the range
+    /// competed with the name on every tile.
+    private var titleText: Text {
+        guard showsRange else { return Text(widget.baseTitle) }
+        return Text(widget.baseTitle)
+            + Text(" · \(widget.range.rawValue)")
+            .foregroundStyle(NotchTheme.secondaryText.opacity(0.7))
     }
 
 

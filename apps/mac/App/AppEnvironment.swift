@@ -111,6 +111,10 @@ final class AppEnvironment {
         // says what to do instead.
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" {
             layoutModel.replace(with: Self.demoLayout())
+            // Demo mode never refreshes, so the titles would otherwise miss
+            // the time window a live notch shows — and a screenshot of the
+            // demo is the place that most needs to look like the real thing.
+            Task { await refreshMetricWindows() }
         }
 
         states = ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1"
@@ -185,12 +189,40 @@ final class AppEnvironment {
                 uniqueKeysWithValues: all.map { ($0.id, $0.label) }))
     }
 
+    /// Tells the notch which metrics depend on a time window, so those tiles
+    /// write the window into their title.
+    ///
+    /// The server's descriptor is the one place that knows — the same flags
+    /// that decide whether the configure pane shows a Range control at all.
+    /// Custom metrics answer from their plugin manifest. Read here rather
+    /// than stored on the widget so a widget made before this existed, or a
+    /// metric whose descriptor changes, is labelled correctly on the next
+    /// refresh without a migration.
+    func refreshMetricWindows() async {
+        var keys = Set<String>()
+        for plugin in plugins.plugins {
+            if plugin.manifest?.supportsSeries == true { keys.insert("custom/\(plugin.id)") }
+        }
+        // Not gated on sign-in: the catalogue is readable either way, and a
+        // demo or signed-out notch should label its tiles the same as a live one.
+        if let catalogue = try? await api.catalogue() {
+            for connector in catalogue.allConnectors {
+                for metric in connector.metrics
+                where metric.supportsSeries || metric.supportsCompare {
+                    keys.insert("\(connector.id)/\(metric.id)")
+                }
+            }
+        }
+        notch.update(timeWindowedMetrics: keys)
+    }
+
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
     /// added so a new tile fills in rather than sitting on "Loading".
     func refresh() async {
         // Alongside, not awaited: the tiles should not wait on the labels to
         // show their numbers.
         Task { await refreshConnectionNames() }
+        Task { await refreshMetricWindows() }
         guard isSignedIn else {
             states = Self.placeholderStates(for: layoutModel.layout, signedIn: false)
             notch.update(states: states)
@@ -337,10 +369,15 @@ final class AppEnvironment {
                 NotchWidget(
                     id: "starter-mrr", kind: .providerMetric, appId: "stripe", metric: "mrr",
                     title: "MRR", size: .square, col: 2, row: 0, position: 1, chart: .none),
+                // A list, so the demo shows both kinds of tile.
+                NotchWidget(
+                    id: "starter-payments", kind: .providerMetric, appId: "stripe",
+                    metric: "recent_payments", title: "Payments", size: .square,
+                    col: 4, row: 0, position: 2, chart: .none),
                 NotchWidget(
                     id: "starter-subs", kind: .providerMetric, appId: "stripe",
                     metric: "active_subscribers", title: "Subscribers", size: .square,
-                    col: 4, row: 0, position: 2, chart: .bars),
+                    col: 0, row: 0, position: 3, chart: .bars),
                 NotchWidget(
                     id: "demo-ga-users", kind: .providerMetric, appId: "google-analytics",
                     metric: "active_subscribers", title: "Active users", size: .wide,
@@ -393,6 +430,32 @@ final class AppEnvironment {
             "starter-subs": series(
                 "active_subscribers", 3_456, unit: .count, currency: nil,
                 trend: [2_980, 3_110, 3_240, 3_300, 3_398, 3_456]),
+            "starter-payments": MetricSeries(
+                integrationId: "int_demo", metric: "recent_payments", unit: .currency,
+                currency: "USD", value: 41_700, points: [], granularity: .day, range: .month,
+                generatedAt: ISO8601.string(from: Date()),
+                items: [
+                    MetricListItem(
+                        id: "1", t: ISO8601.string(from: Date().addingTimeInterval(-420)),
+                        label: "Ada Lovelace", detail: "Pro · yearly", amount: 9_900,
+                        currency: "USD", status: "succeeded"),
+                    MetricListItem(
+                        id: "2", t: ISO8601.string(from: Date().addingTimeInterval(-5_400)),
+                        label: "grace@example.com", detail: "Starter", amount: 1_900,
+                        currency: "USD", status: "succeeded"),
+                    MetricListItem(
+                        id: "3", t: ISO8601.string(from: Date().addingTimeInterval(-19_800)),
+                        label: "Linus T.", detail: "Team", amount: 29_900, currency: "USD",
+                        status: "succeeded"),
+                    MetricListItem(
+                        id: "4", t: ISO8601.string(from: Date().addingTimeInterval(-93_600)),
+                        label: "Margaret H.", detail: "Pro", amount: 4_900, currency: "USD",
+                        status: "refunded"),
+                    MetricListItem(
+                        id: "5", t: ISO8601.string(from: Date().addingTimeInterval(-180_000)),
+                        label: "ken@example.com", detail: "Starter", amount: 1_900,
+                        currency: "USD", status: "succeeded"),
+                ]),
             "demo-ga-users": series(
                 "active_subscribers", 18_402, unit: .count, currency: nil,
                 trend: [14_900, 15_800, 16_100, 17_400, 17_900, 18_402]),

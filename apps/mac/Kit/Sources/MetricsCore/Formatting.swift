@@ -94,6 +94,27 @@ public enum MetricFormatter {
         ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .binary)
     }
 
+    /// "just now", "4m", "2h", "3d" — the age of a list row.
+    ///
+    /// Units only, no "ago": a list row has about 30 points for its time
+    /// and the column reads as ages without the word.
+    public static func age(_ date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        if seconds < 60 { return "now" }
+        if seconds < 3600 { return "\(Int(seconds / 60))m" }
+        if seconds < 86_400 { return "\(Int(seconds / 3600))h" }
+        if seconds < 86_400 * 30 { return "\(Int(seconds / 86_400))d" }
+        return "\(Int(seconds / (86_400 * 30)))mo"
+    }
+
+    /// A list row's amount: minor units in, "$49.00" out, never compacted.
+    ///
+    /// A row is a single payment and the exact figure is the point of
+    /// listing it. The headline compacts; rows do not.
+    public static func amount(_ minor: Double, code: String) -> String {
+        currency(minor / 100, code: code, compact: false, decimals: 2)
+    }
+
     /// "+7.9%" / "−3.2%", with a true minus sign rather than a hyphen.
     public static func delta(_ delta: MetricDelta?) -> String? {
         guard let percent = delta?.percent else { return nil }

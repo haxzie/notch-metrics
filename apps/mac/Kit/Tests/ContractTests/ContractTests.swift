@@ -43,7 +43,7 @@ struct ContractTests {
         let notDecodedHere: Set<String> = ["provider-manifest-list", "integration", "plugin-manifest"]
         let decoded: Set<String> = [
             "metric-series", "metric-series-empty", "metric-series-no-currency",
-            "metric-error", "metric-batch", "widget-layout",
+            "metric-series-list", "metric-error", "metric-batch", "widget-layout",
             "latest-json",
         ]
 
@@ -86,6 +86,26 @@ struct ContractTests {
         #expect(series.currency == nil)
         #expect(series.unit == .count)
         #expect(series.format == nil)
+    }
+
+    @Test("a list series decodes its rows, including one with no amount")
+    func listSeries() throws {
+        let result = try JSONDecoder().decode(
+            MetricResult.self, from: Self.load("metric-series-list"))
+        let series = try #require(result.series)
+        let items = try #require(series.items)
+        #expect(items.count == 3)
+        #expect(items.first?.label == "Ada Lovelace")
+        #expect(items.first?.amount == 9_900)
+        #expect(items.first?.date != nil)
+        #expect(items.last?.amount == nil)
+        #expect(items.last?.currency == nil)
+    }
+
+    @Test("a number series has no rows, rather than an empty list")
+    func numberHasNoItems() throws {
+        let result = try JSONDecoder().decode(MetricResult.self, from: Self.load("metric-series"))
+        #expect(try #require(result.series).items == nil)
     }
 
     @Test("an error carried inside a 200 decodes as a failure")

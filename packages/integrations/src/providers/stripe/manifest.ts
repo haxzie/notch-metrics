@@ -1,4 +1,5 @@
 import type { ProviderManifest } from "@notch/schemas";
+import { recentPaymentsDescriptor } from "../../list.ts";
 
 export const manifest: ProviderManifest = {
   id: "stripe",
@@ -86,6 +87,9 @@ export const manifest: ProviderManifest = {
       supportsCompare: true,
       methodology: "Refund balance transactions in the window, as a positive amount.",
     },
+    recentPaymentsDescriptor(
+      "The latest succeeded charges, newest first, with the payer's billing name or receipt email and the charge description. The headline is their total in your currency.",
+    ),
   ],
   allowedHosts: ["api.stripe.com"],
   status: "stable",
