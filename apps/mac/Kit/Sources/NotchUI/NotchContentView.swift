@@ -31,6 +31,7 @@ public struct NotchContentView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isResizing = false
+    @State private var isGrabberHovered = false
     /// Whole turns of the refresh glyph, one per press.
     @State private var turns = 0.0
     @State private var rowsAtDragStart = NotchLayout.defaultRows
@@ -203,8 +204,8 @@ public struct NotchContentView: View {
     /// anything placed there is invisible.
     ///
     /// Refresh and settings sit beside the name rather than on the right.
-    /// The right half is the crowded one — it carries the edit pill, the
-    /// below-fold count and the close button — and on a notched display it
+    /// The right half is the crowded one — it carries the edit pill and the
+    /// close button — and on a notched display it
     /// starts immediately after the housing, so the two controls reached for
     /// most often were the ones furthest from the pointer and nearest the
     /// hardware. The left half is otherwise only a logo and a label.
@@ -227,19 +228,6 @@ public struct NotchContentView: View {
             // camera housing on a notched display, so the text was half
             // hidden on exactly the machines this app is for — and the
             // selection outline and handles say what to do without words.
-            if belowFoldCount > 0, configuring == nil {
-                // Below the fold, not lost. Saying so beats silently showing
-                // fewer numbers than the user added.
-                Text("+\(belowFoldCount) below")
-                    .font(.system(size: 10, weight: .medium))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.white.opacity(0.1)))
-                    .foregroundStyle(NotchTheme.secondaryText)
-                    .help("Scroll the grid, or drag the handle at the bottom to make the notch taller.")
-                    .transition(.opacity)
-            }
-
             if configuring != nil {
                 cancelConfiguringButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
@@ -472,22 +460,54 @@ public struct NotchContentView: View {
     /// glass under the last tile. Snapping also means the drag has detents,
     /// which is what makes it feel like a control rather than a scrollbar.
     private var grabber: some View {
-        Capsule()
-            .fill(isResizing ? NotchTheme.editHighlight : Color.white.opacity(0.22))
-            .frame(width: isResizing ? 56 : 44, height: 4)
+        let lit = isResizing || isGrabberHovered
+        return Capsule()
+            .fill(lit ? NotchTheme.editHighlight : Color.white.opacity(0.22))
+            .frame(width: lit ? 56 : 44, height: 4)
             .padding(.vertical, 8)
             // The hit area is the full width and taller than the capsule: a
             // 44x4 target is below every sane minimum, and this is the only
             // way to change the height.
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
-            .onHover { hovering in
-                // A resize cursor is the only thing that says "this is a
-                // handle" before the user has already tried dragging it.
-                if hovering { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            // Continuous rather than enter/exit, and `set()` rather than
+            // `push()`: the hosting view resets the cursor to an arrow on
+            // its own cursor-update pass, so a single push on entry was
+            // undone by the next mouse move and the handle looked inert.
+            // Re-setting on every move is what keeps the resize cursor up.
+            .onContinuousHover { phase in
+                switch phase {
+                case .active:
+                    isGrabberHovered = true
+                    NSCursor.resizeUpDown.set()
+                case .ended:
+                    isGrabberHovered = false
+                    // Mid-drag the pointer routinely leaves the band; the
+                    // gesture's end puts the arrow back.
+                    if !isResizing { NSCursor.arrow.set() }
+                }
             }
             .gesture(resizeGesture)
-            .animation(.easeOut(duration: 0.14), value: isResizing)
+            // Below the fold, not lost. Saying so beats silently showing
+            // fewer numbers than the user added. It sits in the handle's band
+            // because the handle is the fix: drag it down and they appear.
+            // Not hit-testable, so the whole band still drags.
+            .overlay(alignment: .leading) {
+                if belowFoldCount > 0 {
+                    HStack(spacing: 3) {
+                        Text("+\(belowFoldCount) below")
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(NotchTheme.tertiaryText)
+                    .padding(.leading, NotchWidgetCanvas.contentHorizontal + 4)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.14), value: lit)
+            .animation(.easeOut(duration: 0.14), value: belowFoldCount)
             .accessibilityLabel("Resize")
             .accessibilityValue("\(model.displayed.rows) rows")
             .accessibilityAdjustableAction { direction in
@@ -517,6 +537,7 @@ public struct NotchContentView: View {
                 isResizing = false
                 view.isInteracting = false
                 model.endRowDrag()
+                if !isGrabberHovered { NSCursor.arrow.set() }
             }
     }
 
