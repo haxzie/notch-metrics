@@ -39,10 +39,10 @@ public struct WidgetConfigurePane: View {
     public var body: some View {
         HStack(spacing: 0) {
             preview
-                .frame(width: 236)
-            Divider()
-                .opacity(0.35)
-                .padding(.vertical, 4)
+                .frame(width: 288)
+            // No divider. The preview sits on its own recessed surface, which
+            // already draws the line between the two halves — a rule beside it
+            // was a second edge saying the same thing.
             panel(widget)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.leading, 16)
