@@ -20,6 +20,9 @@ struct WidgetConfigPanel: View {
     @State private var model = WidgetCatalogueModel()
     @State private var preview: TileState = .loading
     @State private var draft: NotchWidget?
+    @State private var scroll = FormScroll()
+
+    private static let formSpace = "config-form"
 
     private var entry: ConnectorEntry? {
         guard let draft else { return nil }
@@ -68,20 +71,37 @@ struct WidgetConfigPanel: View {
                 // change is already being previewed in the place that counts.
                 env.layoutModel.update(next)
             })
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                connectionSection(binding)
-                appearanceSection(binding)
-                dataSection(binding)
-                removeButton
+        return GeometryReader { outer in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    connectionSection(binding)
+                    appearanceSection(binding)
+                    dataSection(binding)
+                    removeButton
+                }
+                .padding(.trailing, 14)
+                .padding(.bottom, 6)
+                .background(
+                    GeometryReader { inner in
+                        Color.clear.preference(
+                            key: FormScrollKey.self,
+                            value: FormScroll(
+                                offset: -inner.frame(in: .named(Self.formSpace)).minY,
+                                contentHeight: inner.size.height,
+                                viewportHeight: outer.size.height))
+                    })
             }
-            .padding(.trailing, 14)
-            .padding(.bottom, 6)
+            .coordinateSpace(name: Self.formSpace)
+            // Without this the scroll view paints an opaque backing and the
+            // notch's own fill shows through nothing — the panel ends up
+            // looking like a dialog from another app pasted into it.
+            .scrollContentBackground(.hidden)
+            .onPreferenceChange(FormScrollKey.self) { next in
+                MainActor.assumeIsolated { scroll = next }
+            }
+            .overlay(alignment: .bottom) { moreBelow }
+            .animation(.easeOut(duration: 0.16), value: scroll.showsHint)
         }
-        // Without this the scroll view paints an opaque backing and the
-        // notch's own fill shows through nothing — the panel ends up looking
-        // like a dialog from another app pasted into it.
-        .scrollContentBackground(.hidden)
     }
 
     private func connectionSection(_ binding: Binding<NotchWidget>) -> some View {
@@ -235,6 +255,26 @@ struct WidgetConfigPanel: View {
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 
+    /// A chevron at the bottom edge while the form is still at the top.
+    ///
+    /// Only at the top, and only when there is something to scroll to. Once
+    /// the user has started scrolling they know the column moves, and a hint
+    /// that stays put after it has been acted on is just clutter.
+    @ViewBuilder
+    private var moreBelow: some View {
+        if scroll.showsHint {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.black.opacity(0.35)))
+                .padding(.bottom, 2)
+                .transition(.opacity)
+                .allowsHitTesting(false)
+        }
+    }
+
     // MARK: - Pieces
 
     /// A titled group of rows on one translucent card.
@@ -299,5 +339,35 @@ struct WidgetConfigPanel: View {
         } catch {
             preview = .failed(reason: "Could not load a preview")
         }
+    }
+}
+
+/// Where the configure form is scrolled to, and whether it can scroll at all.
+struct FormScroll: Equatable {
+    var offset: CGFloat = 0
+    var contentHeight: CGFloat = 0
+    var viewportHeight: CGFloat = 0
+
+    /// How far past the bottom of the viewport the content runs.
+    private var scrollable: CGFloat { max(0, contentHeight - viewportHeight) }
+
+    /// Shown only at the very top of a column that actually has more below.
+    ///
+    /// The threshold is a fraction rather than a number of points so it reads
+    /// the same whether the form is a little taller than the pane or twice it.
+    var showsHint: Bool {
+        guard scrollable > 8 else { return false }
+        return offset / scrollable < 0.01
+    }
+}
+
+private struct FormScrollKey: PreferenceKey {
+    static let defaultValue = FormScroll()
+
+    static func reduce(value: inout FormScroll, nextValue: () -> FormScroll) {
+        let next = nextValue()
+        // The background reader is the only one that reports a real content
+        // height; anything else is the default and would clear it.
+        if next.contentHeight > 0 { value = next }
     }
 }

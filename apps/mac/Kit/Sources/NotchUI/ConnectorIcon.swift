@@ -44,10 +44,23 @@ public struct ConnectorIcon: View {
     /// Artwork that already is the tile, so it is drawn to the edges.
     private var isFullBleed: Bool { mark != nil && ConnectorMarks.fullBleed.contains(app.id) }
 
+    /// The tile behind the mark.
+    ///
+    /// Frosted glass for the marks drawn against a light background, rather
+    /// than the near-white square they used to sit on. A row of white tiles in
+    /// a dark panel reads as a line of headlights, and glass keeps them part
+    /// of the same surface as everything around them.
+    @ViewBuilder
+    private var tileBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+        if usesLightTile {
+            shape.fill(.ultraThinMaterial)
+        } else {
+            shape.fill(tile)
+        }
+    }
+
     private var tile: Color {
-        // Not pure white: a hard #FFF square is brighter than anything else in
-        // a dark window and the row reads as a line of headlights.
-        if usesLightTile { return Color(white: 0.96) }
         // The luminance floor keeps a *white glyph* legible. A mark with its
         // own colours does not need it, and lifting Dodo Payments' black to
         // grey only makes the tile look washed out behind its lime.
@@ -58,8 +71,7 @@ public struct ConnectorIcon: View {
     }
 
     public var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-            .fill(tile)
+        tileBackground
             .overlay(glyph)
             // Clipped here rather than on the glyph alone, so a full-bleed
             // mark takes the tile's corners instead of squaring them off.
@@ -68,7 +80,7 @@ public struct ConnectorIcon: View {
                 // A hairline so a tile whose brand colour is close to the
                 // window's own still has an edge.
                 RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                    .strokeBorder(Color.white.opacity(usesLightTile ? 0.3 : 0.12), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(usesLightTile ? 0.16 : 0.12), lineWidth: 1)
             )
             .frame(width: size, height: size)
             .opacity(isEnabled ? 1 : 0.45)
@@ -76,9 +88,29 @@ public struct ConnectorIcon: View {
             .accessibilityHidden(true)
     }
 
+    /// A white silhouette of the mark.
+    ///
+    /// Marks drawn for a light background have no contrast on glass as they
+    /// are — Dodo's black, GitHub's black, Analytics' amber all vanish. Drawn
+    /// as a template they take the foreground colour instead. `isTemplate` is
+    /// set on a *copy*: the shared image from the catalogue is handed to every
+    /// other caller too.
+    private var templateMark: NSImage? {
+        guard let copy = mark?.copy() as? NSImage else { return nil }
+        copy.isTemplate = true
+        return copy
+    }
+
     @ViewBuilder
     private var glyph: some View {
-        if let mark {
+        if usesLightTile, let mark = templateMark {
+            Image(nsImage: mark)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(.white)
+                .frame(width: size * 0.6, height: size * 0.6)
+        } else if let mark {
             Image(nsImage: mark)
                 .resizable()
                 .scaledToFit()
