@@ -6,4 +6,4 @@
 // xcconfig value, so the app would ship a stale literal with this file sitting
 // right here looking correct.
 MARKETING_VERSION = 0.1.0
-CURRENT_PROJECT_VERSION = 55
+CURRENT_PROJECT_VERSION = 56
