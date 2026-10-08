@@ -140,7 +140,12 @@ public struct NotchContentView: View {
                 widget: widget,
                 app: AppCatalog.resolve(widget.appId, overrides: appOverrides),
                 state: states[widget.id] ?? .loading,
-                panel: view.configuratorPanel)
+                panel: view.configuratorPanel,
+                onResize: { size in
+                    var next = widget
+                    next.size = size
+                    model.update(next)
+                })
                 .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
                 .padding(.top, NotchWidgetCanvas.contentTop)
                 // Its own bottom inset. The grid gets that margin from the

@@ -94,45 +94,60 @@ struct WidgetConfigPanel: View {
 
     private func connectionSection(_ binding: Binding<NotchWidget>) -> some View {
         section("Connection") {
-            if let entry, !entry.connections.isEmpty {
-                row("Account") {
-                    Picker("", selection: Binding(
-                        get: { binding.wrappedValue.integrationId ?? "" },
-                        set: { id in
+            if let entry {
+                if entry.connections.isEmpty {
+                    // The same row as the picker, with the connect button
+                    // standing in for it. A note saying there is no account
+                    // explained the state but offered no way out of it, and
+                    // the way out was a second row underneath saying much the
+                    // same thing again.
+                    row("Account") {
+                        ConnectButton(app: entry, model: model) { newId in
                             var next = binding.wrappedValue
-                            next.integrationId = id.isEmpty ? nil : id
+                            next.integrationId = newId
                             binding.wrappedValue = next
                             Task { await refreshPreview() }
                         }
-                    )) {
-                        Text("None").tag("")
-                        ForEach(entry.connections) { connection in
-                            Text(connection.label).tag(connection.id)
+                    }
+                } else {
+                    row("Account") {
+                        Picker("", selection: Binding(
+                            get: { binding.wrappedValue.integrationId ?? "" },
+                            set: { id in
+                                var next = binding.wrappedValue
+                                next.integrationId = id.isEmpty ? nil : id
+                                binding.wrappedValue = next
+                                Task { await refreshPreview() }
+                            }
+                        )) {
+                            Text("None").tag("")
+                            ForEach(entry.connections) { connection in
+                                Text(connection.label).tag(connection.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    Divider().opacity(0.4)
+                    HStack {
+                        // Right, with the pickers. Every other control here is
+                        // on the trailing edge, and a button alone on the left
+                        // reads as belonging to a different group.
+                        Spacer(minLength: 0)
+                        ConnectButton(app: entry, model: model) { newId in
+                            var next = binding.wrappedValue
+                            next.integrationId = newId
+                            binding.wrappedValue = next
+                            Task { await refreshPreview() }
                         }
                     }
-                    .labelsHidden()
-                    .fixedSize()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
             } else {
-                note("No account connected yet. The tile shows a placeholder until there is one.")
-            }
-
-            if let entry {
-                Divider().opacity(0.4)
-                HStack {
-                    // Right, with the pickers. Every other control in this
-                    // window is on the trailing edge, and a button alone on
-                    // the left reads as belonging to a different group.
-                    Spacer(minLength: 0)
-                    ConnectButton(app: entry, model: model) { newId in
-                        var next = binding.wrappedValue
-                        next.integrationId = newId
-                        binding.wrappedValue = next
-                        Task { await refreshPreview() }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                // Before the catalogue has loaded there is nothing to connect
+                // to yet, so there is nothing useful to offer either.
+                note("Loading accounts…")
             }
         }
     }
@@ -140,24 +155,6 @@ struct WidgetConfigPanel: View {
     @ViewBuilder
     private func appearanceSection(_ binding: Binding<NotchWidget>) -> some View {
         section("Appearance") {
-            row("Size") {
-                Picker("", selection: Binding(
-                    get: { binding.wrappedValue.size },
-                    set: { size in
-                        var next = binding.wrappedValue
-                        next.size = size
-                        binding.wrappedValue = next
-                    }
-                )) {
-                    ForEach(WidgetSize.presets, id: \.self) { option in
-                        Text(option.rawValue).tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 190)
-            }
-            Divider().opacity(0.4)
             row("Numbers") {
                 Picker("", selection: Binding(
                     get: { binding.wrappedValue.format?.compact ?? true },

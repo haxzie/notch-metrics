@@ -17,17 +17,20 @@ public struct WidgetConfigurePane: View {
     let app: MetricApp
     let state: TileState
     let panel: @MainActor (NotchWidget) -> AnyView
+    let onResize: (WidgetSize) -> Void
 
     public init(
         widget: NotchWidget,
         app: MetricApp,
         state: TileState,
-        panel: @escaping @MainActor (NotchWidget) -> AnyView
+        panel: @escaping @MainActor (NotchWidget) -> AnyView,
+        onResize: @escaping (WidgetSize) -> Void = { _ in }
     ) {
         self.widget = widget
         self.app = app
         self.state = state
         self.panel = panel
+        self.onResize = onResize
     }
 
     public var body: some View {
@@ -53,13 +56,17 @@ public struct WidgetConfigurePane: View {
             WidgetTile(widget: widget, app: app, state: state)
                 .frame(width: tileSize.width, height: tileSize.height)
                 .animation(.snappy(duration: 0.22), value: widget.size)
-            Text(label)
+            Text(app.name)
                 .font(.system(size: 10.5))
                 .foregroundStyle(NotchTheme.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
+        // Over the preview rather than in the form: size is the one setting
+        // whose effect is the shape of the thing beside it, so it belongs
+        // where you are already looking.
+        .overlay(alignment: .bottom) { sizePicker.padding(.bottom, 10) }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.black.opacity(0.12)))
@@ -69,8 +76,31 @@ public struct WidgetConfigurePane: View {
         .padding(.trailing, 14)
     }
 
-    private var label: String {
-        "\(app.name) · \(widget.size.rawValue)"
+    /// The presets only, floating. Every span in between is still reachable
+    /// by dragging a handle on the tile itself.
+    private var sizePicker: some View {
+        HStack(spacing: 2) {
+            ForEach(WidgetSize.presets, id: \.self) { option in
+                Button { onResize(option) } label: {
+                    Text(option.rawValue)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(
+                                option == widget.size
+                                    ? NotchTheme.editHighlight : Color.clear))
+                        .foregroundStyle(
+                            option == widget.size ? Color.white : NotchTheme.secondaryText)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(.ultraThinMaterial))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+        .animation(.snappy(duration: 0.2), value: widget.size)
     }
 
     /// Close to the notch's own cell, capped so a 6x2 does not push the panel

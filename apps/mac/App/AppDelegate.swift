@@ -69,8 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // resolves the widget up front, so firing before the layout
                 // arrives silently does nothing.
                 try? await Task.sleep(for: .seconds(3))
-                if let first = env.layoutModel.layout.widgets.first {
-                    beginConfiguring(first.id)
+                // Prefers one with no account: that is the state a freshly
+                // dropped widget is in, and the one worth looking at.
+                let widgets = env.layoutModel.layout.widgets
+                if let target = widgets.first(where: { $0.integrationId == nil })
+                    ?? widgets.first
+                {
+                    beginConfiguring(target.id)
                 }
             }
         }
