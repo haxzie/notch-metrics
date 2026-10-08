@@ -1,3 +1,4 @@
+import AppKit
 import MetricsAPI
 import MetricsCore
 import NotchUI
@@ -15,6 +16,8 @@ struct ConnectionsPane: View {
     @State private var renaming: Integration?
     @State private var draftName = ""
     @State private var confirmingRemoval: Integration?
+    /// The connection whose browser flow is open, so its row can say so.
+    @State private var reconnecting: String?
 
     var body: some View {
         Form {
@@ -51,7 +54,9 @@ struct ConnectionsPane: View {
                                 draftName = connection.label
                                 renaming = connection
                             },
-                            onRemove: { confirmingRemoval = connection }
+                            onRemove: { confirmingRemoval = connection },
+                            isReconnecting: reconnecting == connection.id,
+                            onReconnect: { Task { await reconnect(connection) } }
                         )
                     }
                 }
@@ -104,6 +109,35 @@ struct ConnectionsPane: View {
             )
         }
     }
+
+    /// Sends the user back through the connector's own browser flow.
+    ///
+    /// The same link as a first connection: re-authorising replaces the stored
+    /// credential on the row that is already there, so there is no separate
+    /// reconnect endpoint to call.
+    private func reconnect(_ connection: Integration) async {
+        reconnecting = connection.id
+        defer { reconnecting = nil }
+        do {
+            let link = try await env.api.connectLink(for: connection.provider)
+            NSWorkspace.shared.open(link.url)
+        } catch {
+            return
+        }
+        // Polls rather than waiting on the `notchmetrics://connected`
+        // callback: the user may finish in a browser that never hands focus
+        // back, and the row would sit broken until the pane was reopened.
+        for _ in 0..<30 {
+            try? await Task.sleep(for: .seconds(2))
+            if Task.isCancelled { return }
+            await model.load(env: env)
+            if case .loaded(let all) = model.state,
+               all.first(where: { $0.id == connection.id })?.status != "auth_failed"
+            {
+                return
+            }
+        }
+    }
 }
 
 private struct ConnectionRow: View {
@@ -111,6 +145,8 @@ private struct ConnectionRow: View {
     let app: MetricApp
     let onRename: () -> Void
     let onRemove: () -> Void
+    var isReconnecting: Bool = false
+    var onReconnect: () -> Void = {}
 
     private var isBroken: Bool { connection.status == "auth_failed" }
 
@@ -127,6 +163,26 @@ private struct ConnectionRow: View {
             }
 
             Spacer(minLength: 8)
+
+            // In the row, next to the thing that is broken. The row already
+            // said to reconnect; saying it without offering it meant hunting
+            // through Apps for the connector this belongs to.
+            if isBroken {
+                Button(action: onReconnect) {
+                    if isReconnecting {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Waiting for the browser…")
+                        }
+                    } else {
+                        Text("Reconnect")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isReconnecting)
+                .fixedSize()
+            }
 
             Menu {
                 Button("Rename…", action: onRename)
