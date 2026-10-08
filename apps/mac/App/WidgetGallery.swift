@@ -15,34 +15,82 @@ import SwiftUI
 /// opaque window reads as an app taking over the screen rather than a palette
 /// hovering above it.
 struct WidgetGalleryView: View {
+    /// Fired the moment a card starts moving. The window gets out of the way
+    /// and the notch opens into edit mode — the drop target has to exist and
+    /// be reachable before the pointer arrives, not after.
+    var onDragStart: () -> Void = {}
+    var onDone: () -> Void = {}
+
     @Environment(AppEnvironment.self) private var env
     @State private var model = WidgetCatalogueModel()
     @State private var query = ""
     @State private var selection: GallerySelection = .all
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                sidebar
+                Divider().opacity(0.5)
+                detail
+            }
             Divider().opacity(0.5)
-            detail
+            footer
         }
         .task { await model.load(env: env) }
+    }
+
+    /// The instruction and the way out, along the bottom.
+    ///
+    /// The panel has no title bar — it is flush with the bottom of the screen
+    /// like the system's own widget gallery — so this row carries the only
+    /// close control there is.
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Text("Drag a widget to place it in the notch…")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Button(action: onDone) {
+                Text("Done")
+                    .font(.system(size: 13, weight: .medium))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 5)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 56)
     }
 
     // MARK: - Sidebar
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Clears the traffic lights, which float over the content because
-            // the window has no title bar of its own.
-            Text("Add Widgets")
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 18)
-                .padding(.top, 52)
-                .padding(.bottom, 14)
+            // In the sidebar rather than over the grid: it filters the whole
+            // catalogue, including which connectors are listed here, so it
+            // belongs with the list it changes.
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                TextField("Search Widgets", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.black.opacity(0.22)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1, pinnedViews: []) {
+                LazyVStack(alignment: .leading, spacing: 1) {
                     sidebarRow(
                         icon: { AnyView(WidgetsMark(size: 15)) },
                         title: "All Widgets", count: nil, value: .all)
@@ -52,7 +100,7 @@ struct WidgetGalleryView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 18)
-                            .padding(.top, 16)
+                            .padding(.top, 14)
                             .padding(.bottom, 5)
 
                         ForEach(group.connectors) { connector in
@@ -63,19 +111,19 @@ struct WidgetGalleryView: View {
                                             app: AppCatalog.resolve(connector.id), size: 19))
                                 },
                                 title: connector.name,
-                                // What is already in the notch, not what is on
-                                // offer — the number answers "how much of this
-                                // have I got?", which is the question somebody
-                                // reopening this window is asking.
-                                count: model.widgetCount(for: connector.id, env: env),
+                                // How many widgets this connector offers. It
+                                // used to count what was already in the notch,
+                                // which made a row somebody had never opened
+                                // read as empty.
+                                count: connector.metrics.count,
                                 value: .connector(connector.id))
                         }
                     }
                 }
-                .padding(.bottom, 20)
+                .padding(.bottom, 16)
             }
         }
-        .frame(width: 240)
+        .frame(width: 236)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
@@ -112,27 +160,8 @@ struct WidgetGalleryView: View {
     // MARK: - Detail
 
     private var detail: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 9) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                TextField("Search widgets…", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                Spacer(minLength: 16)
-                Text("Drag widgets to notch")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 20)
-            .frame(height: 52)
-
-            Divider().opacity(0.5)
-
-            content
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -162,23 +191,24 @@ struct WidgetGalleryView: View {
                     .foregroundStyle(.secondary)
                 }
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 26) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 22) {
                         ForEach(sections) { section in
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 10) {
                                 HStack(spacing: 9) {
                                     ConnectorIcon(
-                                        app: AppCatalog.resolve(section.connector.id), size: 22)
+                                        app: AppCatalog.resolve(section.connector.id), size: 20)
                                     Text(section.connector.name)
-                                        .font(.system(size: 14, weight: .medium))
+                                        .font(.system(size: 13, weight: .semibold))
                                 }
                                 LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 180), spacing: 14)],
+                                    columns: [GridItem(.adaptive(minimum: 184), spacing: 14)],
                                     alignment: .leading, spacing: 14
                                 ) {
                                     ForEach(section.metrics) { metric in
                                         GalleryCard(
-                                            connector: section.connector, metric: metric)
+                                            connector: section.connector, metric: metric,
+                                            onDragStart: onDragStart)
                                     }
                                 }
                             }
@@ -209,12 +239,13 @@ enum GallerySelection: Hashable {
 private struct GalleryCard: View {
     let connector: ConnectorEntry
     let metric: MetricDescriptor
+    var onDragStart: () -> Void = {}
 
     private var app: MetricApp { AppCatalog.resolve(connector.id) }
 
     var body: some View {
         WidgetTile(widget: draft, app: app, state: .value(GallerySample.series(for: metric)))
-            .frame(height: 150)
+            .frame(width: 176, height: 118)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.black.opacity(0.22)))
@@ -226,12 +257,21 @@ private struct GalleryCard: View {
             // The payload the notch's drop destination decodes. A plain string
             // rather than a custom Transferable: it crosses a window boundary
             // and has to survive AppKit's pasteboard either way.
-            .draggable(GalleryPayload.encode(connector: connector.id, metric: metric.id)) {
+            // `onDrag` rather than `draggable`: it is the only one of the two
+            // that hands back a callback at the moment the drag begins, and
+            // that moment is when the window has to move and the notch has to
+            // open.
+            .onDrag {
+                onDragStart()
+                return NSItemProvider(
+                    object: GalleryPayload.encode(
+                        connector: connector.id, metric: metric.id) as NSString)
+            } preview: {
                 WidgetTile(
                     widget: draft, app: app,
                     state: .value(GallerySample.series(for: metric))
                 )
-                .frame(width: 180, height: 110)
+                .frame(width: 176, height: 110)
             }
     }
 

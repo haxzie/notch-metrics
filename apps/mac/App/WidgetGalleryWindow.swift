@@ -45,8 +45,11 @@ func glassContentView(
 /// which a `Window` scene exposes.
 @MainActor
 final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
-    private var window: NSWindow?
+    private var window: NSPanel?
     private let env: AppEnvironment
+    private var isDragging = false
+    private var dragEndMonitor: Any?
+    private var dragTimeout: Task<Void, Never>?
 
     init(env: AppEnvironment) {
         self.env = env
@@ -56,42 +59,49 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         if let window {
+            window.setFrame(Self.frame(), display: true)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             env.notch.holdOpenForGallery(true)
             return
         }
 
-        let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 980, height: 660),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+        let window = GalleryPanel(
+            contentRect: Self.frame(),
+            // Borderless: the system's widget gallery has no title bar and no
+            // traffic lights, and neither does this. Done, in the footer, is
+            // the way out.
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false)
-        window.title = "Add Widgets"
-        // The traffic lights float over the sidebar, as in a Finder window.
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        // Off, deliberately. The whole content area is draggable *cards*, and
-        // background dragging is resolved by AppKit before SwiftUI ever sees
-        // the press — so every attempt to drag a widget moved the window
-        // instead. The transparent title bar is still a drag handle.
-        window.isMovableByWindowBackground = false
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.minSize = CGSize(width: 820, height: 520)
+        window.hasShadow = true
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = false
+        window.isMovable = false
         window.delegate = self
         window.isReleasedWhenClosed = false
+        window.level = .modalPanel
 
-        window.contentView = glassContentView {
-            WidgetGalleryView()
+        let content = glassContentView {
+            WidgetGalleryView(
+                onDragStart: { [weak self] in self?.beginDrag() },
+                onDone: { [weak self] in self?.close() })
                 .environment(env)
                 .ignoresSafeArea()
         }
-        window.center()
+        // Top corners only. The panel sits flush with the bottom of the
+        // screen, so rounding the bottom pair would cut two notches out of the
+        // screen edge — the system's gallery rounds only what you can see.
+        content.wantsLayer = true
+        content.layer?.cornerRadius = 14
+        content.layer?.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        content.layer?.masksToBounds = true
+        window.contentView = content
+
         self.window = window
 
-        // Regular, so the window can be cycled to and ordered properly — the
-        // same reason Settings does it.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -99,7 +109,84 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
         env.notch.holdOpenForGallery(true)
     }
 
+    func close() {
+        window?.close()
+    }
+
+    /// Flush with the bottom of the screen, like the system widget gallery.
+    private static func frame() -> CGRect {
+        let screen = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let visible = NSScreen.main?.visibleFrame ?? screen
+        let width = min(max(visible.width * 0.82, 820), 1600)
+        let height = min(max(visible.height * 0.72, 480), 900)
+        return CGRect(
+            x: visible.midX - width / 2,
+            // The screen's own bottom, not the visible frame's: the panel runs
+            // under the Dock the way the system gallery does, rather than
+            // floating above it with a strip of desktop showing through.
+            y: screen.minY,
+            width: width,
+            height: height)
+    }
+
+    // MARK: - Getting out of the way
+
+    /// Hides the bar for the duration of a drag.
+    ///
+    /// The bar covers the bottom of the screen and the notch is at the top, so
+    /// it is not strictly in the way — but a palette that stays put while the
+    /// thing it produced is being carried somewhere else reads as two
+    /// unrelated windows. Hiding it also makes the notch unmistakably the
+    /// target.
+    private func beginDrag() {
+        guard !isDragging else { return }
+        // SwiftUI calls an `onDrag` closure to *prepare* an item provider, not
+        // only when a drag actually begins. Without this the bar could hide
+        // itself with no drag in flight and nothing to bring it back until
+        // the timeout. A real drag always has the button down.
+        guard NSEvent.pressedMouseButtons & 0x1 != 0 else { return }
+        isDragging = true
+
+        // Edit mode first: the drop destination only draws its well — the one
+        // thing on screen that says "this takes tiles" — while editing.
+        env.notch.holdOpenForGallery(true)
+
+        window?.animator().alphaValue = 0
+        window?.ignoresMouseEvents = true
+
+        // AppKit gives no drag-ended callback to the *source*, so the mouse
+        // coming back up is the signal. Global, because the drag is happening
+        // over another window by then.
+        dragEndMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.endDrag() }
+        }
+        // Belt and braces: a drag that ends somewhere that swallows the mouse
+        // up would otherwise leave the bar invisible and unclickable.
+        dragTimeout?.cancel()
+        let task = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled else { return }
+            self?.endDrag()
+        }
+        dragTimeout = task
+    }
+
+    private func endDrag() {
+        guard isDragging else { return }
+        isDragging = false
+
+        if let dragEndMonitor { NSEvent.removeMonitor(dragEndMonitor) }
+        dragEndMonitor = nil
+        dragTimeout?.cancel()
+        dragTimeout = nil
+
+        window?.ignoresMouseEvents = false
+        window?.animator().alphaValue = 1
+    }
+
     func windowWillClose(_ notification: Notification) {
+        endDrag()
         // The notch goes back to following the pointer the moment there is
         // nothing left to drag into it.
         env.notch.holdOpenForGallery(false)
@@ -108,4 +195,16 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
             if remaining.isEmpty { NSApp.setActivationPolicy(.accessory) }
         }
     }
+}
+
+
+/// A borderless panel that can still take key.
+///
+/// Borderless windows refuse key by default, which would leave the search
+/// field unable to accept a single keystroke.
+final class GalleryPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    /// Never main: this is a palette, and taking main would pull focus out of
+    /// whatever the user is actually working in.
+    override var canBecomeMain: Bool { false }
 }
