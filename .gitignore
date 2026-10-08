@@ -24,7 +24,10 @@ packages/metric-runtime/bin/
 !.dev.vars.example
 
 # Cloudflare
-.wrangler
+# Every variant, not just the exact name: a hand-made copy such as
+# `.wrangler.backup` is still a local D1 database with real rows in it, and
+# the bare entry did not match one.
+.wrangler*
 
 # macOS app
 apps/mac/*.xcodeproj
