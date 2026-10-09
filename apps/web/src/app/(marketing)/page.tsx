@@ -3,6 +3,7 @@ import { ConnectorGrid } from "@/components/marketing/ConnectorGrid";
 import { DownloadButton } from "@/components/marketing/DownloadButton";
 import { NotchMockup } from "@/components/marketing/NotchMockup";
 import { NotchShowcase } from "@/components/marketing/NotchShowcase";
+import { PricingSection } from "@/components/marketing/PricingSection";
 import { SectionIcon } from "@/components/marketing/SectionIcon";
 import {
   ArrowRight,
@@ -233,6 +234,8 @@ export default async function Home() {
           </div>
         </div>
       </Section>
+
+      <PricingSection />
 
       {/* Designed for the Mac */}
       <section className="mx-auto max-w-5xl px-6 pt-28">

@@ -16,7 +16,7 @@ export function PlanPicker() {
 
   async function choose(plan: "pro" | "pro_annual") {
     if (!session) {
-      window.location.href = `/login?next=${encodeURIComponent("/pricing")}`;
+      window.location.href = `/login?next=${encodeURIComponent("/#pricing")}`;
       return;
     }
     setBusy(plan);
