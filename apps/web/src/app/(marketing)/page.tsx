@@ -197,8 +197,8 @@ export default async function Home() {
                 notch-metrics-mcp
               </p>
               <p className="rounded-xl bg-white/[0.05] px-4 py-3 font-sans text-[14px] text-white/85">
-                Add a widget with the number of open issues on haxzie/notch-metrics. Refresh it
-                every ten minutes.
+                Add a widget with the number of open issues on acme/app. Refresh it every ten
+                minutes.
               </p>
               <div className="flex flex-col gap-1.5 text-white/55">
                 <p>

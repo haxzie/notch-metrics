@@ -6,18 +6,12 @@ const COLUMNS: { title: string; links: { href: string; label: string; external?:
     links: [
       { href: "/download", label: "Download" },
       { href: "/pricing", label: "Pricing" },
-      {
-        href: "https://github.com/haxzie/notch-metrics/releases",
-        label: "Changelog",
-        external: true,
-      },
       { href: "/login", label: "Sign in" },
     ],
   },
   {
     title: "Developers",
     links: [
-      { href: "https://github.com/haxzie/notch-metrics", label: "GitHub", external: true },
       {
         href: "https://www.npmjs.com/package/notch-metrics-mcp",
         label: "MCP server",

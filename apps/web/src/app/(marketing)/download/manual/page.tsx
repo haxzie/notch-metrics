@@ -25,15 +25,15 @@ export default function ManualDownload() {
       />
       <h1 className="mt-8 text-4xl font-semibold tracking-tight">Download Notch Metrics</h1>
       <p className="mt-4 text-pretty text-white/60">
-        We could not reach the release manifest just now. Every release is also listed on GitHub,
-        and the disk images are served directly from{" "}
-        <code className="font-mono text-[13px] text-white/80">{ASSETS}</code>.
+        We could not reach the release manifest just now. This is usually brief. The disk images are
+        served from <code className="font-mono text-[13px] text-white/80">{ASSETS}</code>, so trying
+        again in a moment normally works.
       </p>
       <Link
-        href="https://github.com/haxzie/notch-metrics/releases"
+        href="/download"
         className="mt-8 inline-flex h-11 items-center rounded-full bg-white px-6 text-sm font-semibold text-black transition hover:bg-white/90"
       >
-        All releases on GitHub
+        Try the download again
       </Link>
       <p className="mt-4 font-mono text-[11px] tracking-wide text-white/40">
         Apple silicon · macOS 14 or later
