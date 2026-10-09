@@ -55,6 +55,7 @@ export function PlanPicker() {
           title="Yearly"
           price={formatPrice(PLANS.pro_annual.amount, "USD")}
           cadence="per year"
+          was={formatPrice(PLANS.pro.amount * 12, "USD")}
           note={`${formatPrice(Math.round(PLANS.pro_annual.amount / 12), "USD")} a month, billed once.`}
           badge={`Save ${annualSavingPercent()}%`}
           highlighted
@@ -77,6 +78,7 @@ function PlanCard({
   title,
   price,
   cadence,
+  was,
   note,
   badge,
   highlighted,
@@ -87,6 +89,8 @@ function PlanCard({
   title: string;
   price: string;
   cadence: string;
+  /** What twelve months would have cost, shown struck through beside the price. */
+  was?: string;
   note: string;
   badge?: string;
   highlighted?: boolean;
@@ -108,7 +112,12 @@ function PlanCard({
         </span>
       )}
       <h2 className="text-sm font-medium text-white/60">{title}</h2>
-      <p className="mt-3 flex items-baseline gap-1.5">
+      <p className="mt-3 flex items-baseline gap-2">
+        {was && (
+          <span className="text-2xl font-medium tracking-tight text-white/35 line-through decoration-white/40 decoration-2">
+            {was}
+          </span>
+        )}
         <span className="text-5xl font-semibold tracking-tight">{price}</span>
         <span className="text-sm text-white/50">{cadence}</span>
       </p>

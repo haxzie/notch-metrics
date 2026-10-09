@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ConnectorGrid } from "@/components/marketing/ConnectorGrid";
 import { DownloadButton } from "@/components/marketing/DownloadButton";
 import { NotchMockup } from "@/components/marketing/NotchMockup";
+import { NotchShowcase } from "@/components/marketing/NotchShowcase";
 import { SectionIcon } from "@/components/marketing/SectionIcon";
 import {
   ArrowRight,
@@ -80,7 +81,7 @@ export default async function Home() {
         </div>
 
         <div className="mx-auto mt-16 max-w-4xl sm:mt-20">
-          <NotchMockup />
+          <NotchShowcase />
         </div>
       </section>
 

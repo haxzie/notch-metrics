@@ -1,15 +1,22 @@
 import { ConnectorMark } from "@/components/ConnectorMark";
+import { PERSONAS, type Widget } from "./personas";
 
 /**
  * The top of a MacBook display with the notch expanded, drawn in CSS.
  *
  * Drawn rather than screenshotted so it stays sharp at any width and so the
- * numbers can be whatever reads well. The layout matches the app's six-by-two
- * canvas: a 2x2, four 1x1s and a 2x2 list, which is what a real one looks
- * like once somebody has set it up. No menu bar: the notch hangs from the
- * top edge of the display, and the real one leaves the bar untouched.
+ * numbers can be whatever reads well. The layout matches the app's canvas:
+ * six columns, with 2x2s, 2x1s and 1x1s packed the way a real one looks once
+ * somebody has set it up. No menu bar: the notch hangs from the top edge of
+ * the display, and the real one leaves the bar untouched.
  */
-export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "collapsed" }) {
+export function NotchMockup({
+  variant = "expanded",
+  widgets = PERSONAS[0]?.widgets ?? [],
+}: {
+  variant?: "expanded" | "collapsed";
+  widgets?: Widget[];
+}) {
   const expanded = variant === "expanded";
   return (
     <div className="relative overflow-hidden rounded-[28px] border border-white/[0.09] bg-[#0c0b0f] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.9)]">
@@ -24,7 +31,7 @@ export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "
       />
 
       <div className={`relative ${expanded ? "h-[500px] sm:h-[520px]" : "h-[170px]"}`}>
-        {expanded ? <ExpandedNotch /> : <CollapsedNotch />}
+        {expanded ? <ExpandedNotch widgets={widgets} /> : <CollapsedNotch />}
       </div>
     </div>
   );
@@ -38,90 +45,21 @@ function CollapsedNotch() {
   );
 }
 
-function ExpandedNotch() {
+const SPANS: Record<NonNullable<Widget["span"]>, string> = {
+  "1x1": "",
+  "2x1": "col-span-2",
+  "2x2": "col-span-2 row-span-2",
+};
+
+function ExpandedNotch({ widgets }: { widgets: Widget[] }) {
   return (
     <>
       <div className="absolute left-1/2 top-0 w-[min(660px,94%)] -translate-x-1/2 rounded-b-[30px] bg-black p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)]">
         <Flares />
         <div className="grid grid-cols-6 grid-rows-3 gap-2">
-          <Tile span="col-span-2 row-span-2">
-            <TileHeader id="stripe" name="Stripe" accent="#635BFF" label="MRR" />
-            <div className="mt-auto">
-              <Value>$12,480</Value>
-              <Delta>+4.2% vs last month</Delta>
-            </div>
-            <Sparkline />
-          </Tile>
-
-          <Tile>
-            <TileHeader id="stripe" name="Stripe" accent="#635BFF" label="Subscribers" />
-            <Value small>318</Value>
-          </Tile>
-          <Tile>
-            <TileHeader id="polar" name="Polar" accent="#0062FF" label="Today" />
-            <Value small>$640</Value>
-          </Tile>
-
-          <Tile span="col-span-2 row-span-2">
-            <TileHeader id="paddle" name="Paddle" accent="#FDDD35" label="Recent payments" />
-            <ul className="mt-2 flex flex-col gap-[9px] text-[11px] leading-none">
-              {[
-                ["Pro · yearly", "$79"],
-                ["Pro · monthly", "$19"],
-                ["Pro · monthly", "$19"],
-                ["Pro · yearly", "$79"],
-                ["Pro · monthly", "$19"],
-              ].map(([plan, amount], index) => (
-                <li key={index} className="flex items-center justify-between text-white/75">
-                  <span className="truncate">{plan}</span>
-                  <span className="font-semibold tabular-nums text-white">{amount}</span>
-                </li>
-              ))}
-            </ul>
-          </Tile>
-
-          <Tile>
-            <TileHeader id="github" name="GitHub" accent="#181717" label="Stars" />
-            <Value small>2,104</Value>
-          </Tile>
-          <Tile>
-            <TileHeader id="revenuecat" name="RevenueCat" accent="#F2545B" label="Trials" />
-            <Value small>27</Value>
-          </Tile>
-
-          <Tile span="col-span-2">
-            <TileHeader
-              id="dodopayments"
-              name="Dodo Payments"
-              accent="#111111"
-              label="Revenue · 7d"
-            />
-            <div className="mt-auto flex items-end justify-between gap-3">
-              <div>
-                <Value small>$3,920</Value>
-                <Delta>+11% vs last week</Delta>
-              </div>
-              <Bars colour="#c6f135" values={[42, 58, 51, 74, 66, 88, 97]} />
-            </div>
-          </Tile>
-          <Tile>
-            <TileHeader id="dodopayments" name="Dodo Payments" accent="#111111" label="Orders" />
-            <Value small>146</Value>
-          </Tile>
-          <Tile span="col-span-2">
-            <TileHeader id="revenuecat" name="RevenueCat" accent="#F2545B" label="Active subs" />
-            <div className="mt-auto flex items-end justify-between gap-3">
-              <div>
-                <Value small>1,208</Value>
-                <Delta>+38 this week</Delta>
-              </div>
-              <Bars colour="#F2545B" values={[61, 64, 63, 70, 72, 78, 84]} />
-            </div>
-          </Tile>
-          <Tile>
-            <TileHeader id="revenuecat" name="RevenueCat" accent="#F2545B" label="Churn" />
-            <Value small>1.8%</Value>
-          </Tile>
+          {widgets.map((widget, index) => (
+            <WidgetTile key={index} widget={widget} />
+          ))}
         </div>
       </div>
 
@@ -143,40 +81,76 @@ function ExpandedNotch() {
   );
 }
 
-function Tile({ span = "", children }: { span?: string; children: React.ReactNode }) {
+function WidgetTile({ widget }: { widget: Widget }) {
+  const span = widget.span ?? "1x1";
+  const colour = widget.colour ?? widget.accent;
   return (
     <div
-      className={`flex min-h-[92px] flex-col rounded-[14px] border border-white/[0.07] bg-white/[0.07] p-2.5 ${span}`}
+      className={`flex min-h-[92px] flex-col rounded-[14px] border border-white/[0.07] bg-white/[0.07] p-2.5 ${SPANS[span]}`}
     >
-      {children}
+      <div className="flex items-center gap-1.5">
+        <ConnectorMark
+          id={widget.provider}
+          name={widget.name}
+          accentColor={widget.accent}
+          size={16}
+        />
+        <span className="truncate text-[11px] font-medium leading-none text-white/55">
+          {widget.label}
+        </span>
+      </div>
+
+      {widget.rows && (
+        <ul className="mt-2 flex flex-col gap-[9px] text-[11px] leading-none">
+          {widget.rows.map(([left, right], index) => (
+            <li key={index} className="flex items-center justify-between text-white/75">
+              <span className="truncate">{left}</span>
+              <span className="font-semibold tabular-nums text-white">{right}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {widget.spark && (
+        <>
+          <div className="mt-auto">
+            <Value large>{widget.value}</Value>
+            {widget.delta && <Delta>{widget.delta}</Delta>}
+          </div>
+          <Sparkline colour={colour} points={widget.spark} />
+        </>
+      )}
+
+      {widget.bars && span === "2x2" && (
+        <>
+          <div className="mt-auto">
+            <Value large>{widget.value}</Value>
+            {widget.delta && <Delta>{widget.delta}</Delta>}
+          </div>
+          <Bars colour={colour} values={widget.bars} tall />
+        </>
+      )}
+
+      {widget.bars && span !== "2x2" && (
+        <div className="mt-auto flex items-end justify-between gap-3">
+          <div>
+            <Value>{widget.value}</Value>
+            {widget.delta && <Delta>{widget.delta}</Delta>}
+          </div>
+          <Bars colour={colour} values={widget.bars} />
+        </div>
+      )}
+
+      {!widget.rows && !widget.spark && !widget.bars && <Value>{widget.value}</Value>}
     </div>
   );
 }
 
-function TileHeader({
-  id,
-  name,
-  accent,
-  label,
-}: {
-  id: string;
-  name: string;
-  accent: string;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <ConnectorMark id={id} name={name} accentColor={accent} size={16} />
-      <span className="truncate text-[11px] font-medium leading-none text-white/55">{label}</span>
-    </div>
-  );
-}
-
-function Value({ small, children }: { small?: boolean; children: React.ReactNode }) {
+function Value({ large, children }: { large?: boolean; children: React.ReactNode }) {
   return (
     <span
       className={`mt-auto block font-semibold tabular-nums tracking-tight text-white ${
-        small ? "text-[17px]" : "text-[26px]"
+        large ? "text-[26px]" : "text-[17px]"
       }`}
     >
       {children}
@@ -189,14 +163,17 @@ function Delta({ children }: { children: React.ReactNode }) {
 }
 
 /** A week of bars, solid in the brand colour, the last one brightest. */
-function Bars({ colour, values }: { colour: string; values: number[] }) {
+function Bars({ colour, values, tall }: { colour: string; values: number[]; tall?: boolean }) {
   const max = Math.max(...values);
   return (
-    <div className="flex h-11 items-end gap-[3px]" aria-hidden>
+    <div
+      className={`flex items-end gap-[3px] ${tall ? "mt-2 h-14 gap-[5px]" : "h-11"}`}
+      aria-hidden
+    >
       {values.map((value, index) => (
         <span
           key={index}
-          className="w-[7px] rounded-[2px]"
+          className={`rounded-[2px] ${tall ? "flex-1" : "w-[7px]"}`}
           style={{
             height: `${(value / max) * 100}%`,
             backgroundColor: colour,
@@ -208,21 +185,26 @@ function Bars({ colour, values }: { colour: string; values: number[] }) {
   );
 }
 
-function Sparkline() {
-  const points = "0,30 14,26 28,28 42,20 56,22 70,15 84,17 98,10 112,12 126,6 140,8 154,2";
+/** Points are heights on a 0–32 scale, left to right; lower is higher. */
+function Sparkline({ colour, points }: { colour: string; points: number[] }) {
+  const step = 154 / (points.length - 1);
+  const line = points.map((y, index) => `${Math.round(index * step)},${y}`).join(" ");
+  // The fill's gradient id carries the colour so two sparklines on one page
+  // with different colours do not share, and therefore fight over, one id.
+  const gradientId = `spark-${colour.replace("#", "")}`;
   return (
     <svg viewBox="0 0 154 32" preserveAspectRatio="none" className="mt-2 h-14 w-full" aria-hidden>
       <defs>
-        <linearGradient id="spark-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#635BFF" stopOpacity="0.45" />
-          <stop offset="1" stopColor="#635BFF" stopOpacity="0" />
+        <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={colour} stopOpacity="0.45" />
+          <stop offset="1" stopColor={colour} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <polygon points={`0,32 ${points} 154,32`} fill="url(#spark-fill)" />
+      <polygon points={`0,32 ${line} 154,32`} fill={`url(#${gradientId})`} />
       <polyline
-        points={points}
+        points={line}
         fill="none"
-        stroke="#8f88ff"
+        stroke={colour}
         strokeWidth={1.75}
         strokeLinejoin="round"
         strokeLinecap="round"
