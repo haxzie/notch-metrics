@@ -302,6 +302,8 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
         <p className="text-center text-xs text-white/40">
           You will be sent to {connector.name} to approve this. We never see your password.
         </p>
+
+        {isGoogle(connector.id) && <GoogleLimitedUseNotice />}
       </Shell>
     );
   }
@@ -395,6 +397,40 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
         </p>
       </form>
     </Shell>
+  );
+}
+
+/**
+ * Every Google connector shares one OAuth client, so every one of them is
+ * covered by the same policy — `google-` is the registry's own prefix for
+ * them (`google-analytics`, `google-ads`, `google-search-console`).
+ */
+function isGoogle(connectorId: string) {
+  return connectorId.startsWith("google-");
+}
+
+/**
+ * Google requires this exact disclosure, in these words, on the screen that
+ * leads into their consent flow. Verification is refused without it, which
+ * leaves the connector stuck behind an "unverified app" warning.
+ *
+ * https://developers.google.com/terms/api-services-user-data-policy
+ */
+function GoogleLimitedUseNotice() {
+  return (
+    <p className="mt-2 border-t border-white/10 pt-3 text-center text-xs leading-relaxed text-white/40">
+      Notch Metrics&rsquo; use and transfer to any other app of information received from Google
+      APIs will adhere to the{" "}
+      <a
+        href="https://developers.google.com/terms/api-services-user-data-policy"
+        target="_blank"
+        rel="noreferrer"
+        className="underline"
+      >
+        Google API Services User Data Policy
+      </a>
+      , including the Limited Use requirements.
+    </p>
   );
 }
 
