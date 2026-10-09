@@ -23,7 +23,7 @@ export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "
         }}
       />
 
-      <div className={`relative ${expanded ? "h-[400px] sm:h-[420px]" : "h-[170px]"}`}>
+      <div className={`relative ${expanded ? "h-[500px] sm:h-[520px]" : "h-[170px]"}`}>
         {expanded ? <ExpandedNotch /> : <CollapsedNotch />}
       </div>
     </div>
@@ -43,7 +43,7 @@ function ExpandedNotch() {
     <>
       <div className="absolute left-1/2 top-0 w-[min(660px,94%)] -translate-x-1/2 rounded-b-[30px] bg-black p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)]">
         <Flares />
-        <div className="grid grid-cols-6 grid-rows-2 gap-2">
+        <div className="grid grid-cols-6 grid-rows-3 gap-2">
           <Tile span="col-span-2 row-span-2">
             <TileHeader id="stripe" name="Stripe" accent="#635BFF" label="MRR" />
             <div className="mt-auto">
@@ -88,6 +88,40 @@ function ExpandedNotch() {
             <TileHeader id="revenuecat" name="RevenueCat" accent="#F2545B" label="Trials" />
             <Value small>27</Value>
           </Tile>
+
+          <Tile span="col-span-2">
+            <TileHeader
+              id="dodopayments"
+              name="Dodo Payments"
+              accent="#111111"
+              label="Revenue · 7d"
+            />
+            <div className="mt-auto flex items-end justify-between gap-3">
+              <div>
+                <Value small>$3,920</Value>
+                <Delta>+11% vs last week</Delta>
+              </div>
+              <Bars colour="#c6f135" values={[42, 58, 51, 74, 66, 88, 97]} />
+            </div>
+          </Tile>
+          <Tile>
+            <TileHeader id="dodopayments" name="Dodo Payments" accent="#111111" label="Orders" />
+            <Value small>146</Value>
+          </Tile>
+          <Tile span="col-span-2">
+            <TileHeader id="revenuecat" name="RevenueCat" accent="#F2545B" label="Active subs" />
+            <div className="mt-auto flex items-end justify-between gap-3">
+              <div>
+                <Value small>1,208</Value>
+                <Delta>+38 this week</Delta>
+              </div>
+              <Bars colour="#F2545B" values={[61, 64, 63, 70, 72, 78, 84]} />
+            </div>
+          </Tile>
+          <Tile>
+            <TileHeader id="revenuecat" name="RevenueCat" accent="#F2545B" label="Churn" />
+            <Value small>1.8%</Value>
+          </Tile>
         </div>
       </div>
 
@@ -95,7 +129,7 @@ function ExpandedNotch() {
       <svg
         aria-hidden
         viewBox="0 0 24 24"
-        className="absolute left-[calc(50%+120px)] top-[228px] h-6 w-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] sm:top-[238px]"
+        className="absolute left-[calc(50%+120px)] top-[328px] h-6 w-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] sm:top-[338px]"
       >
         <path
           d="M5 3.5 19 10.2l-6.1 1.9-2.6 5.9Z"
@@ -152,6 +186,26 @@ function Value({ small, children }: { small?: boolean; children: React.ReactNode
 
 function Delta({ children }: { children: React.ReactNode }) {
   return <span className="block text-[11px] font-medium text-emerald-400">{children}</span>;
+}
+
+/** A week of bars, solid in the brand colour, the last one brightest. */
+function Bars({ colour, values }: { colour: string; values: number[] }) {
+  const max = Math.max(...values);
+  return (
+    <div className="flex h-11 items-end gap-[3px]" aria-hidden>
+      {values.map((value, index) => (
+        <span
+          key={index}
+          className="w-[7px] rounded-[2px]"
+          style={{
+            height: `${(value / max) * 100}%`,
+            backgroundColor: colour,
+            opacity: index === values.length - 1 ? 1 : 0.55,
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 function Sparkline() {
