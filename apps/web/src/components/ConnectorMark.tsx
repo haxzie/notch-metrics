@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   FULL_BLEED_MARKS,
   LIGHT_TILE_MARKS,
+  MARKS,
   OWN_COLOUR_MARKS,
 } from "@/lib/connector-marks.generated";
 import { liftForDarkUI } from "@/lib/brand-colour";
@@ -27,9 +28,12 @@ export function ConnectorMark({
   accentColor: string;
   size?: number;
 }) {
-  // Four connectors have no vendored mark. They fall back to a lettermark
-  // rather than a broken image, so the row still looks deliberate.
-  const [hasMark, setHasMark] = useState(true);
+  // A few connectors have no vendored mark. They go straight to a lettermark
+  // rather than a broken image: the generated set says which, so this never
+  // requests a file that is not there, and the server render already shows
+  // the letter rather than a broken image until the client hydrates. The
+  // error handler stays for the case the set and the directory disagree.
+  const [hasMark, setHasMark] = useState(MARKS.has(id));
   const lightTile = LIGHT_TILE_MARKS.has(id);
   // Artwork that already is the tile is drawn to the edges, clipped to the
   // same corner radius, rather than floated inside a second square.

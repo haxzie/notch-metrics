@@ -23,7 +23,7 @@ export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "
         }}
       />
 
-      <div className={`relative ${expanded ? "h-[320px] sm:h-[340px]" : "h-[170px]"}`}>
+      <div className={`relative ${expanded ? "h-[400px] sm:h-[420px]" : "h-[170px]"}`}>
         {expanded ? <ExpandedNotch /> : <CollapsedNotch />}
       </div>
     </div>
@@ -32,15 +32,18 @@ export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "
 
 function CollapsedNotch() {
   return (
-    <div className="absolute left-1/2 top-0 h-[30px] w-[180px] -translate-x-1/2 rounded-b-[14px] bg-black" />
+    <div className="absolute left-1/2 top-0 h-[30px] w-[180px] -translate-x-1/2 rounded-b-[14px] bg-black">
+      <Flares />
+    </div>
   );
 }
 
 function ExpandedNotch() {
   return (
     <>
-      <div className="absolute left-1/2 top-0 w-[min(580px,94%)] -translate-x-1/2 rounded-b-[26px] bg-black p-2.5 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)]">
-        <div className="grid grid-cols-6 grid-rows-2 gap-1.5">
+      <div className="absolute left-1/2 top-0 w-[min(660px,94%)] -translate-x-1/2 rounded-b-[30px] bg-black p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)]">
+        <Flares />
+        <div className="grid grid-cols-6 grid-rows-2 gap-2">
           <Tile span="col-span-2 row-span-2">
             <TileHeader id="stripe" name="Stripe" accent="#635BFF" label="MRR" />
             <div className="mt-auto">
@@ -61,7 +64,7 @@ function ExpandedNotch() {
 
           <Tile span="col-span-2 row-span-2">
             <TileHeader id="paddle" name="Paddle" accent="#FDDD35" label="Recent payments" />
-            <ul className="mt-1.5 flex flex-col gap-[5px] text-[10px] leading-none">
+            <ul className="mt-2 flex flex-col gap-[9px] text-[11px] leading-none">
               {[
                 ["Pro · yearly", "$79"],
                 ["Pro · monthly", "$19"],
@@ -92,7 +95,7 @@ function ExpandedNotch() {
       <svg
         aria-hidden
         viewBox="0 0 24 24"
-        className="absolute left-[calc(50%+110px)] top-[150px] h-6 w-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] sm:top-[160px]"
+        className="absolute left-[calc(50%+120px)] top-[228px] h-6 w-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] sm:top-[238px]"
       >
         <path
           d="M5 3.5 19 10.2l-6.1 1.9-2.6 5.9Z"
@@ -109,7 +112,7 @@ function ExpandedNotch() {
 function Tile({ span = "", children }: { span?: string; children: React.ReactNode }) {
   return (
     <div
-      className={`flex min-h-[58px] flex-col rounded-[12px] border border-white/[0.07] bg-white/[0.07] p-2 ${span}`}
+      className={`flex min-h-[92px] flex-col rounded-[14px] border border-white/[0.07] bg-white/[0.07] p-2.5 ${span}`}
     >
       {children}
     </div>
@@ -129,8 +132,8 @@ function TileHeader({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <ConnectorMark id={id} name={name} accentColor={accent} size={14} />
-      <span className="truncate text-[10px] font-medium leading-none text-white/55">{label}</span>
+      <ConnectorMark id={id} name={name} accentColor={accent} size={16} />
+      <span className="truncate text-[11px] font-medium leading-none text-white/55">{label}</span>
     </div>
   );
 }
@@ -139,7 +142,7 @@ function Value({ small, children }: { small?: boolean; children: React.ReactNode
   return (
     <span
       className={`mt-auto block font-semibold tabular-nums tracking-tight text-white ${
-        small ? "text-[15px]" : "text-[22px]"
+        small ? "text-[17px]" : "text-[26px]"
       }`}
     >
       {children}
@@ -148,13 +151,13 @@ function Value({ small, children }: { small?: boolean; children: React.ReactNode
 }
 
 function Delta({ children }: { children: React.ReactNode }) {
-  return <span className="block text-[10px] font-medium text-emerald-400">{children}</span>;
+  return <span className="block text-[11px] font-medium text-emerald-400">{children}</span>;
 }
 
 function Sparkline() {
   const points = "0,30 14,26 28,28 42,20 56,22 70,15 84,17 98,10 112,12 126,6 140,8 154,2";
   return (
-    <svg viewBox="0 0 154 32" preserveAspectRatio="none" className="mt-1.5 h-9 w-full" aria-hidden>
+    <svg viewBox="0 0 154 32" preserveAspectRatio="none" className="mt-2 h-14 w-full" aria-hidden>
       <defs>
         <linearGradient id="spark-fill" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0" stopColor="#635BFF" stopOpacity="0.45" />
@@ -172,5 +175,26 @@ function Sparkline() {
         vectorEffect="non-scaling-stroke"
       />
     </svg>
+  );
+}
+
+/**
+ * The concave corners where the notch meets the top edge. The display's
+ * glass is black there too, so each is a square with a quarter circle of
+ * wallpaper cut out of its outer-bottom corner.
+ */
+function Flares() {
+  const r = 14;
+  const flare = (side: "left" | "right") => ({
+    width: r,
+    height: r,
+    [side === "left" ? "right" : "left"]: "100%",
+    background: `radial-gradient(circle at ${side === "left" ? "0" : "100%"} 100%, transparent ${r - 0.5}px, black ${r}px)`,
+  });
+  return (
+    <>
+      <span aria-hidden className="absolute top-0" style={flare("left")} />
+      <span aria-hidden className="absolute top-0" style={flare("right")} />
+    </>
   );
 }
