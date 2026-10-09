@@ -1,5 +1,4 @@
 import { ConnectorMark } from "@/components/ConnectorMark";
-import { AppleMark } from "./icons";
 
 /**
  * The top of a MacBook display with the notch expanded, drawn in CSS.
@@ -7,7 +6,8 @@ import { AppleMark } from "./icons";
  * Drawn rather than screenshotted so it stays sharp at any width and so the
  * numbers can be whatever reads well. The layout matches the app's six-by-two
  * canvas: a 2x2, four 1x1s and a 2x2 list, which is what a real one looks
- * like once somebody has set it up.
+ * like once somebody has set it up. No menu bar: the notch hangs from the
+ * top edge of the display, and the real one leaves the bar untouched.
  */
 export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "collapsed" }) {
   const expanded = variant === "expanded";
@@ -23,33 +23,8 @@ export function NotchMockup({ variant = "expanded" }: { variant?: "expanded" | "
         }}
       />
 
-      <Menubar />
-
-      <div className={`relative ${expanded ? "h-[300px] sm:h-[320px]" : "h-[150px]"}`}>
+      <div className={`relative ${expanded ? "h-[320px] sm:h-[340px]" : "h-[170px]"}`}>
         {expanded ? <ExpandedNotch /> : <CollapsedNotch />}
-      </div>
-    </div>
-  );
-}
-
-function Menubar() {
-  return (
-    <div className="relative flex h-8 items-center justify-between px-4 text-[12px] font-medium text-white/85">
-      <div className="flex items-center gap-4">
-        <AppleMark className="h-3.5 w-3.5" />
-        <span className="font-semibold">Finder</span>
-        <span className="hidden sm:inline">File</span>
-        <span className="hidden sm:inline">Edit</span>
-        <span className="hidden sm:inline">View</span>
-        <span className="hidden sm:inline">Go</span>
-        <span className="hidden md:inline">Window</span>
-        <span className="hidden md:inline">Help</span>
-      </div>
-      <div className="flex items-center gap-3 text-white/80">
-        <Battery />
-        <Wifi />
-        <span className="hidden sm:inline">Thu 9 Oct</span>
-        <span>10:41</span>
       </div>
     </div>
   );
@@ -196,25 +171,6 @@ function Sparkline() {
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
-    </svg>
-  );
-}
-
-function Battery() {
-  return (
-    <svg viewBox="0 0 28 14" className="h-3 w-6" aria-hidden>
-      <rect x="1" y="1.5" width="22" height="11" rx="3" fill="none" stroke="currentColor" />
-      <rect x="3" y="3.5" width="15" height="7" rx="1.5" fill="currentColor" />
-      <rect x="24.5" y="4.5" width="2" height="5" rx="1" fill="currentColor" opacity="0.6" />
-    </svg>
-  );
-}
-
-function Wifi() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" aria-hidden>
-      <path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 16a5 5 0 0 1 6.8 0" />
-      <circle cx="12" cy="19" r="1.2" fill="currentColor" />
     </svg>
   );
 }
