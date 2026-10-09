@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { github } from "../src/providers/github/index.ts";
+import { OAuthReauthRequiredError } from "../src/oauth.ts";
 import { ProviderError } from "../src/types.ts";
 import { stubContext } from "./helpers.ts";
 
@@ -100,5 +101,94 @@ describe("github", () => {
       .fetchMetric(ctx, creds, { ...request, metric: "mrr" })
       .catch((e: unknown) => e);
     expect((error as ProviderError).code).toBe("unsupported");
+  });
+});
+
+/** GitHub's token endpoint answering with `body`, and recording what was asked. */
+function stubTokenEndpoint(body: Record<string, unknown>, status = 200) {
+  const calls: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+    calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return new Response(JSON.stringify(body), { status });
+  });
+  return calls;
+}
+
+const client = { clientId: "Iv1.client", clientSecret: "secret" };
+
+describe("github oauth tokens", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps the refresh token and expiry when GitHub issues expiring tokens", async () => {
+    stubTokenEndpoint({ access_token: "gho_new", refresh_token: "ghr_new", expires_in: 28800 });
+    const before = Date.now();
+    const creds = await github.oauth!.exchangeCode({
+      code: "c",
+      redirectUri: "https://api/callback",
+      ...client,
+    });
+    expect(creds.access_token).toBe("gho_new");
+    expect(creds.refresh_token).toBe("ghr_new");
+    // Eight hours out, give or take the test's own clock.
+    expect(Number(creds.expires_at)).toBeGreaterThanOrEqual(before + 28800 * 1000);
+    expect(Number(creds.expires_at)).toBeLessThan(before + 28800 * 1000 + 5_000);
+  });
+
+  it("stores no expiry for a token that does not expire", async () => {
+    stubTokenEndpoint({ access_token: "gho_forever" });
+    const creds = await github.oauth!.exchangeCode({
+      code: "c",
+      redirectUri: "https://api/callback",
+      ...client,
+    });
+    expect(creds.refresh_token).toBeUndefined();
+    expect(creds.expires_at).toBeUndefined();
+  });
+
+  it("has nothing to refresh without a refresh token", async () => {
+    const calls = stubTokenEndpoint({});
+    const result = await github.oauth!.refreshCredentials({ credentials: creds, ...client });
+    expect(result).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("trades the refresh token for a new pair and keeps the repository", async () => {
+    const calls = stubTokenEndpoint({
+      access_token: "gho_second",
+      refresh_token: "ghr_second",
+      expires_in: 28800,
+    });
+    const result = await github.oauth!.refreshCredentials({
+      credentials: { ...creds, refresh_token: "ghr_first", expires_at: "1" },
+      ...client,
+    });
+    expect(calls[0]).toMatchObject({ grant_type: "refresh_token", refresh_token: "ghr_first" });
+    expect(result).toMatchObject({
+      access_token: "gho_second",
+      refresh_token: "ghr_second",
+      repository: "haxzie/notch-metrics",
+    });
+    expect(Number(result?.expires_at)).toBeGreaterThan(Date.now());
+  });
+
+  it("asks for a human when the refresh token is dead", async () => {
+    // GitHub answers 200 with an error body, so the status proves nothing.
+    stubTokenEndpoint({ error: "bad_refresh_token" });
+    await expect(
+      github.oauth!.refreshCredentials({
+        credentials: { ...creds, refresh_token: "ghr_used" },
+        ...client,
+      }),
+    ).rejects.toBeInstanceOf(OAuthReauthRequiredError);
+  });
+
+  it("treats anything else as a reason to try again later", async () => {
+    stubTokenEndpoint({}, 502);
+    await expect(
+      github.oauth!.refreshCredentials({
+        credentials: { ...creds, refresh_token: "ghr_x" },
+        ...client,
+      }),
+    ).rejects.not.toBeInstanceOf(OAuthReauthRequiredError);
   });
 });

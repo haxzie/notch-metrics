@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { MetricId, ProviderManifest } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import type { OAuthConfig } from "../../oauth.ts";
+import { EXPIRES_AT_FIELD, OAuthReauthRequiredError, type OAuthConfig } from "../../oauth.ts";
 import type {
   AdapterContext,
   HttpResponse,
@@ -97,6 +97,12 @@ export const manifest: ProviderManifest = {
 
 export const credentialSchema = z.object({
   access_token: z.string().min(8),
+  // Both present only when the OAuth App has "expire user authorization
+  // tokens" switched on. GitHub turns that on by default for new apps, and
+  // the tokens it then issues still start with `gho_` — so nothing about the
+  // token itself says whether it will stop working in eight hours.
+  refresh_token: z.string().min(8).optional(),
+  [EXPIRES_AT_FIELD]: z.string().regex(/^\d+$/).optional(),
   repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/, "A repository looks like owner/name."),
 });
 export type GitHubCredentials = z.infer<typeof credentialSchema>;
@@ -204,6 +210,37 @@ function snapshot(ctx: AdapterContext, value: number, note?: string): RawSeries 
   };
 }
 
+interface TokenResponse {
+  access_token?: string;
+  refresh_token?: string;
+  /** Seconds. Present only when the app issues expiring tokens. */
+  expires_in?: number;
+  error?: string;
+  error_description?: string;
+}
+
+function hasToken(body: TokenResponse): body is TokenResponse & { access_token: string } {
+  return typeof body.access_token === "string" && body.access_token.length > 0;
+}
+
+/**
+ * The token fields of a credential blob, from either the code exchange or a
+ * refresh — the two responses have the same shape.
+ */
+function tokens(body: TokenResponse & { access_token: string }): {
+  access_token: string;
+  refresh_token?: string;
+  expires_at?: string;
+} {
+  return {
+    access_token: body.access_token,
+    ...(body.refresh_token ? { refresh_token: body.refresh_token } : {}),
+    ...(typeof body.expires_in === "number" && body.expires_in > 0
+      ? { [EXPIRES_AT_FIELD]: String(Date.now() + body.expires_in * 1000) }
+      : {}),
+  };
+}
+
 /**
  * GitHub's OAuth leg.
  *
@@ -249,12 +286,8 @@ const oauth: OAuthConfig<GitHubCredentials> = {
 
     // GitHub answers 200 with `{ error }` for a bad or reused code rather
     // than a 4xx, so the status alone proves nothing.
-    const body = (await response.json()) as {
-      access_token?: string;
-      error?: string;
-      error_description?: string;
-    };
-    if (!response.ok || !body.access_token) {
+    const body = (await response.json()) as TokenResponse;
+    if (!response.ok || !hasToken(body)) {
       throw new ProviderError(
         "auth_failed",
         body.error_description ?? "GitHub would not complete the sign-in.",
@@ -263,14 +296,54 @@ const oauth: OAuthConfig<GitHubCredentials> = {
 
     // `repository` is filled in by the selection below; the schema is parsed
     // once, at the end of the flow, when both halves exist.
-    return { access_token: body.access_token, repository: "" };
+    return { ...tokens(body), repository: "" };
   },
 
-  // An OAuth App's user token does not expire, so there is nothing to
-  // refresh. Returning null says so, rather than leaving a caller to find
-  // out by refreshing a token GitHub has no endpoint for.
-  async refreshCredentials() {
-    return null;
+  // Eight hours is the token's whole life when expiry is on. An hour of lead
+  // is generous on purpose: the cron is five-minutely and a Worker tick can
+  // be skipped, and a refresh an hour early costs nothing — the old token
+  // keeps working until the new one is issued. The floor keeps a bug from
+  // looping on the token endpoint.
+  refresh: { leadTimeMs: 60 * 60 * 1000, minIntervalMs: 5 * 60 * 1000 },
+
+  /**
+   * Trades the refresh token for a new pair.
+   *
+   * A connection made before expiry was switched on has no refresh token and
+   * a token that never expires; null says there is nothing to do. Once a
+   * refresh token has been used it is dead, which is why the new one is
+   * stored in the same write as the new access token.
+   */
+  async refreshCredentials({ credentials, clientId, clientSecret }) {
+    if (!credentials.refresh_token) return null;
+
+    const response = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: credentials.refresh_token,
+      }),
+    });
+    const body = (await response.json().catch(() => ({}))) as TokenResponse;
+
+    // `bad_refresh_token` is GitHub's one unambiguous "start over": the
+    // refresh token expired through six months of disuse, was already used,
+    // or the user revoked the app. Anything else — a 5xx, a mangled body —
+    // is a reason to try again on the next tick, not to make somebody
+    // reconnect.
+    if (body.error === "bad_refresh_token" || body.error === "invalid_grant") {
+      throw new OAuthReauthRequiredError(
+        "GitHub has stopped honouring this connection. Reconnect it to carry on.",
+      );
+    }
+    if (!response.ok || !hasToken(body)) {
+      throw new Error(`GitHub token refresh failed: ${body.error ?? response.status}`);
+    }
+    return { ...credentials, ...tokens(body) };
   },
 
   selection: {

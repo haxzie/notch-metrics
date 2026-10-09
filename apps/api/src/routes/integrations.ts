@@ -4,7 +4,8 @@ import { connectionName, getAdapter } from "@notch/integrations";
 import { IntegrationCreate, IntegrationUpdate } from "@notch/schemas";
 import { integration as integrationTable } from "@notch/db";
 import { authenticate, rateLimited, sessionOnly, type AppContext } from "../middleware.ts";
-import { fingerprint, openCredentials, sealCredentials, sealedFromRow } from "../lib/crypto.ts";
+import { fingerprint, sealCredentials } from "../lib/crypto.ts";
+import { openFreshCredentials } from "../lib/token-refresh.ts";
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id } from "../lib/ids.ts";
 import { loadUser } from "../lib/identity.ts";
@@ -251,11 +252,7 @@ integrations.post("/:id/verify", sessionOnly, async (c) => {
   if (!user) return c.json({ code: "NOT_FOUND", message: "No such account." }, 404);
 
   const adapter = getAdapter(row.provider);
-  const credentials = await openCredentials(
-    c.env,
-    { userId: row.userId, integrationId: row.id, provider: row.provider },
-    sealedFromRow(row),
-  );
+  const { credentials } = await openFreshCredentials(c.env, db, row);
 
   try {
     const verified = await adapter.verify(

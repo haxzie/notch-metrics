@@ -88,3 +88,26 @@ curl -s localhost:8787/v1/providers | jq '.providers[] | {id, status}'
 
 Then connect a real **test-mode** key through the dashboard and confirm the
 numbers match the provider's own.
+
+## OAuth connectors whose tokens expire
+
+If the provider issues an access token with an `expires_in`, the adapter's
+`oauth` block **must** do three things, or the connection silently dies the
+first time the token does — for GitHub that was every eight hours, and the
+only symptom was "needs reconnecting":
+
+1. Write `expires_at` (Unix ms, as a decimal string — see `EXPIRES_AT_FIELD`)
+   and the `refresh_token` into the credential blob from `exchangeCode`.
+2. Declare `refresh: { leadTimeMs, minIntervalMs }`. Lead time is how early
+   to rotate; be generous, the old token keeps working until the new one is
+   issued. The floor is what stops a bug from looping on the token endpoint
+   and getting the whole client id throttled.
+3. Implement `refreshCredentials`. Throw `OAuthReauthRequiredError` only for
+   the provider's unambiguous "start over" answer (`bad_refresh_token`,
+   `invalid_grant`). Any other failure is a strike, retried on the next tick.
+
+`apps/api/src/lib/token-refresh.ts` does the rest: the five-minute cron sweeps
+rows inside their lead window using the mirrored `token_expires_at` column, and
+every metric fetch runs the same check first so a request does not race the
+cron. Nothing to wire up per connector. `isRefreshDue` is the one place
+staleness is decided — do not re-check expiry inside the adapter.

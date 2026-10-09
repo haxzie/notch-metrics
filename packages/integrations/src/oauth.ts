@@ -21,6 +21,48 @@ export const DEFAULT_REFRESH_POLICY: OAuthRefreshPolicy = {
 };
 
 /**
+ * The credential field a connector that declares a `refresh` policy must
+ * write: when its access token stops working, as Unix milliseconds.
+ *
+ * A decimal string rather than a number, because a credential blob is
+ * string-valued end to end — it is fingerprinted and hinted as strings, and a
+ * number that survived one JSON round trip and not another is the kind of
+ * drift that shows up as "expires in 1970".
+ */
+export const EXPIRES_AT_FIELD = "expires_at";
+
+/** Reads the expiry out of a blob, tolerating either representation. */
+export function credentialExpiry(credentials: Record<string, unknown>): number | null {
+  const raw = credentials[EXPIRES_AT_FIELD];
+  const value = typeof raw === "string" ? Number(raw) : raw;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Whether a refresh is due right now, by the connector's policy.
+ *
+ * The one place staleness is decided: the cron sweep and the fetch path both
+ * ask this, so they cannot disagree. Connectors never check expiry
+ * themselves — `refreshCredentials` is only called once this says yes.
+ */
+export function isRefreshDue(
+  policy: OAuthRefreshPolicy,
+  state: { expiresAt: number | null; lastAttemptAt: number | null },
+  now = Date.now(),
+): boolean {
+  // The floor wins unconditionally. Even a token that already looks expired
+  // must not re-hit the provider's token endpoint faster than the connector
+  // says is safe — that is how a whole client id gets throttled, not one user.
+  if (state.lastAttemptAt !== null && now - state.lastAttemptAt < policy.minIntervalMs) {
+    return false;
+  }
+  // Unknown expiry: a row from before expiry was recorded. Try once; a
+  // successful refresh writes the expiry and the question answers itself.
+  if (state.expiresAt === null) return true;
+  return state.expiresAt - now <= policy.leadTimeMs;
+}
+
+/**
  * The grant is dead and no amount of retrying will fix it — the user revoked
  * access, or changed their password, or the app was uninstalled on the
  * provider's side.

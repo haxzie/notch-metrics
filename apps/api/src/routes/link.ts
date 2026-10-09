@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
-import { connectionName, getAdapter, oauthSecretNames } from "@notch/integrations";
+import { connectionName, credentialExpiry, getAdapter } from "@notch/integrations";
 import type { VerifyResult } from "@notch/integrations";
 import { connectLink, integration as integrationTable } from "@notch/db";
 import { type AppContext, rateLimitedByIp } from "../middleware.ts";
@@ -11,6 +11,7 @@ import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id, randomToken, sha256Base64Url } from "../lib/ids.ts";
 import { loadUser } from "../lib/identity.ts";
 import { logError } from "../lib/redact.ts";
+import { oauthClient } from "../lib/oauth-client.ts";
 
 /**
  * The public half of the connect flow — what the browser talks to.
@@ -23,6 +24,12 @@ import { logError } from "../lib/redact.ts";
 export const link = new Hono<AppContext>();
 
 type Database = AppContext["Variables"]["db"];
+
+/** The blob's expiry as a Date for the mirror column, or null when it has none. */
+function expiryDate(credentials: Record<string, string>): Date | null {
+  const at = credentialExpiry(credentials);
+  return at === null ? null : new Date(at);
+}
 
 async function resolve(db: Database, token: string) {
   const rows = await db
@@ -234,6 +241,7 @@ async function finishConnection(
     accountLabel: verified.accountLabel,
     accountCurrency: verified.currency,
     refreshOffsetSeconds: Math.floor(Math.random() * 300),
+    tokenExpiresAt: expiryDate(credentials),
   });
 
   // Single-use, and the pending tokens go with it: burning the link here
@@ -279,14 +287,6 @@ function redirectUri(c: Context<AppContext>): string {
   return `${c.env.API_URL}/v1/link/oauth/callback`;
 }
 
-function oauthClient(c: Context<AppContext>, connectorId: string) {
-  const names = oauthSecretNames(connectorId as Parameters<typeof oauthSecretNames>[0]);
-  const clientId = (c.env as unknown as Record<string, string | undefined>)[names.clientId];
-  const clientSecret = (c.env as unknown as Record<string, string | undefined>)[names.clientSecret];
-  if (!clientId || !clientSecret) return null;
-  return { clientId, clientSecret };
-}
-
 /**
  * Start the grant: mint a state, remember its hash, redirect.
  *
@@ -318,7 +318,7 @@ link.get("/:token/authorize", rateLimitedByIp(20, 600), async (c) => {
     return back("This connector is connected with an API key, not a sign-in.");
   }
 
-  const client = oauthClient(c, row.connectorId);
+  const client = oauthClient(c.env, row.connectorId);
   if (!client) {
     // Named plainly rather than left as a 500. A missing client id is a
     // deployment that was never finished, and the message has to be enough
@@ -386,7 +386,7 @@ link.get("/oauth/callback", rateLimitedByIp(40, 600), async (c) => {
   }
 
   const adapter = getAdapter(row.connectorId);
-  const client = oauthClient(c, row.connectorId);
+  const client = oauthClient(c.env, row.connectorId);
   if (!adapter.oauth || !client) {
     return c.json({ code: "NOT_CONFIGURED", message: "This connector is not configured." }, 503);
   }

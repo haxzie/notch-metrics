@@ -5,6 +5,7 @@ import { createDb, type Database } from "./lib/db.ts";
 import { queryMetric, sweepCache } from "./lib/metrics.ts";
 import { sweep as sweepRateLimits } from "./lib/rate-limit.ts";
 import { logError } from "./lib/redact.ts";
+import { sweepTokenRefresh } from "./lib/token-refresh.ts";
 
 /**
  * Runs every five minutes. Warms caches so the notch opens instantly, and
@@ -12,6 +13,9 @@ import { logError } from "./lib/redact.ts";
  */
 export async function scheduled(env: Env): Promise<void> {
   const db = createDb(env);
+  // Tokens before metrics, so the poll that follows runs on the new ones
+  // rather than on a token with minutes left.
+  await sweepTokenRefresh(db, env).catch((e) => logError("cron.tokenRefresh", e));
   await refreshMetrics(db, env).catch((e) => logError("cron.refresh", e));
   await expireGrace(db).catch((e) => logError("cron.grace", e));
   await sweepCache(db).catch((e) => logError("cron.sweepCache", e));

@@ -146,6 +146,30 @@ export const integration = sqliteTable(
      */
     refreshOffsetSeconds: integer("refresh_offset_seconds").notNull().default(0),
 
+    /**
+     * Plaintext mirror of the `expires_at` inside the credential blob.
+     *
+     * Exists so the token-refresh sweep can find due rows in SQL instead of
+     * decrypting every OAuth integration on every tick. Null means unknown:
+     * a row from before expiry was recorded, or a connector whose tokens do
+     * not expire. The sweep checks an unknown row once and the successful
+     * attempt fills it in.
+     */
+    tokenExpiresAt: timestamp("token_expires_at"),
+    /**
+     * When the token endpoint was last called for this row, success or not.
+     * Enforces the connector's `minIntervalMs` floor — the thing that stops a
+     * bug from refreshing in a loop and getting the whole client id
+     * throttled rather than one user.
+     */
+    lastRefreshAttemptAt: timestamp("last_refresh_attempt_at"),
+    /**
+     * Consecutive refresh failures that were not a dead grant. Reset on
+     * success. A single provider blip must not make somebody reconnect; only
+     * a run of them, with the token actually past its expiry, does.
+     */
+    refreshFailures: integer("refresh_failures").notNull().default(0),
+
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -153,6 +177,7 @@ export const integration = sqliteTable(
     index("integration_user_idx").on(t.userId),
     index("integration_disabled_idx").on(t.disabledUntil),
     index("integration_next_allowed_idx").on(t.nextAllowedAt),
+    index("integration_refresh_due_idx").on(t.provider, t.tokenExpiresAt),
     uniqueIndex("integration_fingerprint_idx").on(t.userId, t.provider, t.credentialFingerprint),
   ],
 );

@@ -12,7 +12,7 @@ import { integration as integrationTable, metricCache } from "@notch/db";
 import type { Env } from "../env.ts";
 import type { Database } from "./db.ts";
 import { adapterContext, toMetricError } from "./adapter.ts";
-import { openCredentials, sealedFromRow } from "./crypto.ts";
+import { openFreshCredentials } from "./token-refresh.ts";
 import { percentChange } from "@notch/integrations";
 import { logError } from "./redact.ts";
 
@@ -136,11 +136,9 @@ export async function queryMetric(
 
   try {
     const adapter = getAdapter(row.provider);
-    const credentials = await openCredentials(
-      options.env,
-      { userId: row.userId, integrationId: row.id, provider: row.provider },
-      sealedFromRow(row),
-    );
+    // Refreshed first when the connector says the token is about to lapse,
+    // so a request inside the lead window does not race the cron.
+    const { credentials } = await openFreshCredentials(options.env, db, row);
 
     const raw = await adapter.fetchMetric(
       adapterContext({
