@@ -47,7 +47,14 @@ wrangler secret put BETTER_AUTH_SECRET --env production
 wrangler secret put INTEGRATION_KEK_V1 --env production
 wrangler secret put DODOPAYMENT_API_KEY --env production
 wrangler secret put DODOPAYMENT_WEBHOOK_SECRET --env production
+wrangler secret put SLACK_WEBHOOK_SIGNUPS --env production
+wrangler secret put SLACK_WEBHOOK_EVENTS --env production
 ```
+
+The two Slack ones are optional — an unset webhook makes `lib/slack.ts` a
+no-op rather than an error, which is what a staging stack wants. A webhook URL
+_is_ the credential and is bound to one channel, so moving a notification to a
+different channel is a new URL here, not a code change.
 
 Set once; they survive every deploy. Pushing a payment key through CI means a
 second copy in a second place for no gain.

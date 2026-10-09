@@ -9,6 +9,7 @@ import { openFreshCredentials } from "../lib/token-refresh.ts";
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id } from "../lib/ids.ts";
 import { loadUser } from "../lib/identity.ts";
+import { notify } from "../lib/slack.ts";
 import { logError } from "../lib/redact.ts";
 import type { Database } from "../lib/db.ts";
 
@@ -167,6 +168,16 @@ integrations.post("/", sessionOnly, rateLimited({ limit: 20, windowSeconds: 3600
   });
 
   const row = await owned(db, userId, rowId);
+  if (row) {
+    c.executionCtx.waitUntil(
+      notify(c.env, {
+        kind: "integration_connected",
+        provider: row.provider,
+        account: row.accountLabel ?? row.label,
+        email: user.email,
+      }),
+    );
+  }
   return row
     ? c.json(toPublic(row), 201)
     : c.json({ code: "ERROR", message: "Could not save." }, 500);
@@ -237,9 +248,22 @@ integrations.patch("/:id", async (c) => {
 });
 
 integrations.delete("/:id", async (c) => {
-  const row = await owned(c.get("db"), c.get("identity").userId, c.req.param("id"));
+  const db = c.get("db");
+  const row = await owned(db, c.get("identity").userId, c.req.param("id"));
   if (!row) return c.json({ code: "NOT_FOUND", message: "No such integration." }, 404);
-  await c.get("db").delete(integrationTable).where(eq(integrationTable.id, row.id));
+  // Read before the delete: afterwards there is no row to name, and a
+  // notification saying only that *something* was disconnected is not worth
+  // the channel it is posted to.
+  const owner = await loadUser(db, row.userId);
+  await db.delete(integrationTable).where(eq(integrationTable.id, row.id));
+  c.executionCtx.waitUntil(
+    notify(c.env, {
+      kind: "integration_disconnected",
+      provider: row.provider,
+      account: row.accountLabel ?? row.label,
+      email: owner?.email ?? null,
+    }),
+  );
   return c.json({ ok: true });
 });
 

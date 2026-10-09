@@ -16,6 +16,7 @@ import { adapterContext, toMetricError } from "./adapter.ts";
 import { openFreshCredentials } from "./token-refresh.ts";
 import { percentChange } from "@notch/integrations";
 import { logError } from "./redact.ts";
+import { notifyBroken } from "./slack.ts";
 
 /**
  * How long a computed envelope stays fresh.
@@ -229,7 +230,7 @@ export async function queryMetric(
   } catch (error) {
     logError("metrics.fetch", error);
     const mapped = toMetricError(error);
-    await recordFailure(db, row, mapped);
+    await recordFailure(options.env, db, row, mapped);
     return (
       staleFallback() ?? {
         ok: false,
@@ -244,6 +245,7 @@ export async function queryMetric(
 }
 
 async function recordFailure(
+  env: Env,
   db: Database,
   row: typeof integrationTable.$inferSelect,
   mapped: { code: string; retryAfterSeconds: number | null },
@@ -270,6 +272,8 @@ async function recordFailure(
       nextAllowedAt: Date.now() + MIN_CALL_SPACING_MS,
     })
     .where(eq(integrationTable.id, row.id));
+
+  if (mapped.code === "auth_failed") await notifyBroken(env, db, row.status, row);
 }
 
 /** Opportunistic, through `waitUntil` — a Worker has no timer of its own. */

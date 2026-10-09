@@ -39,7 +39,11 @@ app.use(
   }),
 );
 
-app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
+// `waitUntil` so the signup notification posts after the response rather
+// than inside it — Slack being slow must not make signing up slow.
+app.on(["GET", "POST"], "/api/auth/*", (c) =>
+  createAuth(c.env, (promise) => c.executionCtx.waitUntil(promise)).handler(c.req.raw),
+);
 
 app.route("/v1/me", me);
 app.route("/v1/desktop", desktop);

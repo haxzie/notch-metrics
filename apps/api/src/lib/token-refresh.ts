@@ -12,6 +12,7 @@ import { openCredentials, sealCredentials, sealedFromRow } from "./crypto.ts";
 import type { Database } from "./db.ts";
 import { oauthClient } from "./oauth-client.ts";
 import { logError } from "./redact.ts";
+import { notifyBroken } from "./slack.ts";
 
 type Row = typeof integrationTable.$inferSelect;
 
@@ -117,6 +118,7 @@ export async function openFreshCredentials(
           lastRefreshAttemptAt: now,
         })
         .where(eq(integrationTable.id, row.id));
+      await notifyBroken(env, db, row.status, row);
       return { credentials, refreshed: false };
     }
 
@@ -134,6 +136,7 @@ export async function openFreshCredentials(
           : {}),
       })
       .where(eq(integrationTable.id, row.id));
+    if (giveUp) await notifyBroken(env, db, row.status, row);
     return { credentials, refreshed: false };
   }
 }

@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { schema } from "@notch/db";
 import { createDb } from "./db.ts";
 import { TRIAL_DAYS } from "./entitlement.ts";
+import { notify } from "./slack.ts";
 import { isProduction, required, type Env } from "../env.ts";
 
 /**
@@ -10,8 +11,12 @@ import { isProduction, required, type Env } from "../env.ts";
  *
  * It cannot be a module-scope singleton: the D1 binding only exists on `env`,
  * which only exists inside a request. Construction is cheap.
+ *
+ * `waitUntil` is how the signup notification stays off the critical path. It
+ * is optional because most callers only ever read a session, which fires no
+ * hooks — without one the notification is simply awaited.
  */
-export function createAuth(env: Env) {
+export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => void) {
   return betterAuth({
     database: drizzleAdapter(createDb(env), { provider: "sqlite", schema }),
     secret: required(env, "BETTER_AUTH_SECRET"),
@@ -72,6 +77,14 @@ export function createAuth(env: Env) {
               trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
             },
           }),
+          // Every account is created through this hook, whichever provider
+          // it came in by — which is why the notification hangs off it
+          // rather than off a route.
+          after: async (user) => {
+            const posted = notify(env, { kind: "signup", email: user.email, name: user.name });
+            if (waitUntil) waitUntil(posted);
+            else await posted;
+          },
         },
       },
     },

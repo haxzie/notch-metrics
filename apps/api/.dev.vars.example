@@ -84,3 +84,15 @@ DODOPAYMENT_WEBHOOK_SECRET=
 # Error reporting. Absent means errors go to the console only, which is a
 # working local state rather than a broken one.
 SENTRY_DSN=
+
+# Slack incoming webhooks, one per channel: signups go to the first, the
+# connection lifecycle to the second. See apps/api/src/lib/slack.ts.
+#
+# Create them under Slack → Apps → Incoming Webhooks; a webhook URL *is* the
+# credential and is bound to one channel, so moving a notification to a
+# different channel means a new URL, not a code change.
+#
+# Leave empty to run without them — an unconfigured channel is a silent
+# no-op, which is what every test run and most dev stacks want.
+SLACK_WEBHOOK_SIGNUPS=
+SLACK_WEBHOOK_EVENTS=

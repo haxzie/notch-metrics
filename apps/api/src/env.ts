@@ -64,6 +64,15 @@ export interface Env {
   DODOPAYMENT_API_KEY?: string;
   DODOPAYMENT_WEBHOOK_SECRET?: string;
   SENTRY_DSN?: string;
+  /**
+   * Slack incoming webhooks, one per channel. See `lib/slack.ts`.
+   *
+   * Optional, and absent means those notifications are simply not posted —
+   * which is the state of every test run and of a dev stack whose owner does
+   * not want their Slack filling up.
+   */
+  SLACK_WEBHOOK_SIGNUPS?: string;
+  SLACK_WEBHOOK_EVENTS?: string;
 
   // test-only, injected by the vitest pool
   TEST_MIGRATIONS?: unknown;

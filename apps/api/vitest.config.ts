@@ -23,6 +23,14 @@ export default defineWorkersConfig({
             INTEGRATION_KEK_V2: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=",
             DODOPAYMENT_WEBHOOK_SECRET: "whsec_dGVzdHNlY3JldGZvcnNpZ25pbmd0ZXN0cw==",
             DODOPAYMENT_API_KEY: "test_key",
+            // Blanked, not omitted. Wrangler loads `.dev.vars` for the tests
+            // as well as for `wrangler dev`, so a developer with real webhooks
+            // configured locally would otherwise post a signup to the team's
+            // Slack every time they ran the suite. `lib/slack.ts` treats an
+            // empty webhook as "not configured" and does nothing; the tests
+            // that exercise it pass their own env in.
+            SLACK_WEBHOOK_SIGNUPS: "off",
+            SLACK_WEBHOOK_EVENTS: "off",
           },
         },
       },
