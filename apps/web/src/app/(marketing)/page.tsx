@@ -249,7 +249,7 @@ export default async function Home() {
           />
           <div className="grid items-center gap-10 px-8 py-12 sm:px-12 lg:grid-cols-[1.1fr_1fr] lg:gap-6 lg:py-16">
             <div className="text-center lg:text-left">
-              <p className="eyebrow">Swift, not Electron</p>
+              <p className="eyebrow">Built for macOS 14 and later</p>
               <h2 className="mt-2 text-5xl text-white sm:text-6xl">
                 Native to <span className="accent">Mac</span>
               </h2>
