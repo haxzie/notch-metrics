@@ -8,12 +8,12 @@
  */
 export function SiliconChip() {
   return (
-    <div className="relative mx-auto h-[280px] w-[280px] sm:h-[320px] sm:w-[320px]">
+    <div className="relative h-[260px] w-[260px] sm:h-[300px] sm:w-[300px]">
       {/* Guide lines running off the plate, as on a layout drawing. */}
-      <span aria-hidden className="absolute -inset-y-40 left-0 w-px bg-white/[0.06]" />
-      <span aria-hidden className="absolute -inset-y-40 right-0 w-px bg-white/[0.06]" />
-      <span aria-hidden className="absolute -inset-x-[60vw] top-0 h-px bg-white/[0.06]" />
-      <span aria-hidden className="absolute -inset-x-[60vw] bottom-0 h-px bg-white/[0.06]" />
+      <span aria-hidden className="absolute -inset-y-24 left-0 w-px bg-white/[0.06]" />
+      <span aria-hidden className="absolute -inset-y-24 right-0 w-px bg-white/[0.06]" />
+      <span aria-hidden className="absolute -inset-x-20 top-0 h-px bg-white/[0.06]" />
+      <span aria-hidden className="absolute -inset-x-20 bottom-0 h-px bg-white/[0.06]" />
 
       {/* The plate. */}
       <div

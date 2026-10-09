@@ -238,28 +238,33 @@ export default async function Home() {
 
       {/* Designed for the Mac */}
       <section className="mx-auto max-w-5xl px-6 pt-28">
-        <div className="relative overflow-hidden rounded-[32px] border border-white/[0.08] px-6 py-20 text-center sm:py-24">
+        <div className="relative overflow-hidden rounded-[32px] border border-white/[0.08]">
           <div
             aria-hidden
             className="absolute inset-0 -z-10"
             style={{
               background:
-                "radial-gradient(70% 60% at 50% 110%, rgba(216,25,194,0.35), transparent 70%), radial-gradient(50% 40% at 80% 0%, rgba(255,193,7,0.18), transparent 70%), #0b0a0e",
+                "radial-gradient(60% 80% at 15% 110%, rgba(216,25,194,0.32), transparent 70%), radial-gradient(50% 60% at 95% 0%, rgba(255,193,7,0.16), transparent 70%), #0b0a0e",
             }}
           />
-          <SiliconChip />
-
-          <p className="eyebrow mt-12">Designed for</p>
-          <h2 className="mt-2 text-5xl text-white sm:text-6xl">
-            <span className="accent">The Mac</span>
-          </h2>
-          <p className="mx-auto mt-6 max-w-xl text-pretty text-white/60">
-            Native Swift, built for Apple silicon. Signed, notarised, and updated in place. Every
-            update is checked against both its hash and its Developer ID signature before it is
-            installed. No Electron, no browser engine, no dock icon.
-          </p>
-          <div className="mt-10 flex justify-center">
-            <DownloadButton size="lg" />
+          <div className="grid items-center gap-10 px-8 py-12 sm:px-12 lg:grid-cols-[1.1fr_1fr] lg:gap-6 lg:py-16">
+            <div className="text-center lg:text-left">
+              <p className="eyebrow">Designed for</p>
+              <h2 className="mt-2 text-5xl text-white sm:text-6xl">
+                <span className="accent">The Mac</span>
+              </h2>
+              <p className="mx-auto mt-5 max-w-md text-pretty text-white/60 lg:mx-0">
+                Native Swift, built for Apple silicon. Signed, notarised, and updated in place.
+                Every update is checked against both its hash and its Developer ID signature before
+                it is installed. No Electron, no browser engine, no dock icon.
+              </p>
+              <div className="mt-8 flex justify-center lg:justify-start">
+                <DownloadButton size="lg" />
+              </div>
+            </div>
+            <div className="flex justify-center lg:justify-end">
+              <SiliconChip />
+            </div>
           </div>
         </div>
       </section>
