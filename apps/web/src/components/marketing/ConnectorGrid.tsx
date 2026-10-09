@@ -5,13 +5,17 @@ import { CONNECTOR_GROUPS } from "@/lib/connectors";
  * Every connector as a mark, live ones first. The name is the tooltip, not
  * a label: at this size the marks are recognisable on their own, and a wall
  * of them says "lots" faster than a list does. Ones not shipped yet are
- * dimmed rather than hidden, so a visitor can see PostHog is on the way
+ * dimmed rather than hidden, so a visitor can see Mixpanel is on the way
  * without being told it works today.
+ *
+ * "Live" is anything not `coming_soon`, which includes `beta`. A beta
+ * connector is one the server will happily connect, so dimming it told
+ * visitors the opposite of the truth.
  */
 export function ConnectorGrid() {
   const all = CONNECTOR_GROUPS.flatMap((group) => group.connectors);
-  const live = all.filter((connector) => connector.status === "stable");
-  const soon = all.filter((connector) => connector.status !== "stable");
+  const live = all.filter((connector) => connector.status !== "coming_soon");
+  const soon = all.filter((connector) => connector.status === "coming_soon");
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -20,7 +24,7 @@ export function ConnectorGrid() {
           <li
             key={connector.id}
             className={`transition hover:scale-105 ${
-              connector.status === "stable" ? "" : "opacity-40 grayscale-[0.3]"
+              connector.status === "coming_soon" ? "opacity-40 grayscale-[0.3]" : ""
             }`}
           >
             <ConnectorMark

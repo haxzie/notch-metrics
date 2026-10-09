@@ -93,6 +93,10 @@ public final class NotchViewModel {
         AnyView(EmptyView())
     }
 
+    /// The configure pane closed itself — Done or Cancel. The controller may
+    /// be holding the notch open on the pane's behalf and needs to let go.
+    public var onEndConfiguring: @MainActor () -> Void = {}
+
     public var onOpenSettings: @MainActor () -> Void = {}
     /// Fetch every tile again, now.
     public var onRefresh: @MainActor () -> Void = {}

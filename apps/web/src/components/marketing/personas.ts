@@ -34,7 +34,9 @@ export interface Persona {
 }
 
 const stripe = { provider: "stripe", name: "Stripe", accent: "#635BFF", colour: "#8f88ff" };
-const polar = { provider: "polar", name: "Polar", accent: "#0062FF", colour: "#4d8dff" };
+// White graphs: Polar's brand is monochrome, so there is no brand colour to
+// draw a line in — a tinted one would be invented.
+const polar = { provider: "polar", name: "Polar", accent: "#090909", colour: "#ffffff" };
 const paddle = { provider: "paddle", name: "Paddle", accent: "#FDDD35" };
 const dodo = {
   provider: "dodopayments",

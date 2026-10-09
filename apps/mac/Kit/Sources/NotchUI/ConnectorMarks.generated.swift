@@ -15,6 +15,8 @@ public enum ConnectorMarks {
         "github",
         "google-analytics",
         "google-search-console",
+        "polar",
+        "posthog",
     ]
 
     /// Marks that are the tile: drawn edge to edge and clipped to its

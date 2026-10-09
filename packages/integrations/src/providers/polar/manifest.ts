@@ -8,7 +8,10 @@ export const manifest: ProviderManifest = {
   tagline: "Revenue and subscriptions from your Polar storefront.",
   docsUrl: "https://polar.sh/docs/integrate/authentication",
   iconPath: "/providers/polar.svg",
-  accentColor: "#0062FF",
+  // Polar has no brand colour: the mark is `currentColor`, black on light
+  // and white on dark, over their own near-black. The blue that was here
+  // belongs to Polars, the dataframe library at pola.rs.
+  accentColor: "#090909",
   keywords: ["payments", "billing", "open source", "storefront", "merchant of record"],
   authMode: "api_key",
   fields: [

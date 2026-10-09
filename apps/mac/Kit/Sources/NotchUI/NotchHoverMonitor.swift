@@ -59,7 +59,14 @@ public final class NotchHoverMonitor {
             // `.activeAlways`, because this app is an accessory and is almost
             // never frontmost — `.activeInKeyWindow` would mean the notch only
             // worked while it had focus, which it never has.
-            options: [.mouseEnteredAndExited, .activeAlways],
+            // `.enabledDuringMouseDrag`, or AppKit reports no crossing at
+            // all while a tile is dragged in from the gallery — and a
+            // crossing it never reports is one it never un-reports either.
+            // The pointer ends the drag inside the strip with AppKit still
+            // believing it is outside, or the reverse, and the next real
+            // crossing is then swallowed: the notch stops opening on hover
+            // until something else makes it re-evaluate.
+            options: [.mouseEnteredAndExited, .activeAlways, .enabledDuringMouseDrag],
             owner: view,
             userInfo: nil
         )

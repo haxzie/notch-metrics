@@ -68,6 +68,12 @@ public final class NotchWindowController {
     private let model: NotchLayoutModel
     private var settings: AppSettings
 
+    /// True while *this* object holds the pin on behalf of the configure
+    /// pane, as opposed to the user having clicked the pin themselves.
+    /// Without the distinction, closing the pane would quietly unpin a notch
+    /// the user had pinned by hand.
+    private var pinnedForConfiguring = false
+
     public init(model: NotchLayoutModel, settings: AppSettings = AppSettings()) {
         self.model = model
         self.settings = settings
@@ -188,6 +194,7 @@ public final class NotchWindowController {
             self?.onDropWidget(payload, index) ?? false
         }
         viewModel.onRefresh = { [weak self] in self?.onRefresh() }
+        viewModel.onEndConfiguring = { [weak self] in self?.configuringEnded() }
         viewModel.onTogglePin = { [weak self] in self?.togglePin() }
         viewModel.onClose = { [weak self] in self?.close() }
         self.view = viewModel
@@ -331,6 +338,15 @@ public final class NotchWindowController {
             view.presentation = .collapsed
             view.isPinned = false
             self.model.isEditing = false
+            // A collapsed notch has no pane. The pane used to survive the
+            // collapse, so the next hover reopened on a half-finished form
+            // for a widget the user had stopped thinking about rather than on
+            // the grid — and the only way back was Done. Changes are written
+            // straight through to the layout, so dropping it keeps them,
+            // exactly as Done does.
+            view.configuringID = nil
+            view.configuringSnapshot = nil
+            self.pinnedForConfiguring = false
         }
         if animated {
             withAnimation(NotchMotion.collapse(reduceMotion: reduceMotion)) { apply() }
@@ -364,14 +380,56 @@ public final class NotchWindowController {
     public func holdOpenForGallery(_ open: Bool) {
         guard let view else { return }
         if open {
+            // A drag needs the grid, and the configure pane *replaces* the
+            // grid. Left up, the tile being carried in had nothing to land
+            // on: the drop bounced back and the notch looked like it would
+            // only ever open on somebody else's half-finished form.
+            view.configuringID = nil
+            view.configuringSnapshot = nil
+            pinnedForConfiguring = false
             expand()
             view.isPinned = true
             model.isEditing = true
             hover?.cancelPendingCollapse()
+        } else if view.configuringID != nil {
+            // The gallery is going away mid-configuration — a drop, then Done
+            // on the gallery before the pane was finished with. Collapsing
+            // here would take the form with it.
+            handOffToConfiguring()
         } else {
             view.isPinned = false
             collapseIfUnpinned()
         }
+    }
+
+    /// Hands the notch from the gallery's drag hold to the configure pane the
+    /// drop just opened.
+    ///
+    /// Stays expanded, and stays pinned: the pointer is at the bottom of the
+    /// screen where the gallery is, nowhere near the panel, so the exit watch
+    /// would collapse the pane within a tick of it appearing. The pin is
+    /// released when the pane closes.
+    public func handOffToConfiguring() {
+        guard let view, view.configuringID != nil else {
+            close()
+            return
+        }
+        expand()
+        view.isPinned = true
+        pinnedForConfiguring = true
+        // The pane replaces the grid, so the handles behind it would be
+        // editing nothing.
+        model.isEditing = false
+        hover?.cancelPendingCollapse()
+    }
+
+    /// The configure pane closed — Done or Cancel. Gives back a pin taken on
+    /// its behalf so hover owns the notch again; the exit watch's poll
+    /// collapses it a tick later if the pointer has gone elsewhere.
+    private func configuringEnded() {
+        guard pinnedForConfiguring else { return }
+        pinnedForConfiguring = false
+        view?.isPinned = false
     }
 
     public func togglePin() {

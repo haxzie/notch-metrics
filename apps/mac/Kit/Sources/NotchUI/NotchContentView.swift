@@ -353,6 +353,7 @@ public struct NotchContentView: View {
     private func endConfiguring() {
         view.configuringID = nil
         view.configuringSnapshot = nil
+        view.onEndConfiguring()
     }
 
     private var doneConfiguringButton: some View {
