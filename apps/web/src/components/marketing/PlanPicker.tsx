@@ -57,7 +57,7 @@ export function PlanPicker() {
           cadence="per year"
           was={formatPrice(PLANS.pro.amount * 12, "USD")}
           note={`${formatPrice(Math.round(PLANS.pro_annual.amount / 12), "USD")} a month, billed once.`}
-          badge={`Save ${annualSavingPercent()}%`}
+          badge={`Best value · Save ${annualSavingPercent()}%`}
           highlighted
           busy={busy === "pro_annual"}
           disabled={busy !== null}
@@ -107,7 +107,7 @@ function PlanCard({
       }`}
     >
       {badge && (
-        <span className="brand-gradient absolute -top-3 right-6 rounded-full px-3 py-1 text-xs font-semibold text-black">
+        <span className="brand-gradient absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold text-black shadow-[0_6px_20px_-6px_rgba(216,25,194,0.7)]">
           {badge}
         </span>
       )}
