@@ -54,8 +54,11 @@ const BRANDS = {
  * brand-coloured tile instead of the near-white one.
  *
  * Dodo Payments' mark is lime on black; on a white tile it is barely there.
+ * Polar's mark is white — it is `currentColor` on their own site, black on
+ * light and white on dark, and we take the dark half. PostHog's carries a
+ * white glyph inside the hedgehog, which disappears entirely on a light tile.
  */
-const BRAND_TILE = new Set(["dodopayments"]);
+const BRAND_TILE = new Set(["dodopayments", "polar", "posthog"]);
 
 /**
  * Overrides that *are* the tile: artwork already square, already filled to

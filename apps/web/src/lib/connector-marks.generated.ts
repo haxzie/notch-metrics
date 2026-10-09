@@ -9,6 +9,8 @@ export const OWN_COLOUR_MARKS: ReadonlySet<string> = new Set([
   "github",
   "google-analytics",
   "google-search-console",
+  "polar",
+  "posthog",
 ]);
 export const FULL_BLEED_MARKS: ReadonlySet<string> = new Set(["dodopayments"]);
 export const MONOCHROME_MARKS: ReadonlySet<string> = new Set(["github"]);
@@ -25,6 +27,7 @@ export const MARKS: ReadonlySet<string> = new Set([
   "mixpanel",
   "paddle",
   "plausible",
+  "polar",
   "posthog",
   "revenuecat",
   "stripe",

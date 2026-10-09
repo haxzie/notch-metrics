@@ -64,13 +64,22 @@ public enum AppCatalog {
         MetricApp(
             id: "lemonsqueezy", name: "Lemon Squeezy", symbol: "cart.fill", accentHex: "FFC233"),
         MetricApp(
-            id: "polar", name: "Polar", symbol: "snowflake", accentHex: "0062FF"),
+            // Polar's brand is monochrome — the mark is white on their own
+            // near-black, and the blue that used to be here is Polars', the
+            // dataframe library. With no brand hue, a tinted chart line would
+            // be invented, so the line is white.
+            id: "polar", name: "Polar", symbol: "asterisk", accentHex: "090909",
+            chartHex: "FFFFFF"),
         MetricApp(
             id: "paddle", name: "Paddle", symbol: "banknote.fill", accentHex: "FDDD35"),
         MetricApp(
             id: "revenuecat", name: "RevenueCat", symbol: "cat.fill", accentHex: "F2545B"),
         MetricApp(
-            id: "posthog", name: "PostHog", symbol: "chart.dots.scatter", accentHex: "F54E00"),
+            // Their full-colour mark is drawn for a dark backdrop, so the
+            // accent is that backdrop and the orange — a colour *in* the mark
+            // — stays as the chart line.
+            id: "posthog", name: "PostHog", symbol: "chart.dots.scatter", accentHex: "1D1D1D",
+            chartHex: "F54E00"),
         MetricApp(
             id: "plausible", name: "Plausible", symbol: "chart.xyaxis.line", accentHex: "5850EC"),
         MetricApp(

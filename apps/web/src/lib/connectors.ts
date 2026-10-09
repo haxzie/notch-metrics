@@ -24,7 +24,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
     label: "Revenue",
     connectors: [
       { id: "stripe", name: "Stripe", accentColor: "#635BFF", status: "stable" },
-      { id: "polar", name: "Polar", accentColor: "#0062FF", status: "stable" },
+      { id: "polar", name: "Polar", accentColor: "#090909", status: "stable" },
       { id: "paddle", name: "Paddle", accentColor: "#FDDD35", status: "stable" },
       { id: "dodopayments", name: "Dodo Payments", accentColor: "#111111", status: "stable" },
       { id: "lemonsqueezy", name: "Lemon Squeezy", accentColor: "#FFC233", status: "stable" },
@@ -38,7 +38,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
   {
     label: "Product analytics",
     connectors: [
-      { id: "posthog", name: "PostHog", accentColor: "#F54E00", status: "coming_soon" },
+      { id: "posthog", name: "PostHog", accentColor: "#1D1D1D", status: "coming_soon" },
       { id: "plausible", name: "Plausible", accentColor: "#5850EC", status: "coming_soon" },
       { id: "mixpanel", name: "Mixpanel", accentColor: "#7856FF", status: "coming_soon" },
       { id: "amplitude", name: "Amplitude", accentColor: "#1E61F0", status: "coming_soon" },
