@@ -48,11 +48,13 @@ export function PricingSection() {
       <header className="mx-auto max-w-2xl text-center">
         <p className="eyebrow">Pricing</p>
         <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
-          One plan. <span className="accent">Seven days</span> free.
+          Every connector. One <span className="accent">price</span>.
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-pretty text-[17px] leading-relaxed text-white/55">
-          No card to start. After the trial it is {formatPrice(PLANS.pro.amount, "USD")} a month, or{" "}
-          {formatPrice(PLANS.pro_annual.amount, "USD")} a year to save {annualSavingPercent()}%.
+          Try it for a week with your real numbers, no card. Then{" "}
+          {formatPrice(PLANS.pro.amount, "USD")} a month, or{" "}
+          {formatPrice(PLANS.pro_annual.amount, "USD")} a year and keep {annualSavingPercent()}% of
+          it.
         </p>
       </header>
 
