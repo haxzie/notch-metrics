@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { MetricId, ProviderManifest } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { dayAt, googleHeaders, googleOAuth, ymd } from "../../google-oauth.ts";
-import { bucketSum } from "../../normalise.ts";
+import { googleHeaders, googleOAuth } from "../../google-oauth.ts";
+import { bucketSum, dayAt, ymd } from "../../normalise.ts";
 import type {
   AdapterContext,
   HttpResponse,

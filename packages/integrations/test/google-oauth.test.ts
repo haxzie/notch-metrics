@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { googleOAuth, dayAt, ymd } from "../src/google-oauth.ts";
+import { googleOAuth } from "../src/google-oauth.ts";
+import { dayAt, ymd } from "../src/normalise.ts";
 import { OAuthReauthRequiredError } from "../src/oauth.ts";
 import { ProviderError } from "../src/types.ts";
 

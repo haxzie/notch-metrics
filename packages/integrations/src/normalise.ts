@@ -109,3 +109,28 @@ export function toMonthly(amount: number, interval: string, intervalCount = 1): 
       return perInterval;
   }
 }
+
+/**
+ * `YYYY-MM-DD` of a moment in the user's zone.
+ *
+ * What every date-ranged provider API takes, Google's and Ahrefs' alike —
+ * which is why it lives here rather than beside one provider's OAuth code.
+ */
+export function ymd(date: Date, timeZone: string): string {
+  // en-CA is the locale whose default date format is ISO.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/** Noon UTC of a `YYYYMMDD` or `YYYY-MM-DD` day, so bucketing lands on that calendar day in any zone within ±11h. */
+export function dayAt(ymdValue: string): Date {
+  const digits = ymdValue.replace(/-/g, "");
+  const y = Number(digits.slice(0, 4));
+  const m = Number(digits.slice(4, 6));
+  const d = Number(digits.slice(6, 8));
+  return new Date(Date.UTC(y, m - 1, d, 12));
+}
