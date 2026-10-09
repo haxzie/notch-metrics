@@ -122,6 +122,15 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     public var granularity: Granularity
     public var range: TimeRange
     public var chart: ChartKind
+
+    /// What this widget asks its metric for, beyond the window.
+    ///
+    /// A GitHub tile's repository lives here. On the widget rather than on
+    /// the connection, so one GitHub account serves a tile per repository
+    /// instead of a connection each. Which keys a metric takes is declared by
+    /// the server in `MetricDescriptor.params`; nothing here interprets them.
+    public var params: [String: String]
+
     /// How the number reads. Nil means "whatever the series says".
     public var format: WidgetFormat?
     /// How the chart draws. Nil means "whatever the app's colours say".
@@ -135,7 +144,8 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         title: String? = nil, name: String? = nil, size: WidgetSize = .wide, col: Int = 0,
         row: Int = 0,
         position: Int = 0, granularity: Granularity = .day, range: TimeRange = .month,
-        chart: ChartKind = .sparkline, format: WidgetFormat? = nil,
+        chart: ChartKind = .sparkline, params: [String: String] = [:],
+        format: WidgetFormat? = nil,
         chartStyle: WidgetChartStyle? = nil, visible: Bool = true
     ) {
         self.id = id
@@ -153,6 +163,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         self.granularity = granularity
         self.range = range
         self.chart = chart
+        self.params = params
         self.format = format
         self.chartStyle = chartStyle
         self.visible = visible
@@ -160,7 +171,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, appId, integrationId, metric, customMetricId, title, name, size
-        case col, row, position, granularity, range, chart, format, chartStyle, visible
+        case col, row, position, granularity, range, chart, params, format, chartStyle, visible
     }
 
     public init(from decoder: any Decoder) throws {
@@ -179,6 +190,11 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         granularity = try c.decodeIfPresent(Granularity.self, forKey: .granularity) ?? .day
         range = try c.decodeIfPresent(TimeRange.self, forKey: .range) ?? .month
         chart = try c.decodeIfPresent(ChartKind.self, forKey: .chart) ?? .sparkline
+        // Absent in every layout.json written before per-widget parameters
+        // existed. Empty is the honest reading: those widgets belong to
+        // connections that still carry their own repository, and the server
+        // falls back to it.
+        params = try c.decodeIfPresent([String: String].self, forKey: .params) ?? [:]
         // Absent in every layout.json written before formats existed, and nil
         // means "use the series", so those widgets render exactly as they did.
         format = try c.decodeIfPresent(WidgetFormat.self, forKey: .format)

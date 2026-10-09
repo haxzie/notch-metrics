@@ -161,10 +161,13 @@ describe("POST /v1/link/:token/submit", () => {
 });
 
 /**
- * The OAuth leg: authorize → provider → callback → pick → connected.
+ * The OAuth leg.
  *
- * GitHub is stubbed at `fetch`, which is where both the token exchange and
- * the repository list go.
+ * Two shapes, and both are covered because the difference is where a flow
+ * can go wrong. GitHub finishes at the callback — the grant *is* the
+ * connection, and which repository a tile counts is settled per widget.
+ * Search Console still pauses on a choice, which is the path that holds a
+ * live token encrypted between two requests.
  */
 describe("link / oauth", () => {
   function stubGitHub(options: { exchange?: unknown; repos?: unknown; status?: number } = {}) {
@@ -178,6 +181,11 @@ describe("link / oauth", () => {
 
       if (url.includes("login/oauth/access_token")) {
         return json(options.exchange ?? { access_token: "gho_token", scope: "public_repo" });
+      }
+      // Before the `/repos/` branch: `verify` now reads the account, which is
+      // what names the connection since the repository moved onto the widget.
+      if (url.endsWith("/user")) {
+        return json({ login: "haxzie", followers: 128 });
       }
       if (url.includes("/user/repos")) {
         return json(
@@ -198,6 +206,32 @@ describe("link / oauth", () => {
           },
           options.status ?? 200,
         );
+      }
+      throw new Error(`unexpected fetch to ${url}`);
+    });
+  }
+
+  /** Google's token endpoint and the Search Console property list. */
+  function stubGoogle() {
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      const json = (body: unknown) =>
+        new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+
+      if (url.includes("oauth2.googleapis.com/token")) {
+        // Both long enough for the credential schema's minimums — a short one
+        // here fails the parse at the end of the flow and reads as a broken
+        // selection rather than a broken fixture.
+        return json({
+          access_token: "ya29.access-token-value",
+          refresh_token: "1//refresh-token-value",
+          expires_in: 3599,
+        });
+      }
+      if (url.includes("/webmasters/v3/sites")) {
+        return json({
+          siteEntry: [{ siteUrl: "sc-domain:example.com", permissionLevel: "siteOwner" }],
+        });
       }
       throw new Error(`unexpected fetch to ${url}`);
     });
@@ -265,7 +299,7 @@ describe("link / oauth", () => {
     expect(response.status).toBe(404);
   });
 
-  it("holds the token encrypted between the callback and the choice", async () => {
+  it("finishes GitHub at the callback, with no repository to choose", async () => {
     const u = await makeUser();
     const token = await makeLink(u.id, "github");
     stubGitHub();
@@ -279,63 +313,19 @@ describe("link / oauth", () => {
       headers: { cookie: `nm_connect_link=${token}` },
     });
     expect(back.status).toBe(302);
-    expect(back.headers.get("location")).toContain("step=select");
-
-    const row = scalar(
-      (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
-      "link",
-    );
-    // The access token is a live credential from this moment, so the row
-    // must not hold it in the clear.
-    expect(row.pendingCiphertext).toBeTruthy();
-    expect(JSON.stringify(row)).not.toContain("gho_token");
-  });
-
-  it("completes on a choice, and refuses one the provider never offered", async () => {
-    const u = await makeUser();
-    const token = await makeLink(u.id, "github");
-    stubGitHub();
-
-    const start = await callWith(`/v1/link/${token}/authorize`, withClient);
-    const state = new URL(
-      scalar(start.headers.get("location") ?? undefined, "location"),
-    ).searchParams.get("state");
-    await callWith(`/v1/link/oauth/callback?code=abc&state=${state}`, withClient, {
-      headers: { cookie: `nm_connect_link=${token}` },
-    });
-
-    const options = await callWith(`/v1/link/${token}/options`, withClient);
-    expect(await options.json<{ options: { value: string }[] }>()).toMatchObject({
-      options: [{ value: "haxzie/notch-metrics" }, { value: "haxzie/other" }],
-    });
-
-    const forged = await callWith(`/v1/link/${token}/select`, withClient, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ value: "someone-else/private" }),
-    });
-    // A repository name in a POST body is not a claim about what the grant
-    // covers, so it is checked against the provider's own list.
-    expect(forged.status).toBe(400);
-
-    const done = await callWith(`/v1/link/${token}/select`, withClient, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ value: "haxzie/notch-metrics" }),
-    });
-    expect(done.status).toBe(200);
-    expect(await done.json<{ accountLabel: string }>()).toMatchObject({
-      accountLabel: "haxzie/notch-metrics",
-    });
+    // No `step=select`: one connection per account, and the repository is a
+    // field on each widget rather than a property of the connection.
+    expect(back.headers.get("location")).not.toContain("step=select");
 
     const saved = scalar(
       (await db().select().from(integration).where(eq(integration.userId, u.id)))[0],
       "integration",
     );
-    expect(saved.label).toBe("GitHub — haxzie/notch-metrics");
+    // Named after the account, so it stays right when a tile is repointed.
+    expect(saved.label).toBe("GitHub — haxzie");
+    expect(saved.accountLabel).toBe("haxzie");
     expect(JSON.stringify(saved)).not.toContain("gho_token");
 
-    // The link is burnt and keeps nothing decryptable.
     const row = scalar(
       (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
       "link",
@@ -343,5 +333,55 @@ describe("link / oauth", () => {
     expect(row.completedAt).toBeTruthy();
     expect(row.pendingCiphertext).toBeNull();
     expect(row.oauthState).toBeNull();
+  });
+
+  it("still pauses on a choice for a connector that has one", async () => {
+    // Search Console, not GitHub: the selection machinery is live for GA4 and
+    // Search Console, and letting its only coverage leave with GitHub's
+    // repository picker would retire the tests rather than the code.
+    const u = await makeUser();
+    const token = await makeLink(u.id, "google-search-console");
+    stubGoogle();
+
+    const google = { ...env, GOOGLE_CLIENT_ID: "g.apps", GOOGLE_CLIENT_SECRET: "gsecret" };
+    const start = await callWith(`/v1/link/${token}/authorize`, google);
+    const state = new URL(
+      scalar(start.headers.get("location") ?? undefined, "location"),
+    ).searchParams.get("state");
+
+    const back = await callWith(`/v1/link/oauth/callback?code=abc&state=${state}`, google, {
+      headers: { cookie: `nm_connect_link=${token}` },
+    });
+    expect(back.headers.get("location")).toContain("step=select");
+
+    const row = scalar(
+      (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
+      "link",
+    );
+    // A live credential between two requests, so never in the clear.
+    expect(row.pendingCiphertext).toBeTruthy();
+    expect(JSON.stringify(row)).not.toContain("ya29.token");
+
+    const options = await callWith(`/v1/link/${token}/options`, google);
+    expect(await options.json<{ options: { value: string }[] }>()).toMatchObject({
+      options: [{ value: "sc-domain:example.com" }],
+    });
+
+    const forged = await callWith(`/v1/link/${token}/select`, google, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "sc-domain:someone-else.com" }),
+    });
+    // A property name in a POST body is not a claim about what the grant
+    // covers, so it is checked against the provider's own list.
+    expect(forged.status).toBe(400);
+
+    const done = await callWith(`/v1/link/${token}/select`, google, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "sc-domain:example.com" }),
+    });
+    expect(await done.json()).toMatchObject({ ok: true });
+    expect(done.status).toBe(200);
   });
 });

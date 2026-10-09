@@ -18,6 +18,14 @@ metrics.get("/query", async (c) => {
     granularity: c.req.query("granularity") || undefined,
     range: c.req.query("range") ?? "30d",
     series: c.req.query("series") !== "0",
+    // `?p.repository=owner/name`. A prefix rather than a JSON blob in a query
+    // string: this route is reached by hand and from a preview, and one
+    // readable pair per parameter is easier to get right than nested encoding.
+    params: Object.fromEntries(
+      Object.entries(c.req.queries() ?? {})
+        .filter(([key]) => key.startsWith("p."))
+        .map(([key, values]) => [key.slice(2), values[0] ?? ""]),
+    ),
   });
   if (!parsed.success) return c.json({ code: "BAD_REQUEST", message: "Invalid query." }, 400);
 

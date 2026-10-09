@@ -126,6 +126,19 @@ export type MetricEnvelope = z.infer<typeof MetricEnvelope>;
 export const MetricResult = z.union([MetricEnvelope, MetricError]);
 export type MetricResult = z.infer<typeof MetricResult>;
 
+/**
+ * Per-widget arguments to a metric — a GitHub repository, say.
+ *
+ * Bounded on every axis because this is user input that ends up in a cache
+ * key and in a provider request path. Opaque to everything in between: the
+ * adapter that declared the keys is the only thing that reads them.
+ */
+export const MetricParams = z
+  .record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.string().max(200))
+  .refine((p) => Object.keys(p).length <= 8, "Too many parameters.")
+  .default({});
+export type MetricParams = z.infer<typeof MetricParams>;
+
 export const MetricQuery = z.object({
   integrationId: IntegrationId,
   metric: MetricId,
@@ -133,6 +146,8 @@ export const MetricQuery = z.object({
   range: TimeRange.default("30d"),
   /** Suppress the series when the widget only renders a number. */
   series: z.boolean().default(true),
+  /** See `MetricParams`. Part of the cache key — see `cacheKey` in the API. */
+  params: MetricParams,
 });
 export type MetricQuery = z.infer<typeof MetricQuery>;
 

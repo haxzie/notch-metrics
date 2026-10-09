@@ -11,6 +11,7 @@ const request = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: false,
   wantSeries: true,
+  params: {},
 };
 
 function subscription(priceId: number, quantity = 1, status = "active") {

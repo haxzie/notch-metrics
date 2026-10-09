@@ -4,6 +4,7 @@ import type { Env } from "./env.ts";
 import { createDb, type Database } from "./lib/db.ts";
 import { queryMetric, sweepCache } from "./lib/metrics.ts";
 import { sweep as sweepRateLimits } from "./lib/rate-limit.ts";
+import { getAdapter } from "@notch/integrations";
 import { logError } from "./lib/redact.ts";
 import { sweepTokenRefresh } from "./lib/token-refresh.ts";
 
@@ -69,7 +70,15 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
       const [owner] = await db.select().from(user).where(eq(user.id, row.userId)).limit(1);
       if (!owner) continue;
 
-      const metrics = row.enabledMetrics ?? [];
+      // Metrics whose arguments live on a widget cannot be warmed from here:
+      // this loop knows the connection, not which repository some tile is
+      // pointing at. Warming them with no repository would spend a call per
+      // tick to produce an error, so they are left to be fetched on demand.
+      const descriptors = getAdapter(row.provider).manifest.metrics;
+      const widgetScoped = (metric: string) =>
+        (descriptors.find((d) => d.id === metric)?.params ?? []).some((f) => f.required);
+
+      const metrics = (row.enabledMetrics ?? []).filter((m) => !widgetScoped(m));
       for (const metric of metrics.slice(0, 3)) {
         await queryMetric(
           {
@@ -80,7 +89,13 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
             preferredCurrency: owner.preferredCurrency,
             force: true,
           },
-          { integrationId: row.id, metric: metric as never, range: "30d", series: true },
+          {
+            integrationId: row.id,
+            metric: metric as never,
+            range: "30d",
+            series: true,
+            params: {},
+          },
         );
       }
     } catch (error) {

@@ -11,6 +11,7 @@ const request = {
   to: new Date("2026-10-04T00:00:00Z"),
   comparePrevious: false,
   wantSeries: true,
+  params: {},
 };
 
 function day(date: string, clicks: number, impressions: number, position: number) {

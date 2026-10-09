@@ -202,6 +202,10 @@ const FIXTURES: Record<string, unknown> = {
         metric: "mrr",
         customMetricId: null,
         title: "MRR",
+        // A non-empty one on purpose: an empty map decodes under almost any
+        // mistake, so the fixture that proves the Swift side reads per-widget
+        // parameters has to carry one.
+        params: { repository: "haxzie/notch-metrics" },
         size: "2x2",
         col: 0,
         row: 0,

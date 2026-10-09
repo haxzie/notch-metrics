@@ -122,6 +122,7 @@ export const MetricId = z.enum([
   "forks",
   "open_issues",
   "open_pull_requests",
+  "followers",
   // CRM
   "contacts",
   "new_contacts",

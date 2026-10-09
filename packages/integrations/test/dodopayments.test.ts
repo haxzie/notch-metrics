@@ -12,6 +12,7 @@ const request = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: false,
   wantSeries: true,
+  params: {},
 };
 
 function sub(options: { amount: number; interval?: string; count?: number; currency?: string }) {

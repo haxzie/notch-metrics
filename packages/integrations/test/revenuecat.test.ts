@@ -45,6 +45,7 @@ const snapshot = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: false,
   wantSeries: false,
+  params: {},
 };
 
 describe("revenuecat money", () => {

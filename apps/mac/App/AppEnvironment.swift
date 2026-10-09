@@ -273,7 +273,14 @@ final class AppEnvironment {
                     // with an error: a stale figure with a mark against it
                     // beats a blank tile while a provider is down.
                     if case .value = next[widget.id] { continue }
-                    next[widget.id] = .failed(reason: failure.message)
+                    // `unsupported` is the server saying the widget is not
+                    // finished — a GitHub tile with no repository picked yet,
+                    // say. That is a setup step, not a failure, and a freshly
+                    // dropped tile should not greet somebody in red.
+                    next[widget.id] =
+                        failure.code == .unsupported
+                        ? .needsSetup(failure.message)
+                        : .failed(reason: failure.message)
                 }
             }
             states = next

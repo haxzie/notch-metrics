@@ -4,7 +4,10 @@ import { OAuthReauthRequiredError } from "../src/oauth.ts";
 import { ProviderError } from "../src/types.ts";
 import { stubContext } from "./helpers.ts";
 
-const creds = { access_token: "gho_11ABCDEFGHIJKLMNOP", repository: "haxzie/notch-metrics" };
+const creds = { access_token: "gho_11ABCDEFGHIJKLMNOP" };
+/** A connection made before the repository moved onto the widget. */
+const legacyCreds = { ...creds, repository: "haxzie/notch-metrics" };
+const account = { login: "haxzie", followers: 128 };
 
 const request = {
   metric: "stars" as const,
@@ -13,6 +16,7 @@ const request = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: false,
   wantSeries: true,
+  params: { repository: "haxzie/notch-metrics" },
 };
 
 const repo = {
@@ -26,12 +30,75 @@ const repo = {
 };
 
 describe("github", () => {
-  it("names the connection after the repository", async () => {
-    const ctx = stubContext({ "/repos/haxzie/notch-metrics": repo });
+  it("names the connection after the account, not a repository", async () => {
+    // One connection per GitHub account now, so the label has to be stable
+    // when a tile is pointed at a different repository.
+    const ctx = stubContext({ "/user": account });
     const result = await github.verify(ctx, creds);
-    expect(result.accountLabel).toBe("haxzie/notch-metrics");
+    expect(result.accountLabel).toBe("haxzie");
     expect(result.currency).toBeNull();
-    expect(result.availableMetrics).toContain("open_pull_requests");
+    expect(result.availableMetrics).toEqual(
+      expect.arrayContaining(["stars", "open_pull_requests", "followers"]),
+    );
+  });
+
+  it("takes the repository from the widget, not the connection", async () => {
+    const ctx = stubContext({ "/repos/": repo });
+    await github.fetchMetric(ctx, creds, { ...request, params: { repository: "vercel/next.js" } });
+    expect(ctx.calls[0]).toContain("/repos/vercel/next.js");
+  });
+
+  it("asks a different repository per widget on one connection", async () => {
+    // The whole point of the move: two tiles, one connection, two repos.
+    const ctx = stubContext({ "/repos/": repo });
+    await github.fetchMetric(ctx, creds, { ...request, params: { repository: "a/one" } });
+    await github.fetchMetric(ctx, creds, { ...request, params: { repository: "b/two" } });
+    expect(ctx.calls[0]).toContain("/repos/a/one");
+    expect(ctx.calls[1]).toContain("/repos/b/two");
+  });
+
+  it("falls back to a pre-existing connection's repository", async () => {
+    // Widgets made before this change carry no param. Without the fallback
+    // every one of them would blank on the deploy that shipped it.
+    const ctx = stubContext({ "/repos/": repo });
+    const series = await github.fetchMetric(ctx, legacyCreds, { ...request, params: {} });
+    expect(ctx.calls[0]).toContain("/repos/haxzie/notch-metrics");
+    expect(series.value).toBe(412);
+  });
+
+  it("says which widget needs attention when no repository is set", async () => {
+    const ctx = stubContext({});
+    const error = await github
+      .fetchMetric(ctx, creds, { ...request, params: {} })
+      .catch((e: unknown) => e);
+    expect((error as ProviderError).code).toBe("unsupported");
+    expect((error as ProviderError).message).toMatch(/Pick a repository/);
+  });
+
+  it("rejects a repository that is not owner/name rather than building a URL from it", async () => {
+    const ctx = stubContext({});
+    const error = await github
+      .fetchMetric(ctx, creds, { ...request, params: { repository: "../../user" } })
+      .catch((e: unknown) => e);
+    expect((error as ProviderError).code).toBe("unsupported");
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it("reads followers from the account, with no repository at all", async () => {
+    const ctx = stubContext({ "/user": account });
+    const series = await github.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "followers",
+      params: {},
+    });
+    expect(series.value).toBe(128);
+    expect(ctx.calls[0]).toContain("/user");
+  });
+
+  it("declares the repository on the metrics that need one, and not on followers", async () => {
+    const byId = Object.fromEntries(github.manifest.metrics.map((m) => [m.id, m]));
+    expect(byId.stars?.params?.[0]?.key).toBe("repository");
+    expect(byId.followers?.params ?? []).toEqual([]);
   });
 
   it("reads stars and forks from the repository", async () => {
@@ -68,7 +135,7 @@ describe("github", () => {
     // integration broken and stop polling until the user reconnected.
     const reset = Math.floor(Date.now() / 1000) + 120;
     const ctx = stubContext({
-      "/repos/": {
+      "/user": {
         __status: 403,
         __headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
       },
@@ -82,7 +149,7 @@ describe("github", () => {
 
   it("still reports a 403 with quota left as a credentials problem", async () => {
     const ctx = stubContext({
-      "/repos/": { __status: 403, __headers: { "x-ratelimit-remaining": "4999" } },
+      "/user": { __status: 403, __headers: { "x-ratelimit-remaining": "4999" } },
     });
     const error = await github.verify(ctx, creds).catch((e: unknown) => e);
     expect((error as ProviderError).code).toBe("auth_failed");
@@ -90,7 +157,7 @@ describe("github", () => {
 
   it("explains a 404 as a repository it cannot read", async () => {
     const ctx = stubContext({ "/repos/": { __status: 404 } });
-    const error = await github.verify(ctx, creds).catch((e: unknown) => e);
+    const error = await github.fetchMetric(ctx, creds, request).catch((e: unknown) => e);
     expect((error as ProviderError).code).toBe("auth_failed");
     expect((error as ProviderError).message).toMatch(/token can see it/);
   });
@@ -152,7 +219,7 @@ describe("github oauth tokens", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("trades the refresh token for a new pair and keeps the repository", async () => {
+  it("trades the refresh token for a new pair", async () => {
     const calls = stubTokenEndpoint({
       access_token: "gho_second",
       refresh_token: "ghr_second",
@@ -163,11 +230,7 @@ describe("github oauth tokens", () => {
       ...client,
     });
     expect(calls[0]).toMatchObject({ grant_type: "refresh_token", refresh_token: "ghr_first" });
-    expect(result).toMatchObject({
-      access_token: "gho_second",
-      refresh_token: "ghr_second",
-      repository: "haxzie/notch-metrics",
-    });
+    expect(result).toMatchObject({ access_token: "gho_second", refresh_token: "ghr_second" });
     expect(Number(result?.expires_at)).toBeGreaterThan(Date.now());
   });
 

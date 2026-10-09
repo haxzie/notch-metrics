@@ -140,6 +140,13 @@ struct ContractTests {
         #expect(layout.widgets[1].kind == .customMetric)
         #expect(layout.widgets[1].customMetricId == "github-stars")
         #expect(layout.widgets[1].appId == "github")
+
+        // A widget's own arguments. A renamed key here fails by name in CI
+        // rather than as a tile that silently asks about nothing.
+        #expect(layout.widgets[0].params["repository"] == "haxzie/notch-metrics")
+        // Absent in the second, which is the shape of every widget written
+        // before per-widget parameters existed.
+        #expect(layout.widgets[1].params.isEmpty)
     }
 
 

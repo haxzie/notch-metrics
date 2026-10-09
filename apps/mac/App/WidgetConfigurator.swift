@@ -66,6 +66,27 @@ struct WidgetConfigPanel: View {
             })
     }
 
+    /// One entry of the widget's `params`, as a text field's binding.
+    ///
+    /// Blank clears the key rather than storing an empty string, so "unset"
+    /// has one representation and the server's "pick a repository" fires on
+    /// it rather than on a request for a repository named "".
+    private func paramField(_ binding: Binding<NotchWidget>, _ key: String) -> Binding<String> {
+        Binding(
+            get: { binding.wrappedValue.params[key] ?? "" },
+            set: { typed in
+                var next = binding.wrappedValue
+                let trimmed = typed.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    next.params.removeValue(forKey: key)
+                } else {
+                    next.params[key] = trimmed
+                }
+                binding.wrappedValue = next
+                Task { await env.refresh() }
+            })
+    }
+
     private var descriptor: MetricDescriptor? {
         guard let draft, let metric = draft.metric else { return nil }
         return entry?.metrics.first { $0.id == metric }
@@ -253,9 +274,41 @@ struct WidgetConfigPanel: View {
         }
     }
 
+    /// What this metric asks the widget for — GitHub's repository, say.
+    ///
+    /// Read from the server's catalogue rather than hard-coded, so a
+    /// connector that grows a parameter needs no Mac release.
+    private var metricParams: [AuthField] {
+        descriptor?.params ?? []
+    }
+
     @ViewBuilder
     private func dataSection(_ binding: Binding<NotchWidget>) -> some View {
         section("Data") {
+            ForEach(metricParams, id: \.key) { field in
+                row(field.label) {
+                    TextField(field.placeholder ?? "", text: paramField(binding, field.key))
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.trailing)
+                        .font(.system(size: 13))
+                        .autocorrectionDisabled()
+                        .frame(width: 200)
+                }
+                if let help = field.help {
+                    // Under the field rather than beside it: "owner/name" is
+                    // the whole instruction, and a row this narrow has no
+                    // room for it on the same line.
+                    HStack {
+                        Spacer(minLength: 0)
+                        Text(help)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                }
+                Divider().opacity(0.4)
+            }
             if usesTimeWindow {
                 row("Range") {
                     Picker("", selection: Binding(

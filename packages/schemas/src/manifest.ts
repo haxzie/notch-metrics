@@ -46,6 +46,19 @@ export const MetricDescriptor = z.object({
   keywords: z.array(z.string()).optional(),
   help: z.string().optional(),
   /**
+   * Fields the *widget* supplies, rendered in the configure pane.
+   *
+   * Declared per metric rather than per connector because they differ within
+   * one: GitHub's stars need a repository and its followers do not. Same
+   * `AuthField` shape as the connect form, so an app that already renders one
+   * renders these with no new code.
+   *
+   * Optional on the wire — a metric that takes none omits it, and an older
+   * app that has never heard of it ignores the field rather than failing to
+   * decode the whole catalogue.
+   */
+  params: z.array(AuthField).optional(),
+  /**
    * How this number is derived, in one sentence, shown in a tooltip.
    *
    * Required, not optional. "MRR" is always somebody's definition — gross or

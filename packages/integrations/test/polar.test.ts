@@ -19,6 +19,7 @@ const request = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: true,
   wantSeries: true,
+  params: {},
 };
 
 function period(day: string, values: Record<string, number | null>) {

@@ -14,6 +14,7 @@ const request = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: false,
   wantSeries: true,
+  params: {},
 };
 
 function page<T>(data: T[], next?: string) {

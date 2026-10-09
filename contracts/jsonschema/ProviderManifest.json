@@ -191,6 +191,7 @@
               "forks",
               "open_issues",
               "open_pull_requests",
+              "followers",
               "contacts",
               "new_contacts",
               "open_deals",
@@ -243,6 +244,73 @@
           },
           "help": {
             "type": "string"
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "secret",
+                    "select",
+                    "url",
+                    "boolean"
+                  ]
+                },
+                "required": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "placeholder": {
+                  "type": "string"
+                },
+                "help": {
+                  "type": "string"
+                },
+                "pattern": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "label"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "default": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type",
+                "required"
+              ],
+              "additionalProperties": false
+            }
           },
           "methodology": {
             "type": "string"

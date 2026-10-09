@@ -9,7 +9,7 @@ private func metric(
     MetricDescriptor(
         id: id, label: label, shortLabel: short, unit: .count, granularities: [.day],
         supportsSeries: true, supportsCompare: true, keywords: keywords, help: nil,
-        methodology: "x")
+        params: nil, methodology: "x")
 }
 
 private func app(

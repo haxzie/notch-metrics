@@ -12,11 +12,28 @@ import type {
 } from "../../types.ts";
 import { ProviderError } from "../../types.ts";
 
+/**
+ * The repository a tile is about, asked for when the widget is configured.
+ *
+ * `pattern` is prevalidation only — the app greys out Done on a malformed
+ * name, and `fetchMetric` checks it again, because a manifest is a hint and
+ * the server is where it has to be true.
+ */
+const REPOSITORY_PARAM = {
+  key: "repository",
+  label: "Repository",
+  type: "string",
+  required: true,
+  placeholder: "owner/name",
+  help: "Which repository this tile counts.",
+  pattern: "^[\\w.-]+/[\\w.-]+$",
+} as const;
+
 export const manifest: ProviderManifest = {
   id: "github",
   name: "GitHub",
   category: "developer",
-  tagline: "Stars, forks and open work from a repository.",
+  tagline: "Stars, forks and open work, per repository.",
   docsUrl: "https://docs.github.com/en/rest/metrics",
   iconPath: "/providers/github.svg",
   // The brand black. The catalogue renders the mark on a light tile rather
@@ -26,23 +43,13 @@ export const manifest: ProviderManifest = {
   authMode: "oauth2",
   oauth: {
     scopeSummary: ["Read public repositories you can see", "Read your name and avatar"],
-    // The repository is chosen from a list after authorising rather than
-    // typed. A name typed before the grant exists cannot be checked against
-    // what the grant actually covers, so the first sign of a typo would be a
-    // widget that never fills in.
-    requiresSelection: true,
-    selectionLabel: "Repository",
+    // Authorising is the whole connection now. The repository moved onto the
+    // widget, so one GitHub account serves a tile per repository instead of
+    // needing a connection each — which also means the stars of a repo you
+    // do not own no longer costs a second connection.
+    requiresSelection: false,
   },
-  fields: [
-    {
-      key: "repository",
-      label: "Repository",
-      type: "string",
-      required: true,
-      placeholder: "owner/name",
-      help: "The repository these numbers come from.",
-    },
-  ],
+  fields: [],
   metrics: [
     {
       id: "stars",
@@ -55,6 +62,7 @@ export const manifest: ProviderManifest = {
       // A snapshot, not a total. GitHub's API reports the current count and
       // offers no history, so a series would have to be invented.
       methodology: "Stargazers on the repository right now.",
+      params: [REPOSITORY_PARAM],
     },
     {
       id: "forks",
@@ -65,6 +73,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: false,
       supportsCompare: false,
       methodology: "Forks of the repository right now.",
+      params: [REPOSITORY_PARAM],
     },
     {
       id: "open_issues",
@@ -78,6 +87,7 @@ export const manifest: ProviderManifest = {
       // this has to be a search query rather than `open_issues_count` — that
       // field reads high and nobody can see why.
       methodology: "Open issues, excluding pull requests.",
+      params: [REPOSITORY_PARAM],
     },
     {
       id: "open_pull_requests",
@@ -88,6 +98,21 @@ export const manifest: ProviderManifest = {
       supportsSeries: false,
       supportsCompare: false,
       methodology: "Pull requests currently open.",
+      params: [REPOSITORY_PARAM],
+    },
+    {
+      id: "followers",
+      label: "Followers",
+      shortLabel: "Followers",
+      unit: "count",
+      granularities: ["day", "week", "month"],
+      supportsSeries: false,
+      supportsCompare: false,
+      keywords: ["github", "audience", "profile"],
+      // No `params`: this one is about the account that authorised, not a
+      // repository, which is the reason params are declared per metric
+      // rather than per connector.
+      methodology: "People following the GitHub account this connection signed in as.",
     },
   ],
   allowedHosts: ["api.github.com"],
@@ -103,7 +128,15 @@ export const credentialSchema = z.object({
   // token itself says whether it will stop working in eight hours.
   refresh_token: z.string().min(8).optional(),
   [EXPIRES_AT_FIELD]: z.string().regex(/^\d+$/).optional(),
-  repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/, "A repository looks like owner/name."),
+  /**
+   * Legacy. Connections made before the repository moved onto the widget
+   * carry one here, and their widgets have no `repository` param to supply —
+   * so `fetchMetric` still falls back to it. Nothing writes it any more.
+   */
+  repository: z
+    .string()
+    .regex(/^[\w.-]+\/[\w.-]+$/, "A repository looks like owner/name.")
+    .optional(),
 });
 export type GitHubCredentials = z.infer<typeof credentialSchema>;
 
@@ -175,6 +208,38 @@ interface SearchResult {
   total_count: number;
 }
 
+interface Account {
+  login: string;
+  followers: number;
+}
+
+/**
+ * Which repository this request is about.
+ *
+ * The widget's own parameter, falling back to the connection's for anything
+ * made before the repository moved off the connection. Without that fallback
+ * every GitHub tile in an existing notch would blank on the deploy that
+ * shipped this.
+ */
+function repositoryFor(creds: GitHubCredentials, request: MetricRequest): string {
+  const repository = (request.params.repository ?? creds.repository ?? "").trim();
+  if (!repository) {
+    throw new ProviderError("unsupported", "Pick a repository for this widget.");
+  }
+  // Re-checked here rather than trusted from the manifest's `pattern`: that
+  // is a hint the app renders, and this value reaches a request path.
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) {
+    throw new ProviderError("unsupported", `"${repository}" is not an owner/name repository.`);
+  }
+  return repository;
+}
+
+/** Each segment encoded separately, so the slash between them survives. */
+function repoPath(repository: string): string {
+  const [owner = "", name = ""] = repository.split("/");
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+}
+
 /**
  * Counted through search rather than by subtracting from
  * `open_issues_count`.
@@ -186,9 +251,10 @@ interface SearchResult {
 async function searchCount(
   ctx: AdapterContext,
   creds: GitHubCredentials,
+  repository: string,
   qualifier: "is:issue" | "is:pr",
 ): Promise<number> {
-  const query = encodeURIComponent(`repo:${creds.repository} ${qualifier} is:open`);
+  const query = encodeURIComponent(`repo:${repository} ${qualifier} is:open`);
   // `per_page=1` because only `total_count` is read; the page itself is
   // thrown away and a default page of 30 issue bodies is not free.
   const body = await get<SearchResult>(ctx, creds, `/search/issues?q=${query}&per_page=1`);
@@ -294,9 +360,9 @@ const oauth: OAuthConfig<GitHubCredentials> = {
       );
     }
 
-    // `repository` is filled in by the selection below; the schema is parsed
-    // once, at the end of the flow, when both halves exist.
-    return { ...tokens(body), repository: "" };
+    // Nothing else to fill in: the grant is the whole connection, and which
+    // repository a number comes from is settled per widget.
+    return tokens(body);
   },
 
   // Eight hours is the token's whole life when expiry is on. An hour of lead
@@ -345,87 +411,57 @@ const oauth: OAuthConfig<GitHubCredentials> = {
     }
     return { ...credentials, ...tokens(body) };
   },
-
-  selection: {
-    label: "Repository",
-    field: "repository",
-    async options(credentials) {
-      // Sorted by last push, which puts the repository somebody just came
-      // from at the top. 100 is one page: a chooser is not a backup of
-      // somebody's account, and the list is searchable in the page.
-      const response = await fetch(
-        "https://api.github.com/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
-        {
-          redirect: "manual",
-          headers: {
-            authorization: `Bearer ${credentials.access_token}`,
-            accept: "application/vnd.github+json",
-            "x-github-api-version": "2022-11-28",
-            "user-agent": "notch-metrics",
-          },
-        },
-      );
-      if (!response.ok) {
-        throw new ProviderError("auth_failed", "We could not list your repositories.");
-      }
-
-      const repos = (await response.json()) as {
-        full_name: string;
-        description: string | null;
-        stargazers_count: number;
-        private: boolean;
-      }[];
-
-      return repos.map((repo) => ({
-        value: repo.full_name,
-        label: repo.full_name,
-        // The star count, because two forks of the same project are
-        // otherwise told apart only by the owner prefix.
-        hint: repo.private ? "Private" : `${repo.stargazers_count} stars`,
-      }));
-    },
-  },
 };
 
 export const github: ProviderAdapter<GitHubCredentials> = {
   manifest,
   credentialSchema,
-  // The access token lives in the same blob as the repository and must never
-  // be rendered as a form field or accepted from a submission. The
-  // repository is not typed either — it is chosen from the list above.
+  // Tokens are never typed in or accepted from a submission, and there is
+  // nothing else in the blob to ask a human for.
   userInputFields: [],
   oauth,
 
   async verify(ctx, creds): Promise<VerifyResult> {
-    // The repository, not `/user`: it proves the token works *and* that it
-    // can see this repository, which is the thing every metric needs.
-    const repo = await get<Repository>(ctx, creds, `/repos/${creds.repository}`);
-
-    const available: MetricId[] = ["stars", "forks", "open_issues", "open_pull_requests"];
+    // `/user` rather than a repository: the connection is the account now, and
+    // there is no repository at this point to prove anything about. It also
+    // names the connection something stable — a login does not change when a
+    // tile is pointed somewhere else.
+    const account = await get<Account>(ctx, creds, "/user");
 
     return {
-      // The repository is what distinguishes two GitHub connections, so it is
-      // the detail `connectionName` puts after the provider.
-      accountLabel: repo.full_name,
+      accountLabel: account.login,
       currency: null,
-      availableMetrics: available,
+      availableMetrics: [
+        "stars",
+        "forks",
+        "open_issues",
+        "open_pull_requests",
+        "followers",
+      ] as MetricId[],
     };
   },
 
   async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
+    // Account-level, so it is answered before a repository is demanded.
+    if (request.metric === "followers") {
+      const account = await get<Account>(ctx, creds, "/user");
+      return snapshot(ctx, account.followers);
+    }
+
+    const repository = repositoryFor(creds, request);
     switch (request.metric) {
       case "stars": {
-        const repo = await get<Repository>(ctx, creds, `/repos/${creds.repository}`);
+        const repo = await get<Repository>(ctx, creds, repoPath(repository));
         return snapshot(ctx, repo.stargazers_count);
       }
       case "forks": {
-        const repo = await get<Repository>(ctx, creds, `/repos/${creds.repository}`);
+        const repo = await get<Repository>(ctx, creds, repoPath(repository));
         return snapshot(ctx, repo.forks_count);
       }
       case "open_issues":
-        return snapshot(ctx, await searchCount(ctx, creds, "is:issue"));
+        return snapshot(ctx, await searchCount(ctx, creds, repository, "is:issue"));
       case "open_pull_requests":
-        return snapshot(ctx, await searchCount(ctx, creds, "is:pr"));
+        return snapshot(ctx, await searchCount(ctx, creds, repository, "is:pr"));
       default:
         throw new ProviderError("unsupported", `GitHub does not provide ${request.metric}.`);
     }

@@ -41,6 +41,14 @@ export interface MetricRequest {
   comparePrevious: boolean;
   /** False when the widget renders a number only — lets an adapter skip a walk. */
   wantSeries: boolean;
+  /**
+   * What this particular widget is asking about — the keys the metric's
+   * `params` declared in the manifest, e.g. `{ repository: "owner/name" }`.
+   *
+   * Validated against the declaration before it arrives, but still user
+   * input: an adapter putting one of these in a URL path must encode it.
+   */
+  params: Record<string, string>;
 }
 
 /** A row of a list metric. See `MetricListItem` in `@notch/schemas`. */

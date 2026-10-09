@@ -83,6 +83,7 @@
                   "forks",
                   "open_issues",
                   "open_pull_requests",
+                  "followers",
                   "contacts",
                   "new_contacts",
                   "open_deals",
@@ -159,6 +160,18 @@
               "12m"
             ]
           },
+          "params": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,31}$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
           "chart": {
             "default": "sparkline",
             "type": "string",
@@ -187,6 +200,7 @@
           "position",
           "granularity",
           "range",
+          "params",
           "chart",
           "visible"
         ],

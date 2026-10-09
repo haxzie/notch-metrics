@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Granularity, TimeRange } from "./money.ts";
 import { AppId, IntegrationId, MetricId, PluginId, WidgetId } from "./ids.ts";
+import { MetricParams } from "./metric.ts";
 
 export const WidgetKind = z.enum(["provider_metric", "custom_metric", "divider"]);
 export type WidgetKind = z.infer<typeof WidgetKind>;
@@ -82,6 +83,20 @@ export const Widget = z.object({
   position: z.number().int().min(0),
   granularity: Granularity.default("day"),
   range: TimeRange.default("30d"),
+
+  /**
+   * What this widget asks its metric for, beyond the window — a GitHub
+   * repository, say.
+   *
+   * On the widget rather than on the connection, so one GitHub account
+   * serves a tile per repository instead of one connection per repository.
+   * Which keys a metric takes is declared by `MetricDescriptor.params`, and
+   * the app renders a field per entry; nothing here is interpreted by the
+   * app or by the notch.
+   *
+   * Defaulted, so every widget written before this existed still parses.
+   */
+  params: MetricParams,
   chart: ChartKind.default("sparkline"),
   visible: z.boolean().default(true),
 });

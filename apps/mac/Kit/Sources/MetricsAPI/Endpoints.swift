@@ -8,6 +8,9 @@ public struct MetricQueryRequest: Codable, Sendable {
     public let granularity: String?
     public let range: String
     public let series: Bool
+    /// The widget's own arguments — a GitHub repository, say. Part of the
+    /// server's cache key, so two tiles on one connection stay distinct.
+    public let params: [String: String]
 
     public init(widget: NotchWidget) {
         self.integrationId = widget.integrationId ?? ""
@@ -17,6 +20,7 @@ public struct MetricQueryRequest: Codable, Sendable {
         // A tile with no chart does not need the series, and saying so lets
         // the adapter skip a page walk rather than computing data nobody draws.
         self.series = widget.chart != .none
+        self.params = widget.params
     }
 }
 
@@ -117,6 +121,12 @@ public struct MetricDescriptor: Codable, Sendable, Hashable, Identifiable {
     /// failure this codebase goes out of its way to avoid.
     public let keywords: [String]?
     public let help: String?
+    /// Fields the *widget* supplies, rendered in the configure pane.
+    ///
+    /// Declared per metric because they differ within one connector: GitHub's
+    /// stars need a repository and its followers do not. Optional on the wire
+    /// so an older server's catalogue still decodes.
+    public let params: [AuthField]?
     /// Always present. "MRR" is somebody's definition and this is ours.
     public let methodology: String
 }
