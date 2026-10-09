@@ -15,14 +15,14 @@ export function SiteNav() {
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-5">
-      <nav className="pointer-events-auto flex h-14 items-center gap-1 rounded-full border border-white/[0.08] bg-[#141216]/80 pl-5 pr-2 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-        <Link href="/" className="mr-4 flex items-center gap-2.5 text-[15px] font-semibold">
+      <nav className="pointer-events-auto relative flex h-14 w-full max-w-3xl items-center justify-between rounded-full border border-white/[0.08] bg-[#141216]/80 pl-5 pr-2 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+        <Link href="/" className="flex w-fit items-center gap-2.5 text-[15px] font-semibold">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" width={24} height={24} />
           <span className="hidden sm:inline">Notch Metrics</span>
         </Link>
 
-        <ul className="hidden items-center sm:flex">
+        <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 sm:flex">
           {LINKS.map((link) => {
             const active = pathname === link.href;
             return (
@@ -42,7 +42,7 @@ export function SiteNav() {
 
         <Link
           href="/download"
-          className="ml-3 flex h-10 items-center gap-2 rounded-full bg-white px-4 text-[14px] font-semibold text-black transition hover:bg-white/90"
+          className="flex h-10 w-fit items-center gap-2 rounded-full bg-white px-4 text-[14px] font-semibold text-black transition hover:bg-white/90"
         >
           <AppleMark className="h-4 w-4" />
           Download
