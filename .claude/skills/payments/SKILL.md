@@ -11,7 +11,7 @@ the desktop upsell all read them from there.
 
 | Plan    | `id`         | Price | Dodo var                         |
 | ------- | ------------ | ----- | -------------------------------- |
-| Monthly | `pro`        | $19   | `DODOPAYMENT_MONTHLY_PRODUCT_ID` |
+| Monthly | `pro`        | $14   | `DODOPAYMENT_MONTHLY_PRODUCT_ID` |
 | Yearly  | `pro_annual` | $79   | `DODOPAYMENT_YEARLY_PRODUCT_ID`  |
 
 Seven-day trial, no card, then payment. There is no free tier.
@@ -19,7 +19,7 @@ Seven-day trial, no card, then payment. There is no free tier.
 ## First-time setup
 
 1. In the Dodo dashboard create **two subscription products** — one monthly at
-   $19, one yearly at $79. Copy both product ids.
+   $14, one yearly at $79. Copy both product ids.
 2. Put them in `apps/api/wrangler.jsonc`. They are **not secret** — they appear
    in every checkout URL — so they are `vars`, and the `production` env needs
    its own copy because named environments inherit nothing.
