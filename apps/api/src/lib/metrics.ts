@@ -5,6 +5,7 @@ import {
   RANGE_DURATION_MS,
   type Granularity,
   type MetricQuery,
+  MetricFormat,
   type MetricResult,
   type MetricSeries,
 } from "@notch/schemas";
@@ -177,7 +178,9 @@ export async function queryMetric(
       range: query.range,
       from: from.toISOString(),
       to: to.toISOString(),
-      format: null,
+      // The adapter's say on rendering, when the unit alone gets it wrong.
+      // Filled through the schema so the defaults apply to what it left out.
+      format: raw.format ? MetricFormat.parse(raw.format) : null,
       generatedAt: new Date().toISOString(),
       stale: false,
       ...(raw.items

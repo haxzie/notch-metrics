@@ -37,6 +37,13 @@ export interface Env {
 
   // secrets
   BETTER_AUTH_SECRET?: string;
+  /**
+   * Sign-in *and* every Google connector. Google issues one client per
+   * project rather than per API, and scopes are asked for per flow, so the
+   * analytics grant is a separate consent from the sign-in one. The
+   * client's redirect URIs must list both the auth callback and
+   * `/v1/link/oauth/callback`.
+   */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   /** Sign-in. Distinct from the connector's client below, on purpose. */

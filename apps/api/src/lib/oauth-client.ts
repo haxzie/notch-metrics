@@ -1,4 +1,4 @@
-import { oauthSecretNames } from "@notch/integrations";
+import { getAdapter, oauthSecretNames } from "@notch/integrations";
 import type { Env } from "../env.ts";
 
 /**
@@ -11,7 +11,12 @@ export function oauthClient(
   env: Env,
   connectorId: string,
 ): { clientId: string; clientSecret: string } | null {
-  const names = oauthSecretNames(connectorId as Parameters<typeof oauthSecretNames>[0]);
+  // A connector may name the secrets itself — every Google connector reads
+  // the one Google client the server already has. Otherwise the pair is
+  // derived from the provider id.
+  const names =
+    getAdapter(connectorId).oauth?.clientSecretNames ??
+    oauthSecretNames(connectorId as Parameters<typeof oauthSecretNames>[0]);
   const bag = env as unknown as Record<string, string | undefined>;
   const clientId = bag[names.clientId];
   const clientSecret = bag[names.clientSecret];

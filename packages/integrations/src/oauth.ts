@@ -96,6 +96,17 @@ export interface OAuthSelection<C> {
 }
 
 export interface OAuthConfig<C> {
+  /**
+   * Which Worker secrets hold this connector's client, when it is not the
+   * pair `oauthSecretNames` derives from the provider id.
+   *
+   * Every Google connector reads the one Google client the server already
+   * has for sign-in: Google issues a client per project, not per API, and
+   * three copies of the same secret under three names is three places to
+   * rotate. Scopes are requested per flow, so sharing the client does not
+   * mean signing in grants analytics access.
+   */
+  readonly clientSecretNames?: { clientId: string; clientSecret: string };
   /** Shown on the connect page so the user knows what they are granting. */
   readonly scopes: readonly string[];
   /** Human-readable version of the above, for people rather than APIs. */

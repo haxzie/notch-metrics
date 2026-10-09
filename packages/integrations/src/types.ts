@@ -1,3 +1,4 @@
+import type { MetricFormat } from "@notch/schemas";
 import type { ZodType } from "zod";
 import type { CurrencyCode, Granularity, MetricId, ProviderManifest } from "@notch/schemas";
 import type { OAuthConfig } from "./oauth.ts";
@@ -75,6 +76,12 @@ export interface RawSeries {
   note?: string;
   /** Rows, for a list metric such as `recent_payments`. Absent for a number. */
   items?: RawListItem[];
+  /**
+   * How the tile should render the figure, when the unit alone gets it
+   * wrong. Search Console's average position is a `count` of 12.3, not 12;
+   * without this it rounds to a whole number or, as a `ratio`, reads 1230%.
+   */
+  format?: Partial<MetricFormat>;
 }
 
 export type ProviderErrorCode =
