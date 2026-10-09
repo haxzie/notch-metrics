@@ -11,7 +11,15 @@ export interface MarketingConnector {
   id: string;
   name: string;
   accentColor: string;
-  status: "stable" | "coming_soon";
+  /**
+   * The manifest's own three states, not two.
+   *
+   * `beta` used to be flattened to `coming_soon` here, which showed Google
+   * Analytics and Search Console as "Soon" for as long as they had been
+   * connectable — the server lists anything that is not `coming_soon`, so
+   * the site was the only thing saying they did not work.
+   */
+  status: "stable" | "beta" | "coming_soon";
 }
 
 export interface ConnectorGroup {
@@ -38,7 +46,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
   {
     label: "Product analytics",
     connectors: [
-      { id: "posthog", name: "PostHog", accentColor: "#1D1D1D", status: "coming_soon" },
+      { id: "posthog", name: "PostHog", accentColor: "#1D1D1D", status: "beta" },
       { id: "plausible", name: "Plausible", accentColor: "#5850EC", status: "coming_soon" },
       { id: "mixpanel", name: "Mixpanel", accentColor: "#7856FF", status: "coming_soon" },
       { id: "amplitude", name: "Amplitude", accentColor: "#1E61F0", status: "coming_soon" },
@@ -46,7 +54,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
         id: "google-analytics",
         name: "Google Analytics",
         accentColor: "#E8710A",
-        status: "coming_soon",
+        status: "beta",
       },
     ],
   },
@@ -57,7 +65,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
         id: "google-search-console",
         name: "Search Console",
         accentColor: "#4285F4",
-        status: "coming_soon",
+        status: "beta",
       },
       { id: "google-ads", name: "Google Ads", accentColor: "#4285F4", status: "coming_soon" },
       { id: "meta-ads", name: "Meta Ads", accentColor: "#0866FF", status: "coming_soon" },
@@ -72,6 +80,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
   },
 ];
 
+/** What a visitor can connect today — which is everything not `coming_soon`. */
 export const LIVE_CONNECTORS = CONNECTOR_GROUPS.flatMap((group) =>
-  group.connectors.filter((connector) => connector.status === "stable"),
+  group.connectors.filter((connector) => connector.status !== "coming_soon"),
 );

@@ -74,8 +74,11 @@ definition and it is the one number users will argue about.
 Set `status: "coming_soon"` until the adapter actually works — the settings UI
 lists it and greys it out, which is better than a connect button that fails.
 
-Bump `REGISTRY_VERSION` in the same commit. It is the ETag; a stale one means
-apps that cached the old list never learn about the new provider.
+`REGISTRY_VERSION` needs nothing: it is the ETag, and it is now hashed from
+the manifests themselves. It used to be hand-maintained, and the failure that
+changed it is worth knowing — two connectors were promoted from `coming_soon`
+to `stable` without touching it, so every client that revalidated got a 304
+and kept showing them as unavailable, forever.
 
 ## Before it ships
 
