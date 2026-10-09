@@ -5,6 +5,7 @@ import { NotchMockup } from "@/components/marketing/NotchMockup";
 import { NotchShowcase } from "@/components/marketing/NotchShowcase";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { SectionIcon } from "@/components/marketing/SectionIcon";
+import { SiliconChip } from "@/components/marketing/SiliconChip";
 import {
   ArrowRight,
   ChipIcon,
@@ -13,11 +14,9 @@ import {
   KeyIcon,
   LinkIcon,
   ListIcon,
-  MoonIcon,
   NotchIcon,
   RefreshIcon,
   ShieldIcon,
-  SparkIcon,
   TerminalIcon,
 } from "@/components/marketing/icons";
 import { LIVE_CONNECTORS } from "@/lib/connectors";
@@ -248,21 +247,9 @@ export default async function Home() {
                 "radial-gradient(70% 60% at 50% 110%, rgba(216,25,194,0.35), transparent 70%), radial-gradient(50% 40% at 80% 0%, rgba(255,193,7,0.18), transparent 70%), #0b0a0e",
             }}
           />
-          <div className="mx-auto flex items-center justify-center gap-3">
-            {[<SparkIcon key="a" />, <ChipIcon key="b" />, <MoonIcon key="c" />].map(
-              (icon, index) => (
-                <span
-                  key={index}
-                  className={`flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-white/80 [&>svg]:h-6 [&>svg]:w-6 ${
-                    index === 1 ? "h-16 w-16 scale-110 bg-white/[0.09] text-white" : "h-12 w-12"
-                  }`}
-                >
-                  {icon}
-                </span>
-              ),
-            )}
-          </div>
-          <p className="eyebrow mt-10">Designed for</p>
+          <SiliconChip />
+
+          <p className="eyebrow mt-12">Designed for</p>
           <h2 className="mt-2 text-5xl text-white sm:text-6xl">
             <span className="accent">The Mac</span>
           </h2>
