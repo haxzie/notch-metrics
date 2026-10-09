@@ -19,7 +19,7 @@ export function ConnectorGrid() {
         {[...live, ...soon].map((connector) => (
           <li
             key={connector.id}
-            className={`rounded-[22px] border border-white/[0.08] bg-white/[0.04] p-2 transition hover:bg-white/[0.07] ${
+            className={`transition hover:scale-105 ${
               connector.status === "stable" ? "" : "opacity-40 grayscale-[0.3]"
             }`}
           >
@@ -27,7 +27,8 @@ export function ConnectorGrid() {
               id={connector.id}
               name={connector.name}
               accentColor={connector.accentColor}
-              size={56}
+              size={72}
+              shape="squircle"
             />
           </li>
         ))}

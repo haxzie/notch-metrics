@@ -125,6 +125,16 @@ body {
   user-select: none;
 }
 
+/* An iOS-style squircle, as a mask so it scales with the element. A mask
+   rather than border-radius because no radius gives the continuous curve;
+   `corner-shape: squircle` would, but only in the newest Chrome. */
+.squircle {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0C72 0 86 0 93 7s7 21 7 43-0 36-7 43-21 7-43 7-36 0-43-7S0 72 0 50 0 14 7 7 28 0 50 0Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0C72 0 86 0 93 7s7 21 7 43-0 36-7 43-21 7-43 7-36 0-43-7S0 72 0 50 0 14 7 7 28 0 50 0Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
 /* <details> markers vary by browser; the FAQ draws its own. */
 details > summary {
   list-style: none;
