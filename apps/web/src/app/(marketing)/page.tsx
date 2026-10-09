@@ -249,9 +249,9 @@ export default async function Home() {
           />
           <div className="grid items-center gap-10 px-8 py-12 sm:px-12 lg:grid-cols-[1.1fr_1fr] lg:gap-6 lg:py-16">
             <div className="text-center lg:text-left">
-              <p className="eyebrow">Designed for</p>
+              <p className="eyebrow">Swift, not Electron</p>
               <h2 className="mt-2 text-5xl text-white sm:text-6xl">
-                <span className="accent">The Mac</span>
+                Native to <span className="accent">Mac</span>
               </h2>
               <p className="mx-auto mt-5 max-w-md text-pretty text-white/60 lg:mx-0">
                 Native Swift, built for Apple silicon. Signed, notarised, and updated in place.
