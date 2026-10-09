@@ -59,7 +59,6 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
         accentColor: "#4285F4",
         status: "coming_soon",
       },
-      { id: "ahrefs", name: "Ahrefs", accentColor: "#FF8C00", status: "coming_soon" },
       { id: "google-ads", name: "Google Ads", accentColor: "#4285F4", status: "coming_soon" },
       { id: "meta-ads", name: "Meta Ads", accentColor: "#0866FF", status: "coming_soon" },
     ],

@@ -113,8 +113,8 @@ export function toMonthly(amount: number, interval: string, intervalCount = 1): 
 /**
  * `YYYY-MM-DD` of a moment in the user's zone.
  *
- * What every date-ranged provider API takes, Google's and Ahrefs' alike —
- * which is why it lives here rather than beside one provider's OAuth code.
+ * What every date-ranged provider API takes, which is why it lives here
+ * rather than beside one provider's OAuth code.
  */
 export function ymd(date: Date, timeZone: string): string {
   // en-CA is the locale whose default date format is ISO.

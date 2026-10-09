@@ -31,9 +31,6 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   impressions: ["reach", "search", "seo", "visibility"],
   ctr: ["click through", "clickthrough", "search", "seo"],
   average_position: ["ranking", "rank", "search", "seo", "serp"],
-  backlinks: ["links", "seo", "referring domains", "authority"],
-  domain_rating: ["authority", "seo", "dr", "domain authority"],
-  organic_keywords: ["seo", "search terms", "rankings", "queries"],
   ad_spend: ["budget", "cost", "advertising", "marketing spend", "ppc"],
   ad_conversions: ["advertising", "roas", "campaign", "ppc"],
 

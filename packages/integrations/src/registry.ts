@@ -19,7 +19,6 @@ import { googleAnalytics } from "./providers/google-analytics/index.ts";
 
 // Marketing and SEO
 import { googleSearchConsole } from "./providers/google-search-console/index.ts";
-import { ahrefs } from "./providers/ahrefs/index.ts";
 import { googleAds } from "./providers/google-ads/index.ts";
 import { metaAds } from "./providers/meta-ads/index.ts";
 
@@ -59,7 +58,6 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   amplitude,
   "google-analytics": googleAnalytics,
   "google-search-console": googleSearchConsole,
-  ahrefs,
   "google-ads": googleAds,
   "meta-ads": metaAds,
   hubspot,

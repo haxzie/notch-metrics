@@ -34,7 +34,6 @@ export const ProviderId = z.enum([
   "google-analytics",
   // Marketing and SEO
   "google-search-console",
-  "ahrefs",
   "google-ads",
   "meta-ads",
   // CRM
@@ -116,9 +115,6 @@ export const MetricId = z.enum([
   "impressions",
   "ctr",
   "average_position",
-  "backlinks",
-  "domain_rating",
-  "organic_keywords",
   "ad_spend",
   "ad_conversions",
   // Developer

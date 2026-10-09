@@ -82,8 +82,6 @@ public enum AppCatalog {
         MetricApp(
             id: "google-search-console", name: "Google Search Console", symbol: "magnifyingglass", accentHex: "4285F4"),
         MetricApp(
-            id: "ahrefs", name: "Ahrefs", symbol: "link", accentHex: "FF8C00"),
-        MetricApp(
             id: "google-ads", name: "Google Ads", symbol: "megaphone.fill", accentHex: "4285F4"),
         MetricApp(
             id: "meta-ads", name: "Meta Ads", symbol: "bubble.left.and.bubble.right.fill", accentHex: "0866FF"),

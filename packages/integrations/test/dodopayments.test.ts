@@ -271,7 +271,7 @@ describe("dodo payments errors", () => {
   it("refuses a metric it does not provide", async () => {
     const ctx = stubContext({});
     await expect(
-      dodopayments.fetchMetric(ctx, creds, { ...request, metric: "backlinks" }),
+      dodopayments.fetchMetric(ctx, creds, { ...request, metric: "stars" }),
     ).rejects.toBeInstanceOf(ProviderError);
   });
 });
