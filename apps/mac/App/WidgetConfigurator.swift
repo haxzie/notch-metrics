@@ -176,7 +176,16 @@ struct WidgetConfigPanel: View {
                             }
                         }
                         .labelsHidden()
-                        .fixedSize()
+                        // Not `.fixedSize()` like the other pickers in this
+                        // file. Their options are words written here; these
+                        // are whatever the provider calls the account, and
+                        // "Google Search Console — prequel.sh" sized the popup
+                        // wider than the pane — which pushed the row's own
+                        // label down to one letter a line. 200 to line up with
+                        // the Name field above it.
+                        .frame(width: 200)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     }
                     Divider().opacity(0.4)
                     HStack {
@@ -319,7 +328,12 @@ struct WidgetConfigPanel: View {
 
     private func row<V: View>(_ label: String, @ViewBuilder control: () -> V) -> some View {
         HStack(spacing: 12) {
-            Text(label).font(.system(size: 13))
+            // Never compressed. These labels are one short word, so a control
+            // too wide for the row should overflow or truncate on its own
+            // side rather than wrap this to a column of single letters.
+            Text(label)
+                .font(.system(size: 13))
+                .fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 8)
             control()
         }
