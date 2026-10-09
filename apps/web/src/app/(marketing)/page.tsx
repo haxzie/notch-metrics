@@ -61,13 +61,14 @@ export default async function Home() {
           </Link>
 
           <h1 className="mt-8 text-balance text-[2.75rem] font-semibold leading-[1.02] tracking-tight sm:text-6xl">
-            Your business, <span className="accent">in the notch</span>
+            The dashboard you
+            <br />
+            never have to <span className="accent">open</span>
           </h1>
 
           <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-white/60">
-            Revenue, MRR and subscribers from Stripe, Polar, Paddle and more, in the one piece of
-            your MacBook&rsquo;s screen that was doing nothing. Hover to see them. Move away and the
-            notch looks untouched.
+            Revenue, MRR and subscribers from Stripe, Polar, Paddle and more, living in your
+            MacBook&rsquo;s notch. Hover to look. Move away and it&rsquo;s gone.
           </p>
 
           <div className="mt-9 flex flex-col items-center gap-4">

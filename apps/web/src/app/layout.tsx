@@ -5,14 +5,14 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://notchmetrics.com"),
   title: {
-    default: "Notch Metrics — your business, in the notch",
+    default: "Notch Metrics — the dashboard you never have to open",
     template: "%s · Notch Metrics",
   },
   description:
     "Revenue, MRR and subscribers from Stripe, Polar, Paddle, Dodo Payments and more, in the MacBook notch. Hover to see them; move away and it is gone.",
   openGraph: {
     siteName: "Notch Metrics",
-    title: "Notch Metrics — your business, in the notch",
+    title: "Notch Metrics — the dashboard you never have to open",
     description: "Your business metrics, in the MacBook notch.",
     type: "website",
   },
