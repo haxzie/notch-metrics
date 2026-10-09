@@ -5,21 +5,18 @@ import { PLANS, annualSavingPercent, formatPrice } from "@notch/schemas";
 import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
 
-const INCLUDED = [
-  "Every integration we support, with no per-connector charge",
-  "Unlimited widgets in the notch and in list view",
-  "Custom metrics authored by your own coding agent over MCP",
-  "Layout synced as a backup across your Macs",
-];
-
-export default function Pricing() {
+/**
+ * The two cards and the checkout call. Split from the page so the copy and
+ * the FAQ render on the server and only this needs the session.
+ */
+export function PlanPicker() {
   const { data: session } = useSession();
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   async function choose(plan: "pro" | "pro_annual") {
     if (!session) {
-      window.location.href = `/login?next=${encodeURIComponent("/pricing")}`;
+      window.location.href = `/login?next=${encodeURIComponent("/#pricing")}`;
       return;
     }
     setBusy(plan);
@@ -43,17 +40,8 @@ export default function Pricing() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-20">
-      <header className="text-center">
-        <h1 className="text-4xl font-semibold tracking-tight">One plan. Both billing cycles.</h1>
-        <p className="mt-3 text-white/60">
-          Seven days free, no card. After that it is {formatPrice(PLANS.pro.amount, "USD")} a month
-          — or {formatPrice(PLANS.pro_annual.amount, "USD")} a year and save {annualSavingPercent()}
-          %.
-        </p>
-      </header>
-
-      <div className="mt-12 grid gap-5 sm:grid-cols-2">
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
         <PlanCard
           title="Monthly"
           price={formatPrice(PLANS.pro.amount, "USD")}
@@ -67,8 +55,9 @@ export default function Pricing() {
           title="Yearly"
           price={formatPrice(PLANS.pro_annual.amount, "USD")}
           cadence="per year"
-          note={`Works out at ${formatPrice(Math.round(PLANS.pro_annual.amount / 12), "USD")} a month.`}
-          badge={`Save ${annualSavingPercent()}%`}
+          was={formatPrice(PLANS.pro.amount * 12, "USD")}
+          note={`${formatPrice(Math.round(PLANS.pro_annual.amount / 12), "USD")} a month, billed once.`}
+          badge={`Best value · Save ${annualSavingPercent()}%`}
           highlighted
           busy={busy === "pro_annual"}
           disabled={busy !== null}
@@ -81,18 +70,7 @@ export default function Pricing() {
           {problem}
         </p>
       )}
-
-      <ul className="mx-auto mt-12 grid max-w-xl gap-3 text-sm text-white/70">
-        {INCLUDED.map((item) => (
-          <li key={item} className="flex gap-3">
-            <span aria-hidden className="text-white/30">
-              —
-            </span>
-            {item}
-          </li>
-        ))}
-      </ul>
-    </main>
+    </>
   );
 }
 
@@ -100,6 +78,7 @@ function PlanCard({
   title,
   price,
   cadence,
+  was,
   note,
   badge,
   highlighted,
@@ -110,6 +89,8 @@ function PlanCard({
   title: string;
   price: string;
   cadence: string;
+  /** What twelve months would have cost, shown struck through beside the price. */
+  was?: string;
   note: string;
   badge?: string;
   highlighted?: boolean;
@@ -119,28 +100,35 @@ function PlanCard({
 }) {
   return (
     <section
-      className={`relative rounded-2xl border p-6 ${
-        highlighted ? "border-white/25 bg-white/[0.06]" : "border-white/10 bg-white/[0.02]"
+      className={`relative flex flex-col rounded-[28px] border p-7 ${
+        highlighted
+          ? "border-white/20 bg-white/[0.06] shadow-[0_30px_80px_-30px_rgba(216,25,194,0.45)]"
+          : "border-white/[0.08] bg-white/[0.025]"
       }`}
     >
       {badge && (
-        <span className="brand-gradient absolute -top-2.5 right-5 rounded-full px-2.5 py-0.5 text-xs font-semibold text-black">
+        <span className="brand-gradient absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold text-black shadow-[0_6px_20px_-6px_rgba(216,25,194,0.7)]">
           {badge}
         </span>
       )}
       <h2 className="text-sm font-medium text-white/60">{title}</h2>
-      <p className="mt-2 flex items-baseline gap-1.5">
-        <span className="text-4xl font-semibold tracking-tight">{price}</span>
+      <p className="mt-3 flex items-baseline gap-2">
+        {was && (
+          <span className="text-2xl font-medium tracking-tight text-white/35 line-through decoration-white/40 decoration-2">
+            {was}
+          </span>
+        )}
+        <span className="text-5xl font-semibold tracking-tight">{price}</span>
         <span className="text-sm text-white/50">{cadence}</span>
       </p>
-      <p className="mt-1 text-sm text-white/45">{note}</p>
+      <p className="mt-2 text-sm text-white/45">{note}</p>
       <button
         type="button"
         onClick={onChoose}
         disabled={disabled}
-        className={`mt-6 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+        className={`mt-8 h-11 w-full rounded-full text-sm font-semibold transition disabled:opacity-50 ${
           highlighted
-            ? "brand-gradient text-black"
+            ? "bg-white text-black hover:bg-white/90"
             : "border border-white/15 text-white hover:bg-white/5"
         }`}
       >

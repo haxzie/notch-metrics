@@ -4,9 +4,13 @@
   /* The brand gradient, from the app icon. */
   --color-brand-start: #d819c2;
   --color-brand-end: #ffc107;
-  --color-ink: #09070f;
-  --color-ink-soft: #15101f;
+  --color-ink: #070608;
+  --color-ink-soft: #111013;
   --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* The one italic word in a headline. New York on a Mac, which is the
+     machine this site is selling to; Georgia everywhere else. */
+  --font-serif: "New York", "Iowan Old Style", Palatino, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 :root {
@@ -27,4 +31,114 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* The serif-italic word inside a headline. Slightly larger than the sans
+   around it because an italic at the same size reads a step smaller. */
+.accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.08em;
+  letter-spacing: -0.01em;
+}
+
+/* A small uppercase label above a group, set in mono so it reads as a
+   caption rather than a heading. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.4);
+}
+
+/* The surface every mockup and feature block sits on. */
+.panel {
+  background: rgb(255 255 255 / 0.03);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  border-radius: 1.75rem;
+}
+
+/* The soft colour behind the hero. Two blobs of the brand gradient's ends,
+   blurred until they are weather rather than shapes. Kept to the hero
+   because the same wash behind every section stops reading as light. */
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+.hero-glow::before,
+.hero-glow::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(110px);
+}
+.hero-glow::before {
+  width: 56rem;
+  height: 34rem;
+  left: 50%;
+  top: -6rem;
+  transform: translateX(-72%) rotate(-12deg);
+  background: radial-gradient(closest-side, rgb(216 25 194 / 0.34), transparent 70%);
+}
+.hero-glow::after {
+  width: 52rem;
+  height: 30rem;
+  left: 50%;
+  top: 2rem;
+  transform: translateX(-18%) rotate(10deg);
+  background: radial-gradient(closest-side, rgb(255 193 7 / 0.26), transparent 70%);
+}
+
+/* The glow under a section's icon. */
+.icon-glow {
+  position: relative;
+}
+.icon-glow::before {
+  content: "";
+  position: absolute;
+  inset: -3rem;
+  z-index: -1;
+  border-radius: 9999px;
+  background: radial-gradient(
+    closest-side,
+    rgb(216 25 194 / 0.28),
+    rgb(255 193 7 / 0.1),
+    transparent
+  );
+  filter: blur(24px);
+}
+
+/* The wordmark that closes the page, cut off by the bottom edge. */
+.wordmark {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.78;
+  background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  user-select: none;
+}
+
+/* An iOS-style squircle, as a mask so it scales with the element. A mask
+   rather than border-radius because no radius gives the continuous curve;
+   `corner-shape: squircle` would, but only in the newest Chrome. */
+.squircle {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0C72 0 86 0 93 7s7 21 7 43-0 36-7 43-21 7-43 7-36 0-43-7S0 72 0 50 0 14 7 7 28 0 50 0Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0C72 0 86 0 93 7s7 21 7 43-0 36-7 43-21 7-43 7-36 0-43-7S0 72 0 50 0 14 7 7 28 0 50 0Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+/* <details> markers vary by browser; the FAQ draws its own. */
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
 }

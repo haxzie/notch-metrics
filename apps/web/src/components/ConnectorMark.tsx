@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   FULL_BLEED_MARKS,
   LIGHT_TILE_MARKS,
+  MARKS,
   OWN_COLOUR_MARKS,
 } from "@/lib/connector-marks.generated";
 import { liftForDarkUI } from "@/lib/brand-colour";
@@ -21,25 +22,38 @@ export function ConnectorMark({
   name,
   accentColor,
   size = 36,
+  shape = "rounded",
 }: {
   id: string;
   name: string;
   accentColor: string;
   size?: number;
+  /**
+   * `squircle` is for a wall of marks with nothing else on the tile: the
+   * iOS-style curve, no ring, and the glyph drawn large enough to fill it.
+   */
+  shape?: "rounded" | "squircle";
 }) {
-  // Four connectors have no vendored mark. They fall back to a lettermark
-  // rather than a broken image, so the row still looks deliberate.
-  const [hasMark, setHasMark] = useState(true);
+  // A few connectors have no vendored mark. They go straight to a lettermark
+  // rather than a broken image: the generated set says which, so this never
+  // requests a file that is not there, and the server render already shows
+  // the letter rather than a broken image until the client hydrates. The
+  // error handler stays for the case the set and the directory disagree.
+  const [hasMark, setHasMark] = useState(MARKS.has(id));
   const lightTile = LIGHT_TILE_MARKS.has(id);
   // Artwork that already is the tile is drawn to the edges, clipped to the
   // same corner radius, rather than floated inside a second square.
   const fullBleed = FULL_BLEED_MARKS.has(id);
-  const glyph = fullBleed ? size : Math.round(size * (lightTile ? 0.62 : 0.54));
+  const squircle = shape === "squircle";
+  const scale = squircle ? 0.74 : lightTile ? 0.62 : 0.54;
+  const glyph = fullBleed ? size : Math.round(size * scale);
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[26%] ring-1 ${
-        lightTile ? "ring-white/25" : "ring-white/10"
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden ${
+        squircle
+          ? "squircle"
+          : `rounded-[26%] ring-1 ${lightTile ? "ring-white/25" : "ring-white/10"}`
       }`}
       style={{
         width: size,
@@ -69,7 +83,7 @@ export function ConnectorMark({
       ) : (
         <span
           className="font-semibold text-white"
-          style={{ fontSize: Math.round(size * 0.42) }}
+          style={{ fontSize: Math.round(size * (squircle ? 0.5 : 0.42)) }}
           aria-hidden
         >
           {name.charAt(0).toUpperCase()}

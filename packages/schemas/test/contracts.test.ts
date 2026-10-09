@@ -55,7 +55,7 @@ describe("wire enums", () => {
 
 describe("pricing", () => {
   it("states the two plans the website and the app both quote", () => {
-    expect(S.PLANS.pro.amount).toBe(1900);
+    expect(S.PLANS.pro.amount).toBe(1400);
     expect(S.PLANS.pro.interval).toBe("month");
     expect(S.PLANS.pro_annual.amount).toBe(7900);
     expect(S.PLANS.pro_annual.interval).toBe("year");
@@ -65,7 +65,7 @@ describe("pricing", () => {
   });
 
   it("drops the decimals on a whole amount", () => {
-    expect(S.formatPrice(1900, "USD")).toBe("$19");
+    expect(S.formatPrice(1400, "USD")).toBe("$14");
     expect(S.formatPrice(7900, "USD")).toBe("$79");
     // And keeps them when there is something to show, so a future
     // $19.50 does not silently render as $20.
@@ -73,7 +73,7 @@ describe("pricing", () => {
   });
 
   it("quotes the annual saving against twelve monthly payments", () => {
-    expect(S.annualSavingPercent()).toBe(65);
+    expect(S.annualSavingPercent()).toBe(53);
   });
 
   it("only offers plans the checkout route accepts", () => {
