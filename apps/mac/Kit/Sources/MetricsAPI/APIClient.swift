@@ -186,12 +186,37 @@ extension APIClient {
     /// Results are index-aligned with the requests and partial success is
     /// normal: one broken provider must not blank a notch that has three
     /// working tiles on it.
+    /// How many metrics the server will accept in one request.
+    ///
+    /// The Worker caps the batch so that one request cannot fan out into
+    /// fifty provider calls inside a single invocation's budget. Thirteen
+    /// widgets in one body is a 400 for the *whole* request, so every tile in
+    /// the notch fails at once — which is why this is chunked here rather
+    /// than left to each caller to remember.
+    static let batchLimit = 12
+
+    /// Fetches every metric, in as many requests as the server's cap needs.
+    ///
+    /// Sequential rather than concurrent on purpose: the point of batching is
+    /// to arrive at the Worker as few requests as possible, and firing the
+    /// chunks together would undo the per-integration spacing the server uses
+    /// to stay inside a provider's rate limit.
     public func batch(_ requests: [MetricQueryRequest]) async throws(APIError) -> [MetricResult] {
         guard !requests.isEmpty else { return [] }
-        let response = try await post(
-            "v1/metrics/batch", body: MetricBatchBody(requests: requests),
-            as: MetricBatchResponse.self)
-        return response.results
+
+        var results: [MetricResult] = []
+        results.reserveCapacity(requests.count)
+        for chunk in stride(from: 0, to: requests.count, by: Self.batchLimit).map({ start in
+            Array(requests[start..<min(start + Self.batchLimit, requests.count)])
+        }) {
+            let response = try await post(
+                "v1/metrics/batch", body: MetricBatchBody(requests: chunk),
+                as: MetricBatchResponse.self)
+            // Index-aligned per chunk, so appending in order keeps the whole
+            // reply aligned with what was asked for.
+            results.append(contentsOf: response.results)
+        }
+        return results
     }
 
     /// One metric, for the widget preview.

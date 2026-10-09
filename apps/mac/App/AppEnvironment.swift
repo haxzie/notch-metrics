@@ -289,11 +289,41 @@ final class AppEnvironment {
             states = next
             notch.update(states: states)
         } catch {
+            let state = Self.tileState(for: error)
             for widget in widgets where !isValue(next[widget.id]) {
-                next[widget.id] = .failed(reason: "Could not reach Notch Metrics")
+                next[widget.id] = state
             }
             states = next
             notch.update(states: states)
+        }
+    }
+
+    /// What a whole-request failure should say on every tile.
+    ///
+    /// Every one of these used to read "Could not reach Notch Metrics", which
+    /// is only true for one of them. A rejected request, an ended trial and a
+    /// signed-out app each send somebody to check their wifi, and the real
+    /// cause is on screen nowhere.
+    static func tileState(for error: any Error) -> TileState {
+        guard let api = error as? APIError else {
+            return .failed(reason: "Could not reach Notch Metrics")
+        }
+        switch api {
+        case .offline, .transport:
+            return .failed(reason: "Could not reach Notch Metrics")
+        case .unauthorized:
+            return .needsSetup("Sign in again")
+        case .subscriptionRequired:
+            return .needsSetup("Subscription needed")
+        case .rateLimited:
+            return .failed(reason: "Too many requests — retrying shortly")
+        case .server(_, _, let message):
+            // The server's own words when it bothered to send any. This is
+            // what finally says "Invalid request." out loud rather than
+            // blaming the network for it.
+            return .failed(reason: message ?? "Notch Metrics refused that request")
+        case .decoding:
+            return .failed(reason: "Could not read that response")
         }
     }
 
