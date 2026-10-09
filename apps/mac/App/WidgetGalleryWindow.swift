@@ -48,8 +48,7 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
     private var window: NSPanel?
     private let env: AppEnvironment
     private var isDragging = false
-    private var dragEndMonitor: Any?
-    private var dragTimeout: Task<Void, Never>?
+    private var dragEndWatch: Task<Void, Never>?
 
     init(env: AppEnvironment) {
         self.env = env
@@ -158,32 +157,30 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
         window?.animator().alphaValue = 0
         window?.ignoresMouseEvents = true
 
-        // AppKit gives no drag-ended callback to the *source*, so the mouse
-        // coming back up is the signal. Global, because the drag is happening
-        // over another window by then.
-        dragEndMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) {
-            [weak self] _ in
-            MainActor.assumeIsolated { self?.endDrag() }
-        }
-        // Belt and braces: a drag that ends somewhere that swallows the mouse
-        // up would otherwise leave the bar invisible and unclickable.
-        dragTimeout?.cancel()
-        let task = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(30))
+        // AppKit gives no drag-ended callback to the *source*, so the button
+        // coming back up is the signal — and it has to be *polled*. A global
+        // event monitor never saw it: a global monitor is only sent events
+        // destined for *other* applications, and the drop lands on the notch,
+        // which is this same app. So after every successful drop the gallery
+        // stayed invisible and click-through until the old 30-second
+        // belt-and-braces timeout rescued it — which is also why it then
+        // reappeared on its own, long after the user had moved on.
+        dragEndWatch?.cancel()
+        dragEndWatch = Task { [weak self] in
+            while !Task.isCancelled, NSEvent.pressedMouseButtons & 0x1 != 0 {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
             guard !Task.isCancelled else { return }
             self?.endDrag()
         }
-        dragTimeout = task
     }
 
     private func endDrag() {
         guard isDragging else { return }
         isDragging = false
 
-        if let dragEndMonitor { NSEvent.removeMonitor(dragEndMonitor) }
-        dragEndMonitor = nil
-        dragTimeout?.cancel()
-        dragTimeout = nil
+        dragEndWatch?.cancel()
+        dragEndWatch = nil
 
         window?.ignoresMouseEvents = false
         window?.animator().alphaValue = 1
@@ -195,7 +192,16 @@ final class WidgetGalleryWindowController: NSObject, NSWindowDelegate {
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             guard let self, self.isOpen, !self.isDragging else { return }
-            self.env.notch.close()
+            // A drop that landed opens the configure pane on the new widget,
+            // and closing the notch here threw that pane away 300ms after it
+            // appeared — leaving a widget on the grid with no account and the
+            // notch apparently unwilling to open on anything but a form the
+            // user never got to finish.
+            if self.env.notch.configuringID != nil {
+                self.env.notch.handOffToConfiguring()
+            } else {
+                self.env.notch.close()
+            }
         }
     }
 
