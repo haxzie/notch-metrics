@@ -4,12 +4,16 @@ import SwiftUI
 
 /// A connector's mark, on a tile.
 ///
-/// Two treatments, because the marks come from two sources and each is
+/// Three treatments, because the marks come from two sources and each is
 /// designed for a different background:
 ///
-/// - A mark drawn for a **light** background (Google Analytics, Search
-///   Console, GitHub) gets a near-white tile. Flattening Analytics' amber to
-///   white turns it into a generic bar chart.
+/// - A **monochrome** mark drawn for a light background (GitHub) is drawn
+///   as a white silhouette on frosted glass. It loses nothing, and a row of
+///   near-white squares in a dark panel reads as headlights.
+/// - A **multicolour** mark drawn for a light background (Google Analytics,
+///   Search Console) keeps a near-white tile and its own colours. Flattening
+///   Analytics' two ambers to white turns it into a generic bar chart — which
+///   is what happened when these briefly shared GitHub's treatment.
 /// - Everything else sits on a tile of the brand's own colour: either a white
 ///   simple-icons glyph, or an official mark drawn for dark — Dodo Payments'
 ///   lime would disappear on white.
@@ -41,20 +45,26 @@ public struct ConnectorIcon: View {
     private var mark: NSImage? { NSImage(named: "connector-\(app.id)") }
 
     private var usesLightTile: Bool { ConnectorMarks.lightTile.contains(app.id) }
+    /// Silhouetted on glass rather than drawn in colour on a light tile.
+    private var usesTemplate: Bool {
+        usesLightTile && ConnectorMarks.monochrome.contains(app.id)
+    }
     /// Artwork that already is the tile, so it is drawn to the edges.
     private var isFullBleed: Bool { mark != nil && ConnectorMarks.fullBleed.contains(app.id) }
 
     /// The tile behind the mark.
     ///
-    /// Frosted glass for the marks drawn against a light background, rather
-    /// than the near-white square they used to sit on. A row of white tiles in
-    /// a dark panel reads as a line of headlights, and glass keeps them part
-    /// of the same surface as everything around them.
+    /// Frosted glass for a silhouetted mark, so it stays part of the same
+    /// surface as everything around it. A colour mark drawn for light gets
+    /// the near-white its artwork assumes — not pure white, which is brighter
+    /// than anything else in the panel.
     @ViewBuilder
     private var tileBackground: some View {
         let shape = RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-        if usesLightTile {
+        if usesTemplate {
             shape.fill(.ultraThinMaterial)
+        } else if usesLightTile {
+            shape.fill(Color(white: 0.96))
         } else {
             shape.fill(tile)
         }
@@ -80,7 +90,7 @@ public struct ConnectorIcon: View {
                 // A hairline so a tile whose brand colour is close to the
                 // window's own still has an edge.
                 RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                    .strokeBorder(Color.white.opacity(usesLightTile ? 0.16 : 0.12), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(usesTemplate ? 0.16 : 0.12), lineWidth: 1)
             )
             .frame(width: size, height: size)
             .opacity(isEnabled ? 1 : 0.45)
@@ -103,7 +113,7 @@ public struct ConnectorIcon: View {
 
     @ViewBuilder
     private var glyph: some View {
-        if usesLightTile, let mark = templateMark {
+        if usesTemplate, let mark = templateMark {
             Image(nsImage: mark)
                 .resizable()
                 .renderingMode(.template)

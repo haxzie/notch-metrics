@@ -22,4 +22,10 @@ public enum ConnectorMarks {
     public static let fullBleed: Set<String> = [
         "dodopayments",
     ]
+
+    /// Light-background marks in a single dark colour, which can be drawn
+    /// as a white silhouette on glass. A multicolour mark cannot.
+    public static let monochrome: Set<String> = [
+        "github",
+    ]
 }

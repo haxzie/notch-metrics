@@ -67,6 +67,17 @@ const BRAND_TILE = new Set(["dodopayments"]);
  */
 const FULL_BLEED = new Set(["dodopayments"]);
 
+/**
+ * Light-background overrides that are a single dark colour, so they can be
+ * drawn as a white silhouette on glass and lose nothing.
+ *
+ * Everything else drawn for light is multicolour — Analytics' two ambers,
+ * Search Console's four Google colours — and silhouetting those is exactly
+ * what turned the Analytics mark into a generic bar chart. They keep a
+ * near-white tile and their own colours.
+ */
+const MONOCHROME = new Set(["github"]);
+
 const OVERRIDES = join(ROOT, "packages/ui/assets/connectors/overrides");
 const WEB = join(ROOT, "apps/web/public/connectors");
 const XCASSETS = join(ROOT, "apps/mac/App/Assets.xcassets/Connectors");
@@ -105,6 +116,7 @@ const brandTile = [];
 // lime it was designed against.
 const ownColour = [];
 const fullBleed = [];
+const monochrome = [];
 
 for (const id of new Set([...Object.keys(BRANDS), ...overrideIds()])) {
   const override = join(OVERRIDES, `${id}.svg`);
@@ -114,6 +126,7 @@ for (const id of new Set([...Object.keys(BRANDS), ...overrideIds()])) {
     svg = readFileSync(override, "utf8");
     ownColour.push(id);
     if (FULL_BLEED.has(id)) fullBleed.push(id);
+    if (MONOCHROME.has(id)) monochrome.push(id);
     (BRAND_TILE.has(id) ? brandTile : lightTile).push(id);
   } else {
     svg = monochromeSvg(BRANDS[id]);
@@ -150,6 +163,7 @@ lightTile.sort();
 brandTile.sort();
 ownColour.sort();
 fullBleed.sort();
+monochrome.sort();
 const shipped = [...lightTile, ...brandTile].sort();
 
 // Stale marks left behind after a connector is renamed or dropped would keep
@@ -173,6 +187,7 @@ writeFileSync(
     `export const LIGHT_TILE_MARKS: ReadonlySet<string> = new Set(${JSON.stringify(lightTile)});\n` +
     `export const OWN_COLOUR_MARKS: ReadonlySet<string> = new Set(${JSON.stringify(ownColour)});\n` +
     `export const FULL_BLEED_MARKS: ReadonlySet<string> = new Set(${JSON.stringify(fullBleed)});\n` +
+    `export const MONOCHROME_MARKS: ReadonlySet<string> = new Set(${JSON.stringify(monochrome)});\n` +
     `export const MARKS: ReadonlySet<string> = new Set(${JSON.stringify(shipped)});\n`,
 );
 
@@ -193,6 +208,11 @@ writeFileSync(
     `    /// corner radius, rather than inset into it.\n` +
     `    public static let fullBleed: Set<String> = [\n` +
     fullBleed.map((id) => `        "${id}",`).join("\n") +
+    `\n    ]\n\n` +
+    `    /// Light-background marks in a single dark colour, which can be drawn\n` +
+    `    /// as a white silhouette on glass. A multicolour mark cannot.\n` +
+    `    public static let monochrome: Set<String> = [\n` +
+    monochrome.map((id) => `        "${id}",`).join("\n") +
     `\n    ]\n}\n`,
 );
 
