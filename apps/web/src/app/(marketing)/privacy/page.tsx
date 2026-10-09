@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { LegalPage, LegalSection } from "@/components/marketing/LegalPage";
+import { LEGAL_UPDATED } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Privacy",
   description: "What Notch Metrics collects, why, where it lives, and how to get rid of it.",
+  alternates: { canonical: "/privacy" },
 };
 
 const CONTACT = "support@notchmetrics.com";
@@ -18,7 +20,7 @@ export default function Privacy() {
     <LegalPage
       title="Privacy policy"
       summary="Notch Metrics shows your business numbers in your Mac's notch. To do that it holds the keys to the services those numbers come from, so this page is specific about what it keeps, where, and for how long."
-      updated="2026-10-09"
+      updated={LEGAL_UPDATED.privacy}
     >
       <LegalSection title="Who we are">
         <p>

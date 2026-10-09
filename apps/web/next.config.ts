@@ -37,8 +37,26 @@ function loadRootEnv(): void {
 
 loadRootEnv();
 
+/**
+ * Signed-in and single-use routes, kept out of every index.
+ *
+ * As a header rather than a `metadata` export because all four are `"use
+ * client"` pages — a client component cannot export metadata, and `/app`
+ * already owns the only layout slot at its level. robots.txt disallows the
+ * same paths, but a disallow alone cannot remove a URL that was indexed from
+ * an external link: the crawler never fetches the page, so it never sees a
+ * `noindex`. The header travels with the response either way.
+ */
+const NOINDEX_PATHS = ["/app", "/app/:path*", "/login", "/connect/:path*", "/desktop/:path*"];
+
 const config: NextConfig = {
   reactStrictMode: true,
+  async headers() {
+    return NOINDEX_PATHS.map((source) => ({
+      source,
+      headers: [{ key: "x-robots-tag", value: "noindex, nofollow" }],
+    }));
+  },
   // Deployed to Cloudflare Workers through OpenNext rather than Pages: Pages
   // cannot run this version of Next, and @cloudflare/next-on-pages only
   // supports the edge runtime — which the /download route handler is not.

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { LegalPage, LegalSection } from "@/components/marketing/LegalPage";
+import { LEGAL_UPDATED } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Terms",
   description: "The terms you agree to when you use Notch Metrics.",
+  alternates: { canonical: "/terms" },
 };
 
 const CONTACT = "support@notchmetrics.com";
@@ -13,7 +15,7 @@ export default function Terms() {
     <LegalPage
       title="Terms of service"
       summary="The agreement between you and Notch Metrics when you create an account, install the app, or subscribe. It is short because the product is."
-      updated="2026-10-09"
+      updated={LEGAL_UPDATED.terms}
     >
       <LegalSection title="The service">
         <p>

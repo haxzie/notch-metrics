@@ -3,7 +3,10 @@ import Link from "next/link";
 
 const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL ?? "https://assets.notchmetrics.com";
 
-export const metadata: Metadata = { title: "Download" };
+export const metadata: Metadata = {
+  title: "Download",
+  alternates: { canonical: "/download/manual" },
+};
 
 /**
  * The fallback when `latest.json` cannot be read.

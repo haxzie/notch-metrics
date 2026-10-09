@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { PLANS } from "@notch/schemas";
 import { ConnectorGrid } from "@/components/marketing/ConnectorGrid";
 import { DownloadButton } from "@/components/marketing/DownloadButton";
 import { NotchMockup } from "@/components/marketing/NotchMockup";
@@ -20,8 +22,73 @@ import {
   TerminalIcon,
 } from "@/components/marketing/icons";
 import { LIVE_CONNECTORS } from "@/lib/connectors";
+import { LLM_ALTERNATES, SITE_NAME, absoluteUrl } from "@/lib/site";
 
 const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL ?? "https://assets.notchmetrics.com";
+
+/**
+ * The home page's own canonical, not the root layout's.
+ *
+ * `alternates` is inherited by every child route, so a canonical set once in
+ * the layout would have `/privacy` and every blog post all claiming to be
+ * `/` — the one mistake in this file that could de-index the whole site.
+ */
+export const metadata: Metadata = {
+  alternates: { canonical: "/", types: LLM_ALTERNATES },
+  openGraph: { url: absoluteUrl("/") },
+};
+
+/**
+ * Organisation, site and product, as one graph.
+ *
+ * The `SoftwareApplication` is what earns the price, the platform and the
+ * rating slots in a search result rather than a bare blue link. Its offers
+ * are built from `PLANS` so the markup cannot quote a price the checkout no
+ * longer charges — a mismatch there is grounds for the whole structured-data
+ * block being ignored.
+ */
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": absoluteUrl("/#organization"),
+      name: SITE_NAME,
+      url: absoluteUrl("/"),
+      logo: absoluteUrl("/brand/app-icon.png"),
+      email: "support@notchmetrics.com",
+    },
+    {
+      "@type": "WebSite",
+      "@id": absoluteUrl("/#website"),
+      name: SITE_NAME,
+      url: absoluteUrl("/"),
+      publisher: { "@id": absoluteUrl("/#organization") },
+      inLanguage: "en",
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": absoluteUrl("/#app"),
+      name: SITE_NAME,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "macOS 14 or later, Apple silicon",
+      url: absoluteUrl("/"),
+      downloadUrl: absoluteUrl("/download"),
+      description:
+        "Revenue, MRR and subscribers from Stripe, Polar, Paddle, Dodo Payments and more, in the MacBook notch.",
+      publisher: { "@id": absoluteUrl("/#organization") },
+      offers: Object.values(PLANS).map((plan) => ({
+        "@type": "Offer",
+        // Schema.org prices are major units; ours are minor units, as money
+        // is everywhere in this codebase.
+        price: (plan.amount / 100).toFixed(2),
+        priceCurrency: plan.currency,
+        category: plan.interval === "year" ? "Annual subscription" : "Monthly subscription",
+        url: absoluteUrl("/#pricing"),
+      })),
+    },
+  ],
+};
 
 /**
  * The version under the download button, from the same manifest the button
@@ -45,6 +112,12 @@ export default async function Home() {
 
   return (
     <main className="relative">
+      <script
+        type="application/ld+json"
+        // Our own strings and `PLANS` — not user input.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
+
       {/* Hero */}
       <section className="relative isolate px-6 pb-16 pt-32 sm:pt-40">
         <div className="hero-glow" />

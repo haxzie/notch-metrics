@@ -7,6 +7,7 @@ import { AppleMark } from "./icons";
 const LINKS = [
   { href: "/", label: "Home" },
   { href: "/#pricing", label: "Pricing" },
+  { href: "/blog", label: "Blog" },
   { href: "/login", label: "Sign in" },
 ];
 
@@ -24,7 +25,10 @@ export function SiteNav() {
 
         <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 sm:flex">
           {LINKS.map((link) => {
-            const active = pathname === link.href;
+            // Prefix matching for everything but "/", so a post at
+            // /blog/<slug> still lights up Blog. An equality check left the
+            // nav with nothing selected on every page below the top level.
+            const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
             return (
               <li key={link.href}>
                 <Link

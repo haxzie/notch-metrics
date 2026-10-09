@@ -38,6 +38,23 @@ const FAQ: { q: string; a: string }[] = [
 ];
 
 /**
+ * The same questions, as structured data.
+ *
+ * Built from `FAQ` rather than written out again: a hand-kept copy of the
+ * answers is a copy that eventually contradicts the page, and contradicting
+ * the page is what gets structured data treated as spam rather than ignored.
+ */
+const FAQ_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQ.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+};
+
+/**
  * Pricing as a section of the home page rather than a page of its own. One
  * plan does not need a destination; it needs to be a scroll away from the
  * reason to buy it. `/pricing` still resolves, by redirecting here.
@@ -78,6 +95,11 @@ export function PricingSection() {
       </div>
 
       <div className="mx-auto mt-20 max-w-2xl">
+        <script
+          type="application/ld+json"
+          // Our own strings, from the array above — not user input.
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+        />
         <h3 className="text-center text-2xl font-semibold tracking-tight">Questions</h3>
         <div className="mt-6 divide-y divide-white/[0.07] border-y border-white/[0.07]">
           {FAQ.map((item) => (

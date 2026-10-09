@@ -6,6 +6,7 @@ const COLUMNS: { title: string; links: { href: string; label: string; external?:
     links: [
       { href: "/download", label: "Download" },
       { href: "/#pricing", label: "Pricing" },
+      { href: "/blog", label: "Blog" },
       { href: "/login", label: "Sign in" },
     ],
   },
