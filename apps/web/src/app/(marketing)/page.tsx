@@ -60,15 +60,6 @@ export default async function Home() {
             <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
           </Link>
 
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/app-icon.png"
-            alt=""
-            width={88}
-            height={88}
-            className="mt-10 rounded-[22px] shadow-[0_20px_60px_-15px_rgba(216,25,194,0.6)] ring-1 ring-white/15"
-          />
-
           <h1 className="mt-8 text-balance text-[2.75rem] font-semibold leading-[1.02] tracking-tight sm:text-6xl">
             Your business, <span className="accent">in the notch</span>
           </h1>
