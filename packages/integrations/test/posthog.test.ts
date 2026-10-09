@@ -21,6 +21,7 @@ const request = {
   to: new Date("2026-10-05T00:00:00Z"),
   comparePrevious: true,
   wantSeries: true,
+  params: {},
 };
 
 /** Epoch seconds of a day in October 2026, which is what the bucket column is. */
