@@ -29,10 +29,21 @@ describe("per-widget metric params", () => {
     expect(a).toBe(b);
   });
 
-  it("keeps a param-less metric's key stable", () => {
-    // Not cosmetic: a changed key for every existing widget would throw away
-    // the whole cache on deploy and send every notch to its provider at once.
-    expect(cacheKey({ ...base, metric: "mrr", params: {} }, "day")).toBe("int_1:mrr:day:30d:");
+  it("leaves a param-less key byte-identical to the one already deployed", () => {
+    // Not cosmetic, and not a detail the shape of the key makes obvious: every
+    // cached metric in the estate is stored under the old form. A separator
+    // appended unconditionally — even a bare trailing colon — orphans all of
+    // them on deploy, and every notch goes to its provider at once to refill.
+    expect(cacheKey({ ...base, metric: "mrr", params: {} }, "day")).toBe("int_1:mrr:day:30d");
+    expect(cacheKey({ ...base, metric: "mrr", params: undefined as never }, "day")).toBe(
+      "int_1:mrr:day:30d",
+    );
+  });
+
+  it("extends the key only for a widget that actually carries parameters", () => {
+    expect(cacheKey({ ...base, params: { repository: "owner/a" } }, "day")).toBe(
+      "int_1:stars:day:30d:repository=owner/a",
+    );
   });
 
   it("defaults params so a widget written before this parses", () => {

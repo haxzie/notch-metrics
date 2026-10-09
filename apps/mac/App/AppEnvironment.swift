@@ -250,7 +250,9 @@ final class AppEnvironment {
         // the request is in flight rather than a skeleton.
         var next = states
         for widget in widgets where next[widget.id] == nil {
-            if let cached = await cache.load(widgetID: widget.id, range: widget.range) {
+            if let cached = await cache.load(
+                widgetID: widget.id, range: widget.range, params: widget.params)
+            {
                 next[widget.id] = .value(cached)
             } else {
                 next[widget.id] = .loading
@@ -267,7 +269,8 @@ final class AppEnvironment {
                 switch result {
                 case .success(let series):
                     next[widget.id] = .value(series)
-                    await cache.store(series, widgetID: widget.id, range: widget.range)
+                    await cache.store(
+                        series, widgetID: widget.id, range: widget.range, params: widget.params)
                 case .failure(let failure):
                     // Keep a cached number on screen rather than replacing it
                     // with an error: a stale figure with a mark against it

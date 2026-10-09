@@ -15,12 +15,44 @@ public actor MetricsCache {
         self.directory = directory
     }
 
-    private func key(widgetID: String, range: TimeRange) -> String {
-        "\(widgetID)-\(range.rawValue)"
+    /// The on-disk name for one widget's last-known number.
+    ///
+    /// The widget's parameters are part of it. A tile repointed from one
+    /// repository to another would otherwise load the first one's series and
+    /// show it under the second — a real number, attributed to the wrong
+    /// thing, and it sits there for as long as the next fetch takes.
+    ///
+    /// A widget with no parameters keeps exactly the name it already has, so
+    /// an app update does not silently discard every cached number on disk.
+    private func key(widgetID: String, range: TimeRange, params: [String: String]) -> String {
+        let base = "\(widgetID)-\(range.rawValue)"
+        guard !params.isEmpty else { return base }
+        let canonical = params
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ",")
+        return "\(base)-\(Self.stableDigest(canonical))"
     }
 
-    public func load(widgetID: String, range: TimeRange) -> MetricSeries? {
-        let cacheKey = key(widgetID: widgetID, range: range)
+    /// FNV-1a, because this ends up in a filename.
+    ///
+    /// Deliberately not `hashValue`: Swift seeds that per process, so a key
+    /// built from it would miss every entry the previous launch wrote — a
+    /// cache that silently never hits. Digested rather than sanitised because
+    /// a repository has a slash in it.
+    private static func stableDigest(_ value: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        return String(hash, radix: 36)
+    }
+
+    public func load(widgetID: String, range: TimeRange, params: [String: String] = [:])
+        -> MetricSeries?
+    {
+        let cacheKey = key(widgetID: widgetID, range: range, params: params)
         if let hit = memory[cacheKey] { return hit }
 
         let url = directory.appendingPathComponent("\(cacheKey).json")
@@ -32,8 +64,11 @@ public actor MetricsCache {
         return series
     }
 
-    public func store(_ series: MetricSeries, widgetID: String, range: TimeRange) {
-        let cacheKey = key(widgetID: widgetID, range: range)
+    public func store(
+        _ series: MetricSeries, widgetID: String, range: TimeRange,
+        params: [String: String] = [:]
+    ) {
+        let cacheKey = key(widgetID: widgetID, range: range, params: params)
         memory[cacheKey] = series
 
         guard let data = try? JSONEncoder().encode(series) else { return }

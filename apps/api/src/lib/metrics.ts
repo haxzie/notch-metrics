@@ -39,16 +39,23 @@ const TTL_SECONDS: Record<Granularity, number> = {
 const STALE_FACTOR = 4;
 
 export function cacheKey(q: MetricQuery, granularity: Granularity): string {
-  // The params are in the key, and sorted so two orderings of the same widget
-  // are one entry rather than two. Leaving them out is not a cache-efficiency
-  // question: one GitHub connection now serves a tile per repository, so two
-  // widgets differing only by `repository` would share an entry and serve each
-  // other's star count — wrong, plausible, and silent.
+  const base = `${q.integrationId}:${q.metric}:${granularity}:${q.range}`;
+
+  // Sorted, so two orderings of the same widget are one entry rather than two.
+  // Being in the key at all is not a cache-efficiency question: one GitHub
+  // connection now serves a tile per repository, so two widgets differing only
+  // by `repository` would otherwise share an entry and serve each other's star
+  // count — wrong, plausible, and silent.
   const params = Object.entries(q.params ?? {})
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([k, v]) => `${k}=${v}`)
     .join(",");
-  return `${q.integrationId}:${q.metric}:${granularity}:${q.range}:${params}`;
+
+  // Appended only when there are some, so every widget that predates
+  // parameters keeps the exact key it already has. A trailing separator would
+  // orphan every cached metric in the estate on the deploy that shipped this,
+  // and every notch would go to its provider at once to refill.
+  return params ? `${base}:${params}` : base;
 }
 
 /** Spacing between outbound calls for one integration, and the breaker's ceiling. */
