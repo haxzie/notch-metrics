@@ -40,6 +40,8 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   average_view_duration: ["avd", "retention", "youtube", "how long"],
   likes: ["thumbs up", "reactions", "engagement"],
   comments: ["replies", "engagement", "discussion"],
+  ad_revenue: ["adsense", "ads", "earnings", "payout", "monetisation", "monetization"],
+  rpm: ["revenue per mille", "per thousand", "earnings", "cpm", "monetisation"],
 
   contacts: ["crm", "leads", "people", "customers"],
   new_contacts: ["leads", "crm", "acquisition", "signups"],

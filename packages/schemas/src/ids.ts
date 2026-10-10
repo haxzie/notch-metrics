@@ -131,6 +131,12 @@ export const MetricId = z.enum([
   "average_view_duration",
   "likes",
   "comments",
+  // Creator advertising economics. Not in the revenue block above, which is a
+  // billing book: `revenue` there is what customers paid you, and these are
+  // what an ad network paid you per thousand views. A widget swapping between
+  // the two would be comparing a price list to a payout.
+  "ad_revenue",
+  "rpm",
   // Developer
   "stars",
   "forks",

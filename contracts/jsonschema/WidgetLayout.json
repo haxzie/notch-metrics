@@ -85,6 +85,8 @@
                   "average_view_duration",
                   "likes",
                   "comments",
+                  "ad_revenue",
+                  "rpm",
                   "stars",
                   "forks",
                   "open_issues",

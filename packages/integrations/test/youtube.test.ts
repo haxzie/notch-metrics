@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { youtube } from "../src/providers/youtube/index.ts";
-import { stubContext } from "./helpers.ts";
+import { scalar, stubContext } from "./helpers.ts";
 
 const creds = { channel_id: "UCabcdefghijklmnopqrstuv", access_token: "ya29.0123456789" };
 
@@ -75,6 +75,44 @@ function channelBody(statistics: Record<string, string> | null = { subscriberCou
 function stubChannels(items: unknown[]) {
   vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ items })));
 }
+
+/**
+ * A separate fixture from `rows`, with money on it.
+ *
+ * The daily figures are deliberately awkward — 1.111, 2.222, 3.333 — so that
+ * rounding each day to the cent (666) and rounding the summed window (667)
+ * give different answers, and a test can tell which one happened.
+ */
+const MONEY_COLUMN_HEADERS = [
+  ...COLUMN_HEADERS,
+  { name: "estimatedRevenue" },
+  { name: "estimatedAdRevenue" },
+];
+
+function moneyDay(date: string, views: number, revenue: number, adRevenue: number) {
+  return [...day(date, { views, minutes: 0 }), revenue, adRevenue];
+}
+
+const MONEY_REPORT = {
+  columnHeaders: MONEY_COLUMN_HEADERS,
+  rows: [
+    moneyDay("2026-10-01", 500, 1.111, 1.0),
+    moneyDay("2026-10-02", 500, 2.222, 2.0),
+    moneyDay("2026-10-03", 1000, 3.333, 3.0),
+  ],
+};
+
+/** Routes the two reports apart by whether the request asked for money. */
+function reports(options: { money?: unknown; plain?: unknown } = {}) {
+  return {
+    "/v2/reports": (url: URL) =>
+      url.searchParams.get("metrics")?.includes("estimatedRevenue")
+        ? (options.money ?? MONEY_REPORT)
+        : (options.plain ?? REPORT),
+  };
+}
+
+const FORBIDDEN = { __status: 403 };
 
 describe("youtube", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -201,6 +239,102 @@ describe("youtube", () => {
     await expect(youtube.fetchMetric(ctx, creds, request)).rejects.toMatchObject({
       code: "bad_response",
     });
+  });
+
+  it("keeps revenue columns out of the report every channel can run", async () => {
+    const ctx = stubContext(reports());
+    await youtube.fetchMetric(ctx, creds, request);
+    // A channel outside the Partner Program 403s the whole report if it
+    // names a revenue column, taking the view count down with it.
+    expect(scalar(ctx.calls[0])).not.toContain("estimatedRevenue");
+    expect(new URL(scalar(ctx.calls[0])).searchParams.get("currency")).toBeNull();
+  });
+
+  it("rounds the window's revenue once, not every day of it", async () => {
+    const ctx = stubContext(reports());
+    const series = await youtube.fetchMetric(ctx, creds, { ...request, metric: "revenue" });
+    expect(series.unit).toBe("currency");
+    expect(series.currency).toBe("USD");
+    // 6.666 summed then rounded. Rounding each day first would give 666.
+    expect(series.value).toBe(667);
+    // The chart still rounds per bucket, because a bucket is what it draws.
+    expect(series.points.map((p) => p.v)).toEqual([111, 222, 333, 0]);
+    expect(series.note).toContain("month-end");
+  });
+
+  it("separates ad revenue from total revenue", async () => {
+    const ctx = stubContext(reports());
+    const series = await youtube.fetchMetric(ctx, creds, { ...request, metric: "ad_revenue" });
+    expect(series.value).toBe(600);
+  });
+
+  it("computes RPM per thousand views over the window, not per day", async () => {
+    const ctx = stubContext(reports());
+    const series = await youtube.fetchMetric(ctx, creds, { ...request, metric: "rpm" });
+    // 6.666 over 2000 views × 1000 = 3.333. The mean of the daily RPMs would
+    // be 3.333, 4.444 and 3.333 averaged — a different number.
+    expect(series.value).toBe(333);
+    expect(series.unit).toBe("currency");
+  });
+
+  it("asks YouTube to convert, rather than converting afterwards", async () => {
+    const ctx = stubContext(reports(), { preferredCurrency: "GBP" });
+    const series = await youtube.fetchMetric(ctx, creds, { ...request, metric: "revenue" });
+    expect(new URL(scalar(ctx.calls[0])).searchParams.get("currency")).toBe("GBP");
+    expect(series.currency).toBe("GBP");
+  });
+
+  it("falls back to USD for a currency YouTube cannot pay in, and says so", async () => {
+    const ctx = stubContext(reports(), { preferredCurrency: "ISK" });
+    const series = await youtube.fetchMetric(ctx, creds, { ...request, metric: "revenue" });
+    expect(new URL(scalar(ctx.calls[0])).searchParams.get("currency")).toBe("USD");
+    expect(series.currency).toBe("USD");
+    expect(series.note).toContain("ISK");
+  });
+
+  it("reads a 403 on revenue as a channel without any, not a bad connection", async () => {
+    const ctx = stubContext(reports({ money: FORBIDDEN }));
+    await expect(
+      youtube.fetchMetric(ctx, creds, { ...request, metric: "revenue" }),
+    ).rejects.toMatchObject({ code: "unsupported" });
+    // Not `auth_failed`: nothing here is fixed by reconnecting, and marking
+    // the integration broken would stop the view counts working too.
+  });
+
+  it("offers revenue only to a channel that has it", async () => {
+    const ctx = stubContext({ "/youtube/v3/channels": channelBody(), ...reports() });
+    const result = await youtube.verify(ctx, creds);
+    expect(result.availableMetrics).toContain("revenue");
+    expect(result.currency).toBe("USD");
+  });
+
+  it("connects a channel outside the Partner Program, minus the revenue metrics", async () => {
+    const ctx = stubContext({
+      "/youtube/v3/channels": channelBody(),
+      ...reports({ money: FORBIDDEN }),
+    });
+    const result = await youtube.verify(ctx, creds);
+    // The connection is good. It just has a shorter menu.
+    expect(result.availableMetrics).toContain("views");
+    expect(result.availableMetrics).not.toContain("revenue");
+    expect(result.availableMetrics).not.toContain("ad_revenue");
+    expect(result.availableMetrics).not.toContain("rpm");
+    expect(result.currency).toBeNull();
+  });
+
+  it("still fails verification when the whole Analytics API is refused", async () => {
+    const ctx = stubContext({
+      "/youtube/v3/channels": channelBody(),
+      ...reports({ plain: FORBIDDEN, money: FORBIDDEN }),
+    });
+    await expect(youtube.verify(ctx, creds)).rejects.toMatchObject({ code: "auth_failed" });
+  });
+
+  it("requests the monetary scope, which covers the plain one", async () => {
+    const scopes = youtube.oauth!.scopes;
+    expect(scopes).toContain("https://www.googleapis.com/auth/yt-analytics-monetary.readonly");
+    // Asking for both would be asking twice for the same thing.
+    expect(scopes).not.toContain("https://www.googleapis.com/auth/yt-analytics.readonly");
   });
 
   it("does not claim a metric it cannot serve", async () => {

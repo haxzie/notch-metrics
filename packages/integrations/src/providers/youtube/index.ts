@@ -27,7 +27,7 @@ export const manifest: ProviderManifest = {
   keywords: ["yt", "channel", "video", "creator", "studio", "google"],
   authMode: "oauth2",
   oauth: {
-    scopeSummary: ["Read your YouTube channel's analytics"],
+    scopeSummary: ["Read your YouTube channel's analytics and estimated revenue"],
     // One Google account can own several channels, and a brand account's
     // channel is not the one the sign-in name suggests.
     requiresSelection: true,
@@ -113,6 +113,40 @@ export const manifest: ProviderManifest = {
       supportsCompare: true,
       methodology: "YouTube Analytics `comments` left on the channel's videos in the window.",
     },
+    {
+      id: "revenue",
+      label: "Estimated revenue",
+      shortLabel: "Revenue",
+      unit: "currency",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      keywords: ["youtube", "earnings", "adsense", "payout"],
+      methodology:
+        "YouTube Analytics `estimatedRevenue`: net earnings from ads and YouTube Premium, after YouTube's share. Subject to month-end adjustment, so the current month is provisional, and it excludes partner-sold advertising. Only channels in the YouTube Partner Program have it at all.",
+    },
+    {
+      id: "ad_revenue",
+      label: "Ad revenue",
+      shortLabel: "Ad rev.",
+      unit: "currency",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology:
+        "YouTube Analytics `estimatedAdRevenue`: the advertising part of estimated revenue alone, with YouTube Premium earnings excluded. Also subject to month-end adjustment.",
+    },
+    {
+      id: "rpm",
+      label: "Revenue per mille",
+      shortLabel: "RPM",
+      unit: "currency",
+      granularities: ["day", "week", "month"],
+      supportsSeries: true,
+      supportsCompare: true,
+      methodology:
+        "Estimated revenue per thousand views, computed over the whole window rather than averaged across daily rates. This is RPM as YouTube Studio reports it — total revenue over total views, every view counted — not CPM, which is per thousand ad impressions and counts only monetised playbacks.",
+    },
   ],
   allowedHosts: [
     "youtubeanalytics.googleapis.com",
@@ -149,8 +183,8 @@ const DATA = "https://www.googleapis.com/youtube/v3";
 const LAG_NOTE = "YouTube Analytics runs a day or two behind.";
 
 /**
- * Every metric this connector serves comes out of one report, so the request
- * is identical for all of them and only the arithmetic at the end differs.
+ * Every non-revenue metric comes out of one report, so the request is
+ * identical for all of them and only the arithmetic at the end differs.
  *
  * `subscribersLost` is in here purely to net the subscriber total backwards;
  * it is not a metric of its own.
@@ -165,17 +199,73 @@ const COLUMNS = [
 ] as const;
 
 /**
+ * The revenue columns, asked for only when a revenue metric is requested.
+ *
+ * Kept out of `COLUMNS` deliberately. A channel outside the YouTube Partner
+ * Program answers 403 to any report naming a revenue column — not a report
+ * with those columns blank — so folding them into the shared request would
+ * take the view count down with them for every hobby channel on the service.
+ */
+const MONETARY_COLUMNS = ["estimatedRevenue", "estimatedAdRevenue"] as const;
+
+/** Which of our metrics need `MONETARY_COLUMNS`, and so the monetary scope. */
+const MONETARY_METRICS: ReadonlySet<MetricId> = new Set<MetricId>(["revenue", "ad_revenue", "rpm"]);
+
+/**
+ * The currencies `reports.query` will convert revenue into, from Google's
+ * own list.
+ *
+ * Checked here rather than discovered by trying: an unsupported code is a
+ * hard error on the whole report, which would take a working revenue widget
+ * down for somebody whose account is simply priced in a currency YouTube
+ * does not pay out in. Falling back to USD and saying so in the note is the
+ * honest answer. A currency Google adds later reads as unsupported until
+ * this list catches up, which is the safe direction to be wrong in.
+ */
+const CONVERTIBLE = new Set(
+  (
+    "AED ANG ARS AUD BDT BGN BHD BND BOB BRL BWP CAD CHF CLP CNY COP CRC CZK DKK DOP DZD EGP " +
+    "EUR FJD GBP GTQ HKD HNL HRK HUF IDR ILS INR JMD JOD JPY KES KRW KWD KYD KZT LBP LKR MAD " +
+    "MDL MKD MUR MVR MXN MYR NAD NGN NIO NOK NPR NZD OMR PEN PGK PHP PKR PLN PYG QAR RON RSD " +
+    "RUB SAR SCR SEK SGD SLL SVC THB TND TRY TTD TWD TZS UAH UGX USD UYU UZS VEF VND XAF XOF " +
+    "YER ZAR"
+  ).split(" "),
+);
+
+/**
+ * YouTube reports revenue as a decimal — `1234.56`, not `123456`.
+ *
+ * Every other connector here is handed minor units by its provider, so this
+ * is the one place the conversion happens. Rounded rather than truncated:
+ * a tile reading a cent low every day is a support thread about money being
+ * wrong, and nobody can reproduce it.
+ */
+function toMinorUnits(amount: number): number {
+  return Math.round(amount * 100);
+}
+
+/**
  * 403 from Google is the API not being enabled on the project, the account
  * not owning the channel, or the token having lost the scope. None is a rate
  * limit, all need a human, and the message names the first because that is
  * the one a fresh deployment hits.
+ *
+ * On a *revenue* report it means something else entirely and must not read as
+ * a broken connection: YouTube answers 403 for any channel outside the
+ * Partner Program, which is most channels. That is a metric this account
+ * cannot have, not a credential to go and fix.
  */
-function errorFor(host: string, response: HttpResponse): ProviderError {
+function errorFor(host: string, response: HttpResponse, monetary = false): ProviderError {
   if (response.status === 403) {
-    return new ProviderError(
-      "auth_failed",
-      "Google refused the request. Check the YouTube Data and YouTube Analytics APIs are enabled and this account owns the channel.",
-    );
+    return monetary
+      ? new ProviderError(
+          "unsupported",
+          "YouTube will not report revenue for this channel. It answers that for any channel outside the YouTube Partner Program, and for a connection authorised before this app asked for revenue — if the channel is monetised, reconnecting it will fix this.",
+        )
+      : new ProviderError(
+          "auth_failed",
+          "Google refused the request. Check the YouTube Data and YouTube Analytics APIs are enabled and this account owns the channel.",
+        );
   }
   return errorForStatus(host, response);
 }
@@ -199,6 +289,14 @@ interface Totals {
   comments: number;
   subscribersGained: number;
   subscribersLost: number;
+  /**
+   * Decimals, exactly as YouTube reports them, converted to minor units only
+   * once a window has been summed — rounding each day to the cent first and
+   * adding those up drifts from the true total by up to half a cent a day.
+   * Zero on a non-monetary report, which never asks for them.
+   */
+  revenue: number;
+  adRevenue: number;
 }
 
 function emptyTotals(): Totals {
@@ -209,6 +307,8 @@ function emptyTotals(): Totals {
     comments: 0,
     subscribersGained: 0,
     subscribersLost: 0,
+    revenue: 0,
+    adRevenue: 0,
   };
 }
 
@@ -247,13 +347,36 @@ async function channel(
   return body.items?.[0] ?? null;
 }
 
+/** A day-dimensioned report, plus the currency YouTube converted money into. */
+interface Report {
+  rows: { day: Date; totals: Totals }[];
+  /** Null unless revenue was asked for. */
+  currency: string | null;
+}
+
+/**
+ * The currency to ask YouTube for, and whether it is the one the user wanted.
+ *
+ * YouTube converts at its own daily rates, which is why this is a request
+ * parameter rather than something we do afterwards: converting a month of
+ * revenue at today's rate is a different number from converting each day at
+ * its own, and only one of those matches what Studio shows.
+ */
+function convertTo(preferred: string): { currency: string; substituted: boolean } {
+  const want = preferred.toUpperCase();
+  return CONVERTIBLE.has(want)
+    ? { currency: want, substituted: false }
+    : { currency: "USD", substituted: true };
+}
+
 /** One day-dimensioned report over `[from, to]`, as `{ day, …totals }` rows. */
 async function report(
   ctx: AdapterContext,
   creds: YouTubeCredentials,
   from: Date,
   to: Date,
-): Promise<{ day: Date; totals: Totals }[]> {
+  monetary = false,
+): Promise<Report> {
   const url = new URL(`${ANALYTICS}/reports`);
   // `channel==<id>` rather than `channel==MINE`: the connection is to one
   // channel, and an account that later gains a second must not have its
@@ -262,14 +385,19 @@ async function report(
   url.searchParams.set("ids", `channel==${creds.channel_id}`);
   url.searchParams.set("startDate", ymd(from, ctx.timeZone));
   url.searchParams.set("endDate", ymd(to, ctx.timeZone));
-  url.searchParams.set("metrics", COLUMNS.join(","));
+  const columns = monetary ? [...COLUMNS, ...MONETARY_COLUMNS] : [...COLUMNS];
+  url.searchParams.set("metrics", columns.join(","));
   url.searchParams.set("dimensions", "day");
   url.searchParams.set("sort", "day");
+  const money = monetary ? convertTo(ctx.preferredCurrency) : null;
+  // Ignored by the API when no revenue column is requested, but sending it
+  // anyway would put a currency on a report that has no money in it.
+  if (money) url.searchParams.set("currency", money.currency);
 
   const response = await ctx.http(url.toString(), {
     headers: googleHeaders(creds.access_token),
   });
-  if (!response.ok) throw errorFor("youtubeanalytics.googleapis.com", response);
+  if (!response.ok) throw errorFor("youtubeanalytics.googleapis.com", response, monetary);
   const body = await response.json<ReportResponse>();
 
   // Columns are read by name from `columnHeaders` rather than by the index
@@ -286,6 +414,8 @@ async function report(
     comments: at("comments"),
     subscribersGained: at("subscribersGained"),
     subscribersLost: at("subscribersLost"),
+    revenue: at("estimatedRevenue"),
+    adRevenue: at("estimatedAdRevenue"),
   };
   if (index.day < 0) {
     throw new ProviderError("bad_response", "YouTube Analytics returned a report with no days.");
@@ -297,7 +427,7 @@ async function report(
     return Number.isFinite(value) ? value : 0;
   };
 
-  return (body.rows ?? [])
+  const rows = (body.rows ?? [])
     .map((row) => ({
       day: dayAt(String(row[index.day] ?? "")),
       totals: {
@@ -307,9 +437,13 @@ async function report(
         comments: number(row, index.comments),
         subscribersGained: number(row, index.subscribersGained),
         subscribersLost: number(row, index.subscribersLost),
+        revenue: number(row, index.revenue),
+        adRevenue: number(row, index.adRevenue),
       },
     }))
     .filter((row) => !Number.isNaN(row.day.getTime()));
+
+  return { rows, currency: money?.currency ?? null };
 }
 
 function add(into: Totals, from: Totals): void {
@@ -319,6 +453,8 @@ function add(into: Totals, from: Totals): void {
   into.comments += from.comments;
   into.subscribersGained += from.subscribersGained;
   into.subscribersLost += from.subscribersLost;
+  into.revenue += from.revenue;
+  into.adRevenue += from.adRevenue;
 }
 
 function sum(rows: { totals: Totals }[]): Totals {
@@ -344,6 +480,15 @@ function figure(metric: MetricId, totals: Totals): number {
       return totals.likes;
     case "comments":
       return totals.comments;
+    case "revenue":
+      return toMinorUnits(totals.revenue);
+    case "ad_revenue":
+      return toMinorUnits(totals.adRevenue);
+    case "rpm":
+      // Per *thousand views*, and over the window's own totals — the mean of
+      // daily RPMs would let a day with four views and one lucky ad outweigh
+      // a day with forty thousand.
+      return totals.views === 0 ? 0 : toMinorUnits((totals.revenue / totals.views) * 1000);
     default:
       return 0;
   }
@@ -356,8 +501,12 @@ const UNITS: Partial<Record<MetricId, RawSeries["unit"]>> = {
   new_subscribers: "count",
   likes: "count",
   comments: "count",
+  revenue: "currency",
+  ad_revenue: "currency",
+  rpm: "currency",
 };
 
+/** Everything the adapter can serve. `verify` narrows this per channel. */
 const SERVED: MetricId[] = [
   "views",
   "watch_time",
@@ -366,6 +515,9 @@ const SERVED: MetricId[] = [
   "new_subscribers",
   "likes",
   "comments",
+  "revenue",
+  "ad_revenue",
+  "rpm",
 ];
 
 export const youtube: ProviderAdapter<YouTubeCredentials> = {
@@ -380,9 +532,16 @@ export const youtube: ProviderAdapter<YouTubeCredentials> = {
       // The channel list, its name and the subscriber total.
       "https://www.googleapis.com/auth/youtube.readonly",
       // Everything time-ranged. Separate scope, separate API.
-      "https://www.googleapis.com/auth/yt-analytics.readonly",
+      //
+      // The *monetary* variant rather than plain `yt-analytics.readonly`,
+      // which it is a superset of — Google's own wording is "monetary and
+      // non-monetary". Asking for both would be asking twice for one thing.
+      // It is what revenue needs, and a channel outside the Partner Program
+      // can still grant it; it simply has no revenue behind it, which
+      // `verify` discovers and narrows away rather than refusing.
+      "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ],
-    scopeSummary: ["Read your YouTube channel's analytics"],
+    scopeSummary: ["Read your YouTube channel's analytics and estimated revenue"],
     empty: { channel_id: "" },
     selection: {
       label: "Which channel?",
@@ -427,10 +586,29 @@ export const youtube: ProviderAdapter<YouTubeCredentials> = {
     const today = ctx.now();
     await report(ctx, creds, today, today);
 
+    // The same day again, asking for revenue, purely to find out whether
+    // this channel has any. Most channels are not in the Partner Program
+    // and answer 403; that is a smaller catalogue, not a failed connection,
+    // so it narrows rather than throws. Telling a hobby creator their
+    // perfectly good channel is broken would be the worse answer.
+    let monetised = true;
+    let currency: string | null = null;
+    try {
+      const probe = await report(ctx, creds, today, today, true);
+      currency = probe.currency;
+    } catch (error) {
+      if (error instanceof ProviderError && error.code === "unsupported") {
+        monetised = false;
+        ctx.log("youtube channel has no revenue data", { channel: creds.channel_id });
+      } else {
+        throw error;
+      }
+    }
+
     return {
       accountLabel: entry.snippet?.title ?? creds.channel_id,
-      currency: null,
-      availableMetrics: SERVED,
+      currency,
+      availableMetrics: monetised ? SERVED : SERVED.filter((m) => !MONETARY_METRICS.has(m)),
     };
   },
 
@@ -454,25 +632,48 @@ async function timeSeries(
   creds: YouTubeCredentials,
   request: MetricRequest,
 ): Promise<RawSeries> {
+  const monetary = MONETARY_METRICS.has(request.metric);
   const windowMs = request.to.getTime() - request.from.getTime();
-  const rows = await report(ctx, creds, request.from, request.to);
-  const previousRows = request.comparePrevious
+  const current = await report(ctx, creds, request.from, request.to, monetary);
+  const previous = request.comparePrevious
     ? await report(
         ctx,
         creds,
         new Date(request.from.getTime() - windowMs),
         new Date(request.from.getTime() - 1),
+        monetary,
       )
     : null;
 
   return {
     unit: UNITS[request.metric] ?? "count",
-    currency: null,
-    points: bucket(rows, request.metric, request.granularity, request, ctx.timeZone),
-    value: figure(request.metric, sum(rows)),
-    previousValue: previousRows ? figure(request.metric, sum(previousRows)) : null,
-    note: LAG_NOTE,
+    currency: current.currency,
+    points: bucket(current.rows, request.metric, request.granularity, request, ctx.timeZone),
+    value: figure(request.metric, sum(current.rows)),
+    previousValue: previous ? figure(request.metric, sum(previous.rows)) : null,
+    note: note(ctx, monetary, current.currency),
   };
+}
+
+/**
+ * What the tile says under the number.
+ *
+ * The substitution is worth a sentence rather than a silent conversion: a
+ * figure in dollars under a heading that says the account is in rupees is
+ * the kind of wrong a user only catches by doing the arithmetic themselves.
+ */
+function note(ctx: AdapterContext, monetary: boolean, currency: string | null): string {
+  if (!monetary) return LAG_NOTE;
+  const substituted = currency !== null && currency !== ctx.preferredCurrency.toUpperCase();
+  return [
+    LAG_NOTE,
+    "Revenue is provisional until YouTube's month-end adjustment.",
+    substituted
+      ? `YouTube cannot report in ${ctx.preferredCurrency.toUpperCase()}, so this is ${currency}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /**
@@ -501,7 +702,8 @@ async function subscribers(
 
   let net: number | null = null;
   if (request.comparePrevious) {
-    const totals = sum(await report(ctx, creds, request.from, request.to));
+    const { rows } = await report(ctx, creds, request.from, request.to);
+    const totals = sum(rows);
     net = totals.subscribersGained - totals.subscribersLost;
   }
 
