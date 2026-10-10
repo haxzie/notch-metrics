@@ -26,6 +26,8 @@ export const ProviderId = z.enum([
   "polar",
   "paddle",
   "revenuecat",
+  // Commerce
+  "shopify",
   // Product analytics
   "posthog",
   "plausible",
@@ -102,6 +104,16 @@ export const MetricId = z.enum([
   "churned_subscribers",
   "trials",
   "recent_payments",
+  // Commerce
+  //
+  // A store's book is orders, not a subscription ledger. `customers` and
+  // `new_customers` are buyers, kept apart from the CRM's `contacts` below:
+  // a contact is somebody being marketed to, and reading one as the other
+  // next to a revenue tile is how a store overstates who has ever paid it.
+  "orders",
+  "average_order_value",
+  "customers",
+  "new_customers",
   // Product analytics
   "visitors",
   "pageviews",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
+import { toMinorUnits } from "../../normalise.ts";
 import type {
   AdapterContext,
   MetricRequest,
@@ -51,18 +52,15 @@ const REPORTING_CURRENCIES = new Set([
   "CHF",
 ]);
 
-/** ISO 4217 minor-unit exponents for the currencies above. Everything else is 2. */
-const ZERO_DECIMAL = new Set(["JPY", "KRW"]);
-
 /**
- * RevenueCat reports money as a decimal in major units. Ours is integer minor
- * units, so ¥1234 is 1234 and $12.34 is 1234 — the exponent depends on the
- * currency, not on the number.
+ * RevenueCat reports money as a decimal in major units; ours is integer minor
+ * units.
+ *
+ * Re-exported rather than defined here, which it used to be with a
+ * two-currency exception list. One table, so Shopify's ¥ and RevenueCat's
+ * cannot disagree about where the decimal point is.
  */
-export function toMinorUnits(amount: number, currency: string): number {
-  const exponent = ZERO_DECIMAL.has(currency.toUpperCase()) ? 0 : 2;
-  return Math.round(amount * 10 ** exponent);
-}
+export { toMinorUnits };
 
 interface Project {
   id: string;

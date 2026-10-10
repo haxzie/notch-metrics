@@ -3,12 +3,14 @@ import type { AdapterContext, HttpResponse } from "../src/types.ts";
 /**
  * A fake `http` that answers from a routing table instead of the network.
  *
- * Keys are matched as substrings of the full URL, longest first, so a test can
- * say `"/subscriptions?status=active"` without rebuilding Stripe's query
- * ordering.
+ * Keys are matched as substrings of the full URL *and* of a string request
+ * body, longest first, so a test can say `"/subscriptions?status=active"`
+ * without rebuilding Stripe's query ordering — and can route a GraphQL
+ * provider, where every call is a POST to the same URL, by its operation
+ * name.
  */
 export function stubContext(
-  routes: Record<string, unknown | ((url: URL) => unknown)>,
+  routes: Record<string, unknown | ((url: URL, init?: RequestInit) => unknown)>,
   overrides: Partial<AdapterContext> = {},
 ): AdapterContext & { calls: string[] } {
   const calls: string[] = [];
@@ -21,13 +23,18 @@ export function stubContext(
     preferredCurrency: "USD",
     signal: new AbortController().signal,
     log: () => {},
-    async http(url: string): Promise<HttpResponse> {
+    async http(url: string, init?: RequestInit): Promise<HttpResponse> {
       calls.push(url);
       const parsed = new URL(url);
-      const key = keys.find((k) => url.includes(k));
+      const sent = typeof init?.body === "string" ? init.body : "";
+      const haystack = `${url} ${sent}`;
+      const key = keys.find((k) => haystack.includes(k));
       if (key === undefined) throw new Error(`no stub for ${url}`);
       const entry = routes[key]!;
-      const body = typeof entry === "function" ? (entry as (u: URL) => unknown)(parsed) : entry;
+      const body =
+        typeof entry === "function"
+          ? (entry as (u: URL, i?: RequestInit) => unknown)(parsed, init)
+          : entry;
       if (body && typeof body === "object" && "__status" in body) {
         const status = (body as { __status: number }).__status;
         return {

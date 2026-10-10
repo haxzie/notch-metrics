@@ -75,6 +75,8 @@ public enum AppCatalog {
         MetricApp(
             id: "revenuecat", name: "RevenueCat", symbol: "cat.fill", accentHex: "F2545B"),
         MetricApp(
+            id: "shopify", name: "Shopify", symbol: "bag.fill", accentHex: "7AB55C"),
+        MetricApp(
             // Their full-colour mark is drawn for a dark backdrop, so the
             // accent is that backdrop and the orange — a colour *in* the mark
             // — stays as the chart line.

@@ -10,6 +10,9 @@ import { polar } from "./providers/polar/index.ts";
 import { paddle } from "./providers/paddle/index.ts";
 import { revenuecat } from "./providers/revenuecat/index.ts";
 
+// Commerce
+import { shopify } from "./providers/shopify/index.ts";
+
 // Product analytics
 import { posthog } from "./providers/posthog/index.ts";
 import { plausible } from "./providers/plausible/index.ts";
@@ -53,6 +56,7 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   polar,
   paddle,
   revenuecat,
+  shopify,
   posthog,
   plausible,
   mixpanel,

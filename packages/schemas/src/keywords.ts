@@ -18,6 +18,11 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   trials: ["free trial", "trialling", "evaluating"],
   recent_payments: ["payments", "transactions", "orders", "charges", "latest", "list", "feed"],
 
+  orders: ["sales", "purchases", "transactions", "checkouts", "volume", "store"],
+  average_order_value: ["aov", "basket", "cart", "average order", "order size", "spend"],
+  customers: ["buyers", "shoppers", "people", "store", "accounts"],
+  new_customers: ["first time", "buyers", "acquisition", "growth", "signups", "store"],
+
   visitors: ["users", "traffic", "uniques", "audience", "people"],
   pageviews: ["views", "hits", "traffic", "impressions"],
   sessions: ["visits", "traffic"],

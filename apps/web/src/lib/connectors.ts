@@ -37,6 +37,7 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
       { id: "dodopayments", name: "Dodo Payments", accentColor: "#111111", status: "stable" },
       { id: "lemonsqueezy", name: "Lemon Squeezy", accentColor: "#FFC233", status: "stable" },
       { id: "revenuecat", name: "RevenueCat", accentColor: "#F2545B", status: "stable" },
+      { id: "shopify", name: "Shopify", accentColor: "#7AB55C", status: "beta" },
     ],
   },
   {

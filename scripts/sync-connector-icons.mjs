@@ -37,6 +37,7 @@ const BRANDS = {
   lemonsqueezy: "Lemon Squeezy",
   paddle: "Paddle",
   revenuecat: "RevenueCat",
+  shopify: "Shopify",
   posthog: "PostHog",
   plausible: "Plausible Analytics",
   mixpanel: "Mixpanel",
