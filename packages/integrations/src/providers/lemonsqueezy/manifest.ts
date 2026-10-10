@@ -7,7 +7,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "Store revenue and subscriptions from Lemon Squeezy.",
   docsUrl: "https://app.lemonsqueezy.com/settings/api",
-  iconPath: "/providers/lemonsqueezy.svg",
+  iconPath: "/connectors/lemonsqueezy.svg",
   accentColor: "#FFC233",
   keywords: ["payments", "billing", "merchant of record", "store", "lemon"],
   authMode: "api_key",

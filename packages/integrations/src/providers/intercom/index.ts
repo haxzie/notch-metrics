@@ -9,7 +9,7 @@ export const manifest: ProviderManifest = {
   category: "crm",
   tagline: "Conversation volume and response load from Intercom.",
   docsUrl: "https://developers.intercom.com/docs/build-an-integration/learn-more/authentication",
-  iconPath: "/providers/intercom.svg",
+  iconPath: "/connectors/intercom.svg",
   accentColor: "#1F8DED",
   keywords: ["support", "chat", "inbox", "conversations", "helpdesk"],
   authMode: "oauth2",

@@ -9,7 +9,7 @@ export const manifest: ProviderManifest = {
   category: "analytics",
   tagline: "Privacy-friendly traffic numbers from Plausible.",
   docsUrl: "https://plausible.io/docs/stats-api",
-  iconPath: "/providers/plausible.svg",
+  iconPath: "/connectors/plausible.svg",
   accentColor: "#5850EC",
   keywords: ["web analytics", "privacy", "traffic", "visitors"],
   authMode: "api_key",

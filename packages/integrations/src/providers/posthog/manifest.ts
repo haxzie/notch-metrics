@@ -6,7 +6,7 @@ export const manifest: ProviderManifest = {
   category: "analytics",
   tagline: "Product analytics — users, events and conversion from PostHog.",
   docsUrl: "https://posthog.com/docs/api/personal-api-keys",
-  iconPath: "/providers/posthog.svg",
+  iconPath: "/connectors/posthog.svg",
   // The dark surface their full-colour mark is drawn against; the orange
   // is one of the colours *in* the mark, not a backdrop for it.
   accentColor: "#1D1D1D",

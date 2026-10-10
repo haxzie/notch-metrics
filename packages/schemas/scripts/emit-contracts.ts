@@ -65,7 +65,7 @@ const manifest: S.ProviderManifest = {
   category: "revenue",
   tagline: "Revenue, MRR and subscribers from your Stripe account.",
   docsUrl: "https://dashboard.stripe.com/apikeys",
-  iconPath: "/providers/stripe.svg",
+  iconPath: "/connectors/stripe.svg",
   accentColor: "#635BFF",
   authMode: "api_key",
   fields: [

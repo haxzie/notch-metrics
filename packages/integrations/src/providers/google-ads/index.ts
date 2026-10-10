@@ -9,7 +9,7 @@ export const manifest: ProviderManifest = {
   category: "marketing",
   tagline: "Spend, clicks and conversions from Google Ads.",
   docsUrl: "https://developers.google.com/google-ads/api/docs/start",
-  iconPath: "/providers/google-ads.svg",
+  iconPath: "/connectors/google-ads.svg",
   accentColor: "#4285F4",
   keywords: ["advertising", "ppc", "adwords", "google", "campaigns"],
   authMode: "oauth2",

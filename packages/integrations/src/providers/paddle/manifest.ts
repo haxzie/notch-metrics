@@ -7,7 +7,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "Subscriptions and revenue from Paddle Billing.",
   docsUrl: "https://developer.paddle.com/api-reference/about/authentication",
-  iconPath: "/providers/paddle.svg",
+  iconPath: "/connectors/paddle.svg",
   accentColor: "#FDDD35",
   keywords: ["payments", "billing", "merchant of record", "subscriptions"],
   authMode: "api_key",

@@ -9,7 +9,7 @@ export const manifest: ProviderManifest = {
   category: "analytics",
   tagline: "Events and active users from Mixpanel.",
   docsUrl: "https://developer.mixpanel.com/reference/service-accounts",
-  iconPath: "/providers/mixpanel.svg",
+  iconPath: "/connectors/mixpanel.svg",
   accentColor: "#7856FF",
   keywords: ["product analytics", "events", "funnels"],
   authMode: "api_key",

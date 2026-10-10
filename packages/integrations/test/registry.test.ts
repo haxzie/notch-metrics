@@ -16,6 +16,15 @@ describe("registry", () => {
     }
   });
 
+  it("every iconPath points at the path the website actually serves", () => {
+    // These lived at `/providers/<id>.svg` for eighteen connectors and the
+    // website has only ever served `/connectors/`. Nothing read the field,
+    // so nothing noticed.
+    for (const manifest of manifests()) {
+      expect(manifest.iconPath, manifest.id).toBe(`/connectors/${manifest.id}.svg`);
+    }
+  });
+
   it("no manifest allows a bare wildcard host", () => {
     for (const manifest of manifests()) {
       expect(manifest.allowedHosts, manifest.id).not.toContain("*");

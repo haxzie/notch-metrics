@@ -7,7 +7,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "Revenue and subscriptions from your Polar storefront.",
   docsUrl: "https://polar.sh/docs/integrate/authentication",
-  iconPath: "/providers/polar.svg",
+  iconPath: "/connectors/polar.svg",
   // Polar has no brand colour: the mark is `currentColor`, black on light
   // and white on dark, over their own near-black. The blue that was here
   // belongs to Polars, the dataframe library at pola.rs.

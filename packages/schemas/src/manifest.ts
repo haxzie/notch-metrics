@@ -94,8 +94,17 @@ export const ProviderManifest = z.object({
   tagline: z.string(),
   /** Where to find the API key, linked from the connect sheet. */
   docsUrl: z.url(),
-  /** Resolved against the assets host, so a new provider's logo ships with the
-   *  manifest rather than with the app. */
+  /**
+   * The connector's mark, resolved against the *website* — not the assets
+   * host, which only mirrors releases and 404s these.
+   *
+   * Served rather than bundled so a new provider's logo ships with the
+   * manifest rather than with the app. Both clients currently resolve the
+   * mark from the connector id instead, so this is belt and braces for one
+   * that cannot; `registry.test.ts` pins it to the path that actually
+   * serves, because a field nothing reads is a field nothing notices has
+   * gone stale.
+   */
   iconPath: z.string(),
   accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   /** What someone might call this app other than its name — "payments",

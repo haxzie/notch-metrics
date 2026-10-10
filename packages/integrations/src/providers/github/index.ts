@@ -35,7 +35,7 @@ export const manifest: ProviderManifest = {
   category: "developer",
   tagline: "Stars, forks and open work, per repository.",
   docsUrl: "https://docs.github.com/en/rest/metrics",
-  iconPath: "/providers/github.svg",
+  iconPath: "/connectors/github.svg",
   // The brand black. The catalogue renders the mark on a light tile rather
   // than white on this, which is how GitHub itself shows the logo.
   accentColor: "#181717",
