@@ -21,6 +21,18 @@ BETTER_AUTH_SECRET=
 #
 # No "Authorised JavaScript origin" is needed; the exchange is server-side.
 #
+# This one client is also what every Google *connector* authorises against —
+# Google issues a client per project, not per API — so each connector's APIs
+# have to be enabled on that project or it 403s with a message that reads
+# like a bad token:
+#
+#   Analytics        Google Analytics Data API, Google Analytics Admin API
+#   Search Console   Google Search Console API
+#   YouTube          YouTube Data API v3, YouTube Analytics API
+#
+# Their scopes also need listing on the consent screen, or Google drops them
+# from the grant and the connector authorises into a 403.
+#
 # Leave both empty to run without Google sign-in — email sign-in is enabled
 # automatically when API_URL is not production.
 GOOGLE_CLIENT_ID=

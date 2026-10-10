@@ -64,7 +64,13 @@ export interface RawListItem {
 }
 
 export interface RawSeries {
-  unit: "currency" | "count" | "ratio";
+  /**
+   * A subset of `MetricUnit`: no `bytes`, because nothing fetched over HTTP
+   * from a SaaS API is a size. `duration` is seconds — the Mac formatter
+   * divides by 60 and 3600 — so a provider reporting minutes converts here
+   * rather than leaving the tile to read "45s" for forty-five minutes.
+   */
+  unit: "currency" | "count" | "ratio" | "duration";
   /** Required when unit is `currency`; null when the account mixes currencies. */
   currency: string | null;
   /** Minor units when currency. Integers — see packages/schemas/src/money.ts. */

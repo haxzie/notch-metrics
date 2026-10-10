@@ -31,4 +31,5 @@ export const MARKS: ReadonlySet<string> = new Set([
   "posthog",
   "revenuecat",
   "stripe",
+  "youtube",
 ]);

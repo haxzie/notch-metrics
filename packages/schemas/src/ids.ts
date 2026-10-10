@@ -36,6 +36,7 @@ export const ProviderId = z.enum([
   "google-search-console",
   "google-ads",
   "meta-ads",
+  "youtube",
   // CRM
   "hubspot",
   "intercom",
@@ -117,6 +118,19 @@ export const MetricId = z.enum([
   "average_position",
   "ad_spend",
   "ad_conversions",
+  // Audience and content
+  //
+  // `subscribers` is a channel's audience, not a billing book —
+  // `active_subscribers` above is the one that costs money. Two ids rather
+  // than one because a tile reading "Subscribers" next to a revenue figure
+  // and a tile reading it next to watch time are different numbers, and
+  // sharing the id would let a widget swap between them silently.
+  "subscribers",
+  "views",
+  "watch_time",
+  "average_view_duration",
+  "likes",
+  "comments",
   // Developer
   "stars",
   "forks",

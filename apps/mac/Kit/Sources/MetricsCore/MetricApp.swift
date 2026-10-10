@@ -95,6 +95,8 @@ public enum AppCatalog {
         MetricApp(
             id: "meta-ads", name: "Meta Ads", symbol: "bubble.left.and.bubble.right.fill", accentHex: "0866FF"),
         MetricApp(
+            id: "youtube", name: "YouTube", symbol: "play.rectangle.fill", accentHex: "FF0000"),
+        MetricApp(
             id: "hubspot", name: "HubSpot", symbol: "person.crop.circle.badge.checkmark", accentHex: "FF7A59"),
         MetricApp(
             id: "intercom", name: "Intercom", symbol: "message.fill", accentHex: "1F8DED"),

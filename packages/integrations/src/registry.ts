@@ -21,6 +21,7 @@ import { googleAnalytics } from "./providers/google-analytics/index.ts";
 import { googleSearchConsole } from "./providers/google-search-console/index.ts";
 import { googleAds } from "./providers/google-ads/index.ts";
 import { metaAds } from "./providers/meta-ads/index.ts";
+import { youtube } from "./providers/youtube/index.ts";
 
 // CRM
 import { hubspot } from "./providers/hubspot/index.ts";
@@ -60,6 +61,7 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   "google-search-console": googleSearchConsole,
   "google-ads": googleAds,
   "meta-ads": metaAds,
+  youtube,
   hubspot,
   intercom,
   github,

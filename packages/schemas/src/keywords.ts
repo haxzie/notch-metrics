@@ -34,6 +34,13 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   ad_spend: ["budget", "cost", "advertising", "marketing spend", "ppc"],
   ad_conversions: ["advertising", "roas", "campaign", "ppc"],
 
+  subscribers: ["subs", "audience", "channel", "youtube", "followers", "fans"],
+  views: ["plays", "watches", "youtube", "video", "traffic"],
+  watch_time: ["watched", "minutes watched", "hours", "youtube", "retention"],
+  average_view_duration: ["avd", "retention", "youtube", "how long"],
+  likes: ["thumbs up", "reactions", "engagement"],
+  comments: ["replies", "engagement", "discussion"],
+
   contacts: ["crm", "leads", "people", "customers"],
   new_contacts: ["leads", "crm", "acquisition", "signups"],
   open_deals: ["pipeline", "opportunities", "crm", "sales"],
