@@ -31,6 +31,59 @@ export function bucketStart(date: Date, granularity: Granularity, timeZone: stri
   }
 }
 
+/**
+ * The instant at which a zone's wall clock reads `fields`.
+ *
+ * The inverse of `bucketStart`, and here beside it for that reason. A
+ * provider that buckets server-side hands back a label with no offset in it
+ * — Plausible's `2026-10-05 14:00:00` — and reading that as UTC puts the bar
+ * in the wrong bucket for every user west of Greenwich.
+ */
+export function instantOfWallClock(
+  fields: { year: number; month: number; day: number; hour?: number; minute?: number },
+  timeZone: string,
+): Date {
+  const naive = Date.UTC(
+    fields.year,
+    fields.month - 1,
+    fields.day,
+    fields.hour ?? 0,
+    fields.minute ?? 0,
+  );
+  // Twice, not once. The offset has to be sampled at an instant, and the
+  // first guess can land on the wrong side of a DST change — an hour out,
+  // which for an hourly bucket is the whole bucket. The second pass samples
+  // within an hour of the answer, which no real zone transition spans.
+  let at = naive - offsetOf(new Date(naive), timeZone);
+  at = naive - offsetOf(new Date(at), timeZone);
+  return new Date(at);
+}
+
+/** How far ahead of UTC `timeZone` is at `at`, in milliseconds. */
+function offsetOf(at: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(at);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const wall = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    // en-CA with hour12: false renders midnight as hour 24.
+    get("hour") % 24,
+    get("minute"),
+    get("second"),
+  );
+  return wall - at.getTime();
+}
+
 function advance(date: Date, granularity: Granularity): Date {
   const next = new Date(date);
   switch (granularity) {

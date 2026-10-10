@@ -48,9 +48,9 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
     label: "Product analytics",
     connectors: [
       { id: "posthog", name: "PostHog", accentColor: "#1D1D1D", status: "beta" },
-      { id: "plausible", name: "Plausible", accentColor: "#5850EC", status: "coming_soon" },
+      { id: "plausible", name: "Plausible", accentColor: "#5850EC", status: "beta" },
       { id: "mixpanel", name: "Mixpanel", accentColor: "#7856FF", status: "coming_soon" },
-      { id: "amplitude", name: "Amplitude", accentColor: "#1E61F0", status: "coming_soon" },
+      { id: "amplitude", name: "Amplitude", accentColor: "#1E61F0", status: "beta" },
       {
         id: "google-analytics",
         name: "Google Analytics",
