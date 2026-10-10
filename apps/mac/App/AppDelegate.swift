@@ -2,6 +2,7 @@ import AppKit
 import OSLog
 import MetricsAPI
 import MetricsCore
+import NotchUI
 import SwiftUI
 
 @MainActor
@@ -9,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let env = AppEnvironment()
     private var statusItem: NSStatusItem?
     private lazy var gallery = WidgetGalleryWindowController(env: env)
+    private lazy var share = ShareWindowController(env: env)
     /// The catalogue, kept warm so a drop can turn "stripe/mrr" into a widget
     /// without waiting on a round trip at the moment the pointer lets go.
     private let dropCatalogue = WidgetCatalogueModel()
@@ -31,6 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         env.notch.onConfigureWidget = { [weak self] widget in
             self?.beginConfiguring(widget.id)
+        }
+
+        // The request arrives fully resolved — widget, app, state, connection
+        // name — because only the notch has all four. See `ShareRequest`.
+        env.notch.onShareWidget = { [weak self] request in
+            self?.share.show(request)
         }
 
         env.notch.onAddWidget = { [weak self] in
@@ -59,6 +67,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_GALLERY"] == "1" {
             gallery.show()
             Task { await dropCatalogue.load(env: env) }
+        }
+
+        // The share editor is otherwise only reachable by hovering a tile and
+        // clicking a badge that appears on hover — which a screenshot cannot
+        // do, because taking one moves the pointer.
+        if let wanted = ProcessInfo.processInfo.environment["NOTCH_DEBUG_SHARE"], !wanted.isEmpty {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                let widgets = env.layoutModel.layout.widgets
+                // `1` picks the first widget; any other value is a metric id,
+                // for framing a particular tile.
+                let target =
+                    wanted == "1" ? widgets.first : widgets.first { $0.metric == wanted }
+                if let target { openShare(for: target) }
+            }
         }
 
         // The configure pane is otherwise only reachable by dropping a widget
@@ -120,6 +143,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // tile is a poor first run.
         beginConfiguring(widget.id)
         return true
+    }
+
+    /// Opens the share editor on a widget, resolving what the notch would
+    /// have passed in. Only for `NOTCH_DEBUG_SHARE` — in normal use the
+    /// request comes from the canvas, which already holds all of this.
+    private func openShare(for widget: NotchWidget) {
+        share.show(
+            ShareRequest(
+                widget: widget,
+                app: widget.app(),
+                state: env.states[widget.id] ?? .loading))
     }
 
     /// Opens the configure pane on a widget, animated.

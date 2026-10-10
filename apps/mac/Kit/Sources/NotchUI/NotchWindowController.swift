@@ -16,6 +16,8 @@ public final class NotchWindowController {
 
     public var onOpenSettings: () -> Void = {}
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
+    /// Opens the share editor on a tile. See `ShareRequest`.
+    public var onShareWidget: (ShareRequest) -> Void = { _ in }
     public var onAddWidget: () -> Void = {}
 
     /// The controls shown in the notch's configure pane. See
@@ -187,6 +189,9 @@ public final class NotchWindowController {
         viewModel.onOpenSettings = { [weak self] in self?.onOpenSettings() }
         viewModel.onConfigureWidget = { [weak self] widget in
             self?.onConfigureWidget(widget)
+        }
+        viewModel.onShareWidget = { [weak self] request in
+            self?.onShareWidget(request)
         }
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
         viewModel.configuratorPanel = configuratorPanel

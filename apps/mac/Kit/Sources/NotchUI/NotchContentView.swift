@@ -48,6 +48,7 @@ public struct NotchContentView: View {
     private var isPinned: Bool { view.isPinned }
     private var onOpenSettings: () -> Void { view.onOpenSettings }
     private var onConfigureWidget: (NotchWidget) -> Void { view.onConfigureWidget }
+    private var onShareWidget: (ShareRequest) -> Void { view.onShareWidget }
     private var onAddWidget: () -> Void { view.onAddWidget }
     private var onRefresh: () -> Void { view.onRefresh }
     private var onTogglePin: () -> Void { view.onTogglePin }
@@ -177,6 +178,7 @@ public struct NotchContentView: View {
             connectionNames: view.connectionNames,
             timeWindowedMetrics: view.timeWindowedMetrics,
             onConfigureWidget: onConfigureWidget,
+            onShareWidget: onShareWidget,
             onDropWidget: view.onDropWidget)
             // The well, not the tiles, is what has to clear the panel edge —
             // so the tiles are inset by the margin the well wants *plus* the
@@ -640,6 +642,9 @@ public struct NotchWidgetCanvas: View {
     public var timeWindowedMetrics: Set<String> = []
     /// Opens the app on a widget's configuration.
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
+    /// Opens the share editor on a widget, with everything it is currently
+    /// drawing. See `ShareRequest`.
+    public var onShareWidget: (ShareRequest) -> Void = { _ in }
     /// A payload dropped from the gallery, with the reading-order index it
     /// landed on. Returns false when it did not produce a widget.
     public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
@@ -674,6 +679,7 @@ public struct NotchWidgetCanvas: View {
         connectionNames: [String: String] = [:],
         timeWindowedMetrics: Set<String> = [],
         onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
+        onShareWidget: @escaping (ShareRequest) -> Void = { _ in },
         onDropWidget: @escaping (String, Int) -> Bool = { _, _ in false }
     ) {
         self.model = model
@@ -682,6 +688,7 @@ public struct NotchWidgetCanvas: View {
         self.connectionNames = connectionNames
         self.timeWindowedMetrics = timeWindowedMetrics
         self.onConfigureWidget = onConfigureWidget
+        self.onShareWidget = onShareWidget
         self.onDropWidget = onDropWidget
     }
 
@@ -750,15 +757,30 @@ public struct NotchWidgetCanvas: View {
                     // badges do not sit under the top-trailing resize handle
                     // when a widget is both hovered and selected.
                     .overlay(alignment: .topTrailing) {
-                        if model.isEditing, hoveredID == widget.id {
+                        if hoveredID == widget.id {
                             HStack(spacing: 4) {
-                                TileBadge(symbol: "slider.horizontal.3", help: "Configure") {
-                                    onConfigureWidget(widget)
-                                }
-                                TileBadge(symbol: "xmark", help: "Remove this widget") {
-                                    if selectedID == widget.id { selectedID = nil }
-                                    hoveredID = nil
-                                    model.remove(widget.id)
+                                if model.isEditing {
+                                    TileBadge(symbol: "slider.horizontal.3", help: "Configure") {
+                                        onConfigureWidget(widget)
+                                    }
+                                    TileBadge(symbol: "xmark", help: "Remove this widget") {
+                                        if selectedID == widget.id { selectedID = nil }
+                                        hoveredID = nil
+                                        model.remove(widget.id)
+                                    }
+                                } else {
+                                    // Share is the one affordance that belongs
+                                    // outside edit mode: it does not change
+                                    // the widget, and asking somebody to enter
+                                    // a rearranging mode to take a picture
+                                    // would put the dotted well and the resize
+                                    // handles between them and the thing they
+                                    // wanted to post.
+                                    TileBadge(
+                                        symbol: "square.and.arrow.up", help: "Share this metric"
+                                    ) {
+                                        onShareWidget(shareRequest(for: widget))
+                                    }
                                 }
                             }
                             .padding(6)
@@ -827,7 +849,11 @@ public struct NotchWidgetCanvas: View {
             // that never arrived. One point tested against `grid.rect` cannot
             // disagree with itself.
             .onContinuousHover(coordinateSpace: .named("notch-grid")) { phase in
-                guard model.isEditing, model.draggingID == nil else {
+                // Tracked in both modes now. Edit mode gets Configure and
+                // Remove; a plain hover gets Share. The guard is only about a
+                // gesture owning the pointer — a tile following the cursor is
+                // not hovering the cell it is passing over.
+                guard model.draggingID == nil, model.resizingID == nil else {
                     hoveredID = nil
                     return
                 }
@@ -884,6 +910,21 @@ public struct NotchWidgetCanvas: View {
         }
         // The viewport. The content inside is as tall as the flow needs.
         .frame(height: Self.viewportHeight(rows: model.visibleRows))
+    }
+
+    /// Everything the share editor needs about one tile, resolved here.
+    ///
+    /// The canvas is the only place that holds the widget, the app it resolved
+    /// to, the state it is drawing and the connection's name all at once —
+    /// passing an id upwards would make the app target re-derive four things
+    /// it would then have to keep in step with how the tile actually rendered.
+    private func shareRequest(for widget: NotchWidget) -> ShareRequest {
+        ShareRequest(
+            widget: widget,
+            app: widget.app(overrides: appOverrides),
+            state: states[widget.id] ?? .loading,
+            connectionName: widget.integrationId.flatMap { connectionNames[$0] },
+            showsRange: widget.metricKey.map(timeWindowedMetrics.contains) ?? false)
     }
 
     /// The recessed surface the tiles sit on in edit mode.

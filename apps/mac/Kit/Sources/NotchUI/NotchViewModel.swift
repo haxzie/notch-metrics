@@ -102,6 +102,10 @@ public final class NotchViewModel {
     public var onRefresh: @MainActor () -> Void = {}
     /// Opens the app on this widget's configuration.
     public var onConfigureWidget: @MainActor (NotchWidget) -> Void = { _ in }
+    /// Opens the share editor on a tile, with the number it is showing right
+    /// now. The request carries the resolved app and state rather than an id,
+    /// because the notch is the only place that has both — see `ShareRequest`.
+    public var onShareWidget: @MainActor (ShareRequest) -> Void = { _ in }
     /// Opens the gallery of widgets that can be added.
     public var onAddWidget: @MainActor () -> Void = {}
     /// A widget dragged out of the gallery and dropped on the grid.
