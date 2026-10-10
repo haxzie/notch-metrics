@@ -19,6 +19,20 @@ public final class NotchWindowController {
     /// Opens the share editor on a tile. See `ShareRequest`.
     public var onShareWidget: (ShareRequest) -> Void = { _ in }
     public var onAddWidget: () -> Void = {}
+    /// Starts the browser sign-in handshake. Owned by the app target, which
+    /// is where the PKCE challenge and the website's URL live.
+    public var onSignIn: () -> Void = {}
+
+    /// Whether there is an account behind the numbers. The notch shows the
+    /// sign-in panel in place of the grid when there is not.
+    public var isSignedIn: Bool = true {
+        didSet { view?.isSignedIn = isSignedIn }
+    }
+
+    /// Whether the browser handshake is out. See `NotchViewModel`.
+    public var isSigningIn: Bool = false {
+        didSet { view?.isSigningIn = isSigningIn }
+    }
 
     /// The controls shown in the notch's configure pane. See
     /// `NotchViewModel.configuratorPanel`.
@@ -34,9 +48,23 @@ public final class NotchWindowController {
         set { view?.configuringID = newValue }
     }
 
+    /// Whether that widget arrived from the browser a moment ago. The form
+    /// reads this to leave out controls that make no sense before the widget
+    /// has been added — see `NotchViewModel.configuringIsNew`.
+    public var configuringIsNew: Bool { view?.configuringIsNew ?? false }
+
+    /// The widget browser shown in the notch. See
+    /// `NotchViewModel.browserPanel`.
+    public var browserPanel: @MainActor () -> AnyView = { AnyView(EmptyView()) } {
+        didSet { view?.browserPanel = browserPanel }
+    }
+
     /// Opens the configure pane, remembering what the widget looked like so
     /// Cancel has something to put back.
-    public func beginConfiguring(_ id: String) {
+    ///
+    /// `isNew` is for a widget the browser has just put on the grid: the pane
+    /// commits with Add, and Cancel removes it again.
+    public func beginConfiguring(_ id: String, isNew: Bool = false) {
         guard let view else { return }
         // The snapshot is best-effort; the pane opens either way. Refusing to
         // open because the widget could not be resolved *here* made this fail
@@ -45,8 +73,15 @@ public final class NotchWindowController {
         // configure button that does nothing.
         view.configuringSnapshot = model.layout.widgets.first { $0.id == id }
         view.configuringID = id
+        view.configuringIsNew = isNew
+        // The pane replaces the browser, which is where this was picked.
+        view.isBrowsing = false
+        // The pointer is over the browser's list, which the pane has just
+        // replaced — so without the hold the exit watch collapses the form
+        // within a tick of it appearing.
+        holdOpenForPane()
     }
-    public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
+
     public var onRefresh: () -> Void = {}
 
     /// What the SwiftUI tree reads. Mutating this updates the notch in place;
@@ -70,11 +105,11 @@ public final class NotchWindowController {
     private let model: NotchLayoutModel
     private var settings: AppSettings
 
-    /// True while *this* object holds the pin on behalf of the configure
-    /// pane, as opposed to the user having clicked the pin themselves.
-    /// Without the distinction, closing the pane would quietly unpin a notch
-    /// the user had pinned by hand.
-    private var pinnedForConfiguring = false
+    /// True while *this* object holds the pin on behalf of a pane — the
+    /// browser or the configure form — as opposed to the user having pinned
+    /// the notch themselves. Without the distinction, closing a pane would
+    /// quietly unpin a notch that edit mode had pinned.
+    private var pinnedForPane = false
 
     public init(model: NotchLayoutModel, settings: AppSettings = AppSettings()) {
         self.model = model
@@ -194,12 +229,14 @@ public final class NotchWindowController {
             self?.onShareWidget(request)
         }
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
+        viewModel.onSignIn = { [weak self] in self?.onSignIn() }
+        viewModel.isSignedIn = isSignedIn
+        viewModel.isSigningIn = isSigningIn
         viewModel.configuratorPanel = configuratorPanel
-        viewModel.onDropWidget = { [weak self] payload, index in
-            self?.onDropWidget(payload, index) ?? false
-        }
+        viewModel.browserPanel = browserPanel
         viewModel.onRefresh = { [weak self] in self?.onRefresh() }
-        viewModel.onEndConfiguring = { [weak self] in self?.configuringEnded() }
+        viewModel.onEndConfiguring = { [weak self] in self?.paneEnded() }
+        viewModel.onEndBrowsing = { [weak self] in self?.paneEnded() }
         viewModel.onTogglePin = { [weak self] in self?.togglePin() }
         viewModel.onClose = { [weak self] in self?.close() }
         self.view = viewModel
@@ -351,7 +388,12 @@ public final class NotchWindowController {
             // exactly as Done does.
             view.configuringID = nil
             view.configuringSnapshot = nil
-            self.pinnedForConfiguring = false
+            view.configuringIsNew = false
+            // Same reasoning for the browser: reopening on somebody's
+            // half-scrolled widget list rather than on their numbers is not
+            // what the next hover was asking for.
+            view.isBrowsing = false
+            self.pinnedForPane = false
         }
         if animated {
             withAnimation(NotchMotion.collapse(reduceMotion: reduceMotion)) { apply() }
@@ -372,68 +414,47 @@ public final class NotchWindowController {
         collapse(animated: true)
     }
 
-    /// Holds the notch open and in edit mode while a tile is being dragged
-    /// out of the gallery.
+    /// Opens the widget browser in the notch.
     ///
-    /// Only for the drag, not for the whole time the gallery is up: the
-    /// gallery collapses the notch when it opens and after each drop, so the
-    /// two are not both on screen at once.
-    ///
-    /// A drag from another window takes the pointer nowhere near the notch,
-    /// so the exit watch would collapse the drop target the moment the drag
-    /// started. Pinning is the same mechanism edit mode already uses.
-    public func holdOpenForGallery(_ open: Bool) {
+    /// Leaves edit mode: the browser replaces the grid, so the handles and the
+    /// dotted well behind it would be arranging something nobody can see.
+    public func beginBrowsing() {
         guard let view else { return }
-        if open {
-            // A drag needs the grid, and the configure pane *replaces* the
-            // grid. Left up, the tile being carried in had nothing to land
-            // on: the drop bounced back and the notch looked like it would
-            // only ever open on somebody else's half-finished form.
-            view.configuringID = nil
-            view.configuringSnapshot = nil
-            pinnedForConfiguring = false
-            expand()
-            view.isPinned = true
-            model.isEditing = true
-            hover?.cancelPendingCollapse()
-        } else if view.configuringID != nil {
-            // The gallery is going away mid-configuration — a drop, then Done
-            // on the gallery before the pane was finished with. Collapsing
-            // here would take the form with it.
-            handOffToConfiguring()
-        } else {
-            view.isPinned = false
-            collapseIfUnpinned()
-        }
+        view.configuringID = nil
+        view.configuringSnapshot = nil
+        view.configuringIsNew = false
+        expand()
+        model.isEditing = false
+        // The pane swap animates from the view, which watches `isBrowsing` —
+        // see `expandedContent`.
+        view.isBrowsing = true
+        holdOpenForPane()
     }
 
-    /// Hands the notch from the gallery's drag hold to the configure pane the
-    /// drop just opened.
+    /// Keeps the notch open while a pane — the browser, the configure form —
+    /// is up.
     ///
-    /// Stays expanded, and stays pinned: the pointer is at the bottom of the
-    /// screen where the gallery is, nowhere near the panel, so the exit watch
-    /// would collapse the pane within a tick of it appearing. The pin is
-    /// released when the pane closes.
-    public func handOffToConfiguring() {
-        guard let view, view.configuringID != nil else {
-            close()
-            return
+    /// A pane is read and typed into, not hovered over: the pointer sits
+    /// still inside a scroll view or leaves for the keyboard, and either way
+    /// the exit watch would collapse the panel out from under it. The pin is
+    /// given back in `paneEnded`, and only if it was taken here — edit mode
+    /// pins on its own, and stealing credit for that pin would unpin a notch
+    /// this object never pinned.
+    private func holdOpenForPane() {
+        guard let view else { return }
+        if !view.isPinned {
+            view.isPinned = true
+            pinnedForPane = true
         }
-        expand()
-        view.isPinned = true
-        pinnedForConfiguring = true
-        // The pane replaces the grid, so the handles behind it would be
-        // editing nothing.
-        model.isEditing = false
         hover?.cancelPendingCollapse()
     }
 
-    /// The configure pane closed — Done or Cancel. Gives back a pin taken on
-    /// its behalf so hover owns the notch again; the exit watch's poll
-    /// collapses it a tick later if the pointer has gone elsewhere.
-    private func configuringEnded() {
-        guard pinnedForConfiguring else { return }
-        pinnedForConfiguring = false
+    /// A pane closed — Done, Add or Cancel. Gives back a pin taken on its
+    /// behalf so hover owns the notch again; the exit watch's poll collapses
+    /// it a tick later if the pointer has gone elsewhere.
+    private func paneEnded() {
+        guard pinnedForPane else { return }
+        pinnedForPane = false
         view?.isPinned = false
     }
 

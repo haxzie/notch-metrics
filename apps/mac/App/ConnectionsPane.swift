@@ -75,7 +75,8 @@ struct ConnectionsPane: View {
             }
         }
         .formStyle(.grouped)
-        .task { await model.load(env: env) }
+        // See AppsPane: reloads when the account picture changes.
+        .task(id: env.catalogueRevision) { await model.load(env: env) }
         .sheet(item: $renaming) { connection in
             RenameSheet(
                 name: $draftName,

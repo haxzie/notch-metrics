@@ -114,17 +114,7 @@ struct AccountPane: View {
     }
 
     private func beginSignIn() {
-        do {
-            let url = try AuthCoordinator().signInURL(appBase: AppEnvironment.appURL)
-            signInError = nil
-            env.signInStarted()
-            NSWorkspace.shared.open(url)
-        } catch {
-            // Writing the pending challenge is what fails here, and silently
-            // opening the browser anyway would strand the user on the same
-            // unhelpful page.
-            signInError = "Could not start sign-in. Check that Notch Metrics can write to Application Support."
-        }
+        signInError = env.beginSignIn()
     }
 }
 

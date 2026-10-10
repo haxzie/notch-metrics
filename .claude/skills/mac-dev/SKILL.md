@@ -52,16 +52,16 @@ it needs no scheme, so CI does not have to generate the project to run it.
 
 The notch is awkward to inspect because it hides when the pointer leaves it.
 
-| Variable                | Effect                                                       |
-| ----------------------- | ------------------------------------------------------------ |
-| `NOTCH_DEBUG_EXPAND=1`  | Open and **pin** the notch at launch.                        |
-| `NOTCH_DEBUG_EDIT=1`    | Start in edit mode — dotted grid, resize handles.            |
-| `NOTCH_DEBUG_DEMO=1`    | Plausible numbers instead of "Sign in". For screenshots.     |
-| `NOTCH_DEBUG_GALLERY=1` | Open the Add Widgets gallery at launch.                      |
-| `NOTCH_DEBUG_CONFIG=…`  | Configure pane: `1` for one with no account, or a metric id. |
-| `NOTCH_DEBUG_SHARE=…`   | Share editor: `1` for the first widget, or a metric id.      |
-| `NOTCH_SUPPORT_DIR=…`   | Point Application Support somewhere disposable.              |
-| `NOTCH_RUNNER_PATH=…`   | Use a locally built custom-metric runner.                    |
+| Variable               | Effect                                                       |
+| ---------------------- | ------------------------------------------------------------ |
+| `NOTCH_DEBUG_EXPAND=1` | Open and **pin** the notch at launch.                        |
+| `NOTCH_DEBUG_EDIT=1`   | Start in edit mode — dotted grid, resize handles.            |
+| `NOTCH_DEBUG_DEMO=1`   | Plausible numbers instead of "Sign in". For screenshots.     |
+| `NOTCH_DEBUG_BROWSE=1` | Open the widget browser in the notch at launch.              |
+| `NOTCH_DEBUG_CONFIG=…` | Configure pane: `1` for one with no account, or a metric id. |
+| `NOTCH_DEBUG_SHARE=…`  | Share editor: `1` for the first widget, or a metric id.      |
+| `NOTCH_SUPPORT_DIR=…`  | Point Application Support somewhere disposable.              |
+| `NOTCH_RUNNER_PATH=…`  | Use a locally built custom-metric runner.                    |
 
 `NOTCH_DEBUG_EXPAND` pins rather than merely expanding, and that matters: the
 exit watch installed on expand finds the pointer elsewhere and collapses within

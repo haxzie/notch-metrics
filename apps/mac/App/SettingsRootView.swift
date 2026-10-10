@@ -10,7 +10,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     /// renamed to Apps.
     ///
     /// `widgets` and `custom-metrics` are parked rather than removed. Widgets
-    /// are added from the gallery now and the pane is gone, but those links
+    /// are added in the notch now and the pane is gone, but those links
     /// are in the website and in old connect-flow return URLs — and a link to
     /// a pane that no longer exists should land on the nearest thing rather
     /// than nowhere.

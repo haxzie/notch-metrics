@@ -51,6 +51,18 @@ public final class NotchViewModel {
     /// True while a manual refresh is in flight, so the button can say so.
     public var isRefreshing = false
 
+    /// Whether there is an account behind the numbers.
+    ///
+    /// Defaults to true so a signed-in user never sees the sign-in panel
+    /// flash on the way past: the app only knows the answer after reading the
+    /// Keychain, which is async, and the honest "not yet known" state looks
+    /// exactly like "signed out" if it is drawn.
+    public var isSignedIn = true
+
+    /// True while the browser handshake is out. The panel says so rather than
+    /// leaving a button that has visibly done nothing for ten seconds.
+    public var isSigningIn = false
+
     /// True while a gesture owns the pointer — a handle drag, a tile being
     /// moved or resized.
     ///
@@ -93,9 +105,38 @@ public final class NotchViewModel {
         AnyView(EmptyView())
     }
 
-    /// The configure pane closed itself — Done or Cancel. The controller may
-    /// be holding the notch open on the pane's behalf and needs to let go.
+    /// True when the widget being configured was *just* added from the
+    /// browser, so the pane commits with Add and Cancel takes it back out.
+    ///
+    /// The widget is already on the grid by then — it has to be, or the
+    /// preview behind the pane would be of a tile that does not exist — so
+    /// what Add confirms is the configuration, and what Cancel undoes is the
+    /// whole addition.
+    public var configuringIsNew = false
+
+    /// The configure pane closed itself — Done, Add or Cancel. The controller
+    /// may be holding the notch open on the pane's behalf and needs to let go.
     public var onEndConfiguring: @MainActor () -> Void = {}
+
+    /// True while the notch is showing the widget browser instead of the grid.
+    ///
+    /// Browsing used to be a window of its own, flush with the bottom of the
+    /// screen, which put the widgets being chosen and the notch they were
+    /// going into at opposite edges of the display — and made adding one a
+    /// drag across the whole screen. Same move as the configure pane: the
+    /// notch is the thing being changed, so it hosts this too.
+    public var isBrowsing = false
+
+    /// The browser's sidebar, search field and widget list.
+    ///
+    /// Supplied by the app target for the same reason `configuratorPanel` is:
+    /// it needs the server's catalogue and the user's connections. NotchUI
+    /// owns the panel it sits in and nothing inside it.
+    public var browserPanel: @MainActor () -> AnyView = { AnyView(EmptyView()) }
+
+    /// Browsing ended — Done, or a widget was picked. As with the configure
+    /// pane, the controller may be holding the notch open for it.
+    public var onEndBrowsing: @MainActor () -> Void = {}
 
     public var onOpenSettings: @MainActor () -> Void = {}
     /// Fetch every tile again, now.
@@ -106,14 +147,10 @@ public final class NotchViewModel {
     /// now. The request carries the resolved app and state rather than an id,
     /// because the notch is the only place that has both — see `ShareRequest`.
     public var onShareWidget: @MainActor (ShareRequest) -> Void = { _ in }
-    /// Opens the gallery of widgets that can be added.
+    /// Opens the browser of widgets that can be added.
     public var onAddWidget: @MainActor () -> Void = {}
-    /// A widget dragged out of the gallery and dropped on the grid.
-    ///
-    /// The payload is opaque here on purpose: turning "stripe/mrr" into a
-    /// `NotchWidget` needs the server's catalogue, which belongs to the app
-    /// target. NotchUI only knows where it landed.
-    public var onDropWidget: @MainActor (String, Int) -> Bool = { _, _ in false }
+    /// Starts the browser sign-in handshake.
+    public var onSignIn: @MainActor () -> Void = {}
     public var onTogglePin: @MainActor () -> Void = {}
     public var onClose: @MainActor () -> Void = {}
 

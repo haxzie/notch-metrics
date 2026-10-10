@@ -9,11 +9,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let env = AppEnvironment()
     private var statusItem: NSStatusItem?
-    private lazy var gallery = WidgetGalleryWindowController(env: env)
     private lazy var share = ShareWindowController(env: env)
-    /// The catalogue, kept warm so a drop can turn "stripe/mrr" into a widget
-    /// without waiting on a round trip at the moment the pointer lets go.
-    private let dropCatalogue = WidgetCatalogueModel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Accessory, not regular: no Dock icon, no app menu. It flips to
@@ -31,8 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return AnyView(EmptyView()) }
             return AnyView(WidgetConfigPanel(widgetId: widget.id).environment(self.env))
         }
+        // Browsing is a pane in the notch for the same reason configuring is.
+        // Both need the catalogue, which is why both come from here.
+        env.notch.browserPanel = { [weak self] in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(WidgetBrowserPane().environment(self.env))
+        }
         env.notch.onConfigureWidget = { [weak self] widget in
-            self?.beginConfiguring(widget.id)
+            self?.env.beginConfiguring(widget.id)
         }
 
         // The request arrives fully resolved — widget, app, state, connection
@@ -42,13 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         env.notch.onAddWidget = { [weak self] in
-            guard let self else { return }
-            self.gallery.show()
-            Task { await self.dropCatalogue.load(env: self.env) }
+            self?.env.notch.beginBrowsing()
         }
 
-        env.notch.onDropWidget = { [weak self] payload, index in
-            self?.addDroppedWidget(payload, at: index) ?? false
+        env.notch.onSignIn = { [weak self] in
+            self?.env.beginSignIn()
         }
 
         env.notch.onRefresh = { [weak self] in
@@ -61,12 +61,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installMainMenu()
         updateStatusItem()
 
-        // The gallery is otherwise only reachable by hovering the notch,
+        // The browser is otherwise only reachable by hovering the notch,
         // entering edit mode and clicking — none of which a screenshot or a
-        // first look at the layout can do.
-        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_GALLERY"] == "1" {
-            gallery.show()
-            Task { await dropCatalogue.load(env: env) }
+        // first look at the layout can do. Deferred, because `beginBrowsing`
+        // needs the panel, and the panel is built in `env.start()`.
+        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_BROWSE"] == "1" {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                env.notch.beginBrowsing()
+            }
         }
 
         // The share editor is otherwise only reachable by hovering a tile and
@@ -84,8 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // The configure pane is otherwise only reachable by dropping a widget
-        // or clicking a tile's sliders, neither of which a screenshot can do.
+        // The configure pane is otherwise only reachable by picking a widget
+        // in the browser or clicking a tile's sliders, neither of which a
+        // screenshot can do.
         if let wanted = ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONFIG"], !wanted.isEmpty {
             Task { @MainActor in
                 // Long enough for the layout to have loaded: beginConfiguring
@@ -100,49 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     wanted == "1"
                     ? widgets.first { $0.integrationId == nil } ?? widgets.first
                     : widgets.first { $0.metric == wanted }
-                if let target { beginConfiguring(target.id) }
+                if let target { env.beginConfiguring(target.id) }
             }
         }
-    }
-
-    /// Turns a dragged payload into a widget on the grid.
-    ///
-    /// Returns false when the catalogue has not loaded or does not know the
-    /// metric, so the drop animates back to the gallery rather than silently
-    /// doing nothing.
-    private func addDroppedWidget(_ payload: String, at index: Int) -> Bool {
-        guard let parsed = GalleryPayload.decode(payload),
-              let entry = dropCatalogue.entry(parsed.connector),
-              let metric = entry.metrics.first(where: { $0.id == parsed.metric })
-        else { return false }
-
-        var widget = NotchWidget(
-            id: "w_\(UUID().uuidString.prefix(8))",
-            kind: .providerMetric,
-            appId: entry.id,
-            // Whatever is already connected, so a drop lands on real numbers
-            // when there is only one account — which is the common case.
-            integrationId: entry.connections.first?.id,
-            metric: metric.id,
-            title: metric.shortLabel,
-            size: .wide,
-            granularity: metric.granularities.first ?? .day,
-            range: .month,
-            chart: metric.supportsSeries ? .sparkline : .none,
-            format: WidgetFormat(compact: true))
-
-        guard env.layoutModel.add(widget) else { return false }
-        // Dropped *here*, not appended: `add` puts it on the end, and the
-        // pointer was somewhere specific.
-        env.layoutModel.move(widget.id, toIndex: index)
-        widget = env.layoutModel.layout.widgets.first { $0.id == widget.id } ?? widget
-
-        Task { await env.refresh() }
-        // Straight into configuration: a widget with no account renders as
-        // "Pick a connection", and dropping one only to be shown a broken
-        // tile is a poor first run.
-        beginConfiguring(widget.id)
-        return true
     }
 
     /// Opens the share editor on a widget, resolving what the notch would
@@ -154,17 +118,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 widget: widget,
                 app: widget.app(),
                 state: env.states[widget.id] ?? .loading))
-    }
-
-    /// Opens the configure pane on a widget, animated.
-    ///
-    /// Also leaves edit mode: the pane replaces the grid, so the handles and
-    /// the dotted well behind it would be configuring nothing.
-    private func beginConfiguring(_ id: String) {
-        env.layoutModel.isEditing = false
-        withAnimation(.snappy(duration: 0.28)) {
-            env.notch.beginConfiguring(id)
-        }
     }
 
     /// Closing the settings window must not quit an app whose whole point is
@@ -188,6 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "auth":
                 Task { await handleAuthCallback(url) }
             case "connected":
+                // A new account exists. Reload everything built from the
+                // catalogue, and point any widget that was waiting for its
+                // provider's only account at it.
+                env.catalogueChanged()
+                Task { if await env.adoptConnections() { await env.refresh() } }
                 // The browser finished a connect flow. Land on Integrations
                 // so the newly connected account is visible rather than
                 // leaving the user to go looking for it.

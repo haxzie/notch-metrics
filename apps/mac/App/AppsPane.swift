@@ -54,7 +54,10 @@ struct AppsPane: View {
             }
         }
         .formStyle(.grouped)
-        .task { await model.load(env: env) }
+        // Keyed on the revision, so signing in or finishing a connect
+        // flow reloads this list rather than leaving the signed-out
+        // answer on screen until the window is closed and reopened.
+        .task(id: env.catalogueRevision) { await model.load(env: env) }
         .refreshable { await model.load(env: env) }
     }
 

@@ -29,10 +29,10 @@ control that lies rather than a build that fails.
 | `supportsCompare` | With `supportsSeries`, decides whether **Range** is shown at all.  |
 | `unit`            | How the number is formatted. `currency` means **minor units**.     |
 | `shortLabel`      | The title on the tile. It has about 14 characters.                 |
-| `label`           | The name in the gallery and the configure pane's header.           |
+| `label`           | The name in the widget browser and the configure pane's header.    |
 | `methodology`     | Always shown, under Data. This is where "ours differs from theirs" |
 | `granularities`   | Only read when there is a series. See the trap below.              |
-| `keywords`        | Gallery search. Central ones are in `keywords.ts`.                 |
+| `keywords`        | Browser search. Central ones are in `keywords.ts`.                 |
 
 **The rule that matters:** `supportsSeries: false` **and**
 `supportsCompare: false` means the configure pane shows no Range and no Chart,

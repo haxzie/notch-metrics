@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MetricsAPI
 import MetricsCore
@@ -20,7 +21,36 @@ final class AppEnvironment {
 
     private(set) var settings = AppSettings()
     private(set) var states: [String: TileState] = [:]
-    private(set) var isSignedIn = false
+
+    /// Bumped whenever the server's idea of the user's connections may have
+    /// changed — a sign-in, a connect flow coming back.
+    ///
+    /// Every catalogue-backed view loads once in a `.task` and then never
+    /// again, so signing in left the Apps pane, the connections list and the
+    /// widget browser showing the signed-out answer — no accounts — until
+    /// they were closed and reopened. They key their `.task` on this instead.
+    private(set) var catalogueRevision = 0
+
+    /// Every connected account's id, by provider.
+    ///
+    /// A by-product of the labels fetch rather than a request of its own.
+    /// Two things need it: pointing a widget at its only account, and
+    /// telling "nothing connected" apart from "connected, but this widget
+    /// has not been pointed at one".
+    private(set) var connectionsByProvider: [String: [String]] = [:]
+
+    /// Something changed server-side; reload anything built from the
+    /// catalogue.
+    func catalogueChanged() { catalogueRevision += 1 }
+
+    /// Plausible numbers, no account, no network. For screenshots.
+    static var isDemo: Bool { ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" }
+    private(set) var isSignedIn = false {
+        // The notch shows the sign-in panel in place of the grid, so it has
+        // to hear about this the moment it changes rather than on the next
+        // refresh — which, signed out, never comes.
+        didSet { notch.isSignedIn = isSignedIn }
+    }
 
     /// Where a sign-in attempt has got to.
     ///
@@ -34,7 +64,9 @@ final class AppEnvironment {
         case failed(String)
     }
 
-    private(set) var signIn: SignInState = .idle
+    private(set) var signIn: SignInState = .idle {
+        didSet { notch.isSigningIn = signIn == .waiting }
+    }
 
     func signInStarted() {
         signIn = .waiting
@@ -49,6 +81,31 @@ final class AppEnvironment {
 
     func signInFinished(error: String?) {
         signIn = error.map(SignInState.failed) ?? .idle
+    }
+
+    /// Opens the browser on the sign-in page, challenge and state included.
+    ///
+    /// One implementation for the Settings pane and the notch's sign-in
+    /// panel. Opening `/desktop/auth` bare is what this used to do from one
+    /// of them, and the page can only answer "this link is missing
+    /// information" — nothing about the button looked wrong, which is why it
+    /// survived. A second call site would have been a second chance to do it.
+    ///
+    /// Returns the local failure, if the challenge could not be written.
+    @discardableResult
+    func beginSignIn() -> String? {
+        do {
+            let url = try AuthCoordinator().signInURL(appBase: Self.appURL)
+            signInStarted()
+            NSWorkspace.shared.open(url)
+            return nil
+        } catch {
+            // Writing the pending challenge is what fails here, and silently
+            // opening the browser anyway would strand the user on a page that
+            // cannot complete.
+            return "Could not start sign-in. Check that Notch Metrics can write to "
+                + "Application Support."
+        }
     }
 
     /// Which settings pane to show. Driven by `notchmetrics://settings/<pane>`
@@ -78,7 +135,12 @@ final class AppEnvironment {
     init() {
         try? AppPaths.ensureDirectories()
 
-        let secrets = KeychainSecretStore()
+        // Demo mode never touches the Keychain. Every read of it — the
+        // token on each API call, a plugin's secret — prompts when the item
+        // belongs to a differently-signed build of this app, and that dialog
+        // lands on top of the screenshot demo mode exists to take, having
+        // already blocked launch waiting for an answer.
+        let secrets: any SecretStore = Self.isDemo ? InMemorySecretStore() : KeychainSecretStore()
         self.secrets = secrets
         self.auth = AuthStore(secrets: secrets)
         self.api = APIClient(baseURL: Self.apiURL, tokens: auth)
@@ -109,7 +171,7 @@ final class AppEnvironment {
         // a new user's notch was full of an app they had never connected and
         // every tile said "Connect Stripe". The empty state in NotchPanel
         // says what to do instead.
-        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" {
+        if Self.isDemo {
             layoutModel.replace(with: Self.demoLayout())
             // Demo mode never refreshes, so the titles would otherwise miss
             // the time window a live notch shows — and a screenshot of the
@@ -117,12 +179,67 @@ final class AppEnvironment {
             Task { await refreshMetricWindows() }
         }
 
-        states = ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1"
+        states = Self.isDemo
             ? Self.demoStates(for: layoutModel.layout)
             : Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
         notch.update(states: states)
 
+        // Demo mode has numbers without an account, and the sign-in panel
+        // would replace the very screenshot it exists to produce. Only the
+        // notch's copy of the flag: everything else that reads `isSignedIn`
+        // decides whether to hit the network, which demo mode must not.
+        if Self.isDemo { notch.isSignedIn = true }
+
         startRefreshing()
+
+        // Signing in is the moment every catalogue-backed view is wrong: it
+        // was rendered against an anonymous catalogue with no accounts in it.
+        if isSignedIn {
+            catalogueChanged()
+            Task { if await adoptConnections() { await refresh() } }
+        }
+    }
+
+    /// Points a widget with no account at the only one its provider has.
+    ///
+    /// A widget added while signed out has no `integrationId` — there were
+    /// no accounts to choose from at the time — and nothing bound it
+    /// afterwards, so the tile sat on "Connect Stripe" with Stripe plainly
+    /// connected, and the only way out was opening the configure pane and
+    /// picking the one option.
+    ///
+    /// Only when the choice is unambiguous. With two accounts there is a
+    /// right answer and this does not know it, so that tile says "Pick a
+    /// connection" and waits. Custom metrics are left alone: they have no
+    /// integration by design.
+    @discardableResult
+    func adoptConnections() async -> Bool {
+        guard isSignedIn else { return false }
+        if connectionsByProvider.isEmpty { await refreshConnectionNames() }
+
+        var changed = false
+        for widget in layoutModel.layout.widgets
+        where widget.kind == .providerMetric && widget.integrationId?.isEmpty != false {
+            guard let ids = connectionsByProvider[widget.appId], ids.count == 1 else { continue }
+            var next = widget
+            next.integrationId = ids[0]
+            layoutModel.update(next)
+            changed = true
+        }
+        return changed
+    }
+
+    /// Opens the notch's configure pane on a widget.
+    ///
+    /// Also leaves edit mode: the pane replaces the grid, so the handles and
+    /// the dotted well behind it would be arranging something nobody can see.
+    /// `isNew` marks a widget the browser has just added, which the pane
+    /// commits with Add rather than Done.
+    func beginConfiguring(_ id: String, isNew: Bool = false) {
+        layoutModel.isEditing = false
+        withAnimation(.snappy(duration: 0.28)) {
+            notch.beginConfiguring(id, isNew: isNew)
+        }
     }
 
     // MARK: - Real numbers
@@ -136,7 +253,7 @@ final class AppEnvironment {
     /// defeats the per-integration spacing that keeps us inside a provider's
     /// rate limit.
     func startRefreshing() {
-        guard ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] != "1" else { return }
+        guard !Self.isDemo else { return }
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -187,6 +304,8 @@ final class AppEnvironment {
         notch.update(
             connectionNames: Dictionary(
                 uniqueKeysWithValues: all.map { ($0.id, $0.label) }))
+        connectionsByProvider = Dictionary(grouping: all, by: \.provider)
+            .mapValues { $0.map(\.id) }
     }
 
     /// Tells the notch which metrics depend on a time window, so those tiles
@@ -219,6 +338,12 @@ final class AppEnvironment {
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
     /// added so a new tile fills in rather than sitting on "Loading".
     func refresh() async {
+        // Demo mode draws its own numbers and must not reach the network for
+        // real ones. The poll already skips it; this covers every other way
+        // in — the refresh button, and the connection adoption that follows
+        // a sign-in.
+        guard !Self.isDemo else { return }
+
         // Alongside, not awaited: the tiles should not wait on the labels to
         // show their numbers.
         Task { await refreshConnectionNames() }
@@ -234,14 +359,23 @@ final class AppEnvironment {
         }
 
         // A widget that lost its account keeps its last number otherwise —
-        // a figure on screen attributed to nothing. Say what it needs instead.
+        // a figure on screen attributed to nothing. Say what it needs instead,
+        // and say the right one: a provider with no account at all needs
+        // connecting, while one that has accounts needs a choice. Both used
+        // to read "Connect Stripe", which is the wrong instruction for the
+        // second and the reason a signed-in notch could look signed out.
         let fetchable = Set(widgets.map(\.id))
         for widget in layoutModel.layout.widgets where !fetchable.contains(widget.id) {
-            states[widget.id] = .needsSetup("Pick a connection")
+            let app = AppCatalog.resolve(widget.appId)
+            states[widget.id] =
+                connectionsByProvider[widget.appId]?.isEmpty == false
+                ? .needsSetup("Pick a connection")
+                : .needsSetup("Connect \(app.name)")
         }
 
         guard !widgets.isEmpty else {
-            states = Self.placeholderStates(for: layoutModel.layout, signedIn: true)
+            // Not `placeholderStates`: that answers for every widget at once
+            // and would overwrite what the loop above just worked out.
             notch.update(states: states)
             return
         }

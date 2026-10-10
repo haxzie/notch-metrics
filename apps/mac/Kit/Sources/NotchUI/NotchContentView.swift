@@ -1,3 +1,4 @@
+import AppKit
 import MetricsCore
 import SwiftUI
 
@@ -123,10 +124,12 @@ public struct NotchContentView: View {
             header
             content
             // The handle sets how many rows are on screen, which is not a
-            // thing the configure pane has.
-            if configuring == nil { grabber }
+            // thing either pane has.
+            if configuring == nil, !view.isBrowsing, view.isSignedIn { grabber }
         }
         .animation(.snappy(duration: 0.28), value: view.configuringID)
+        .animation(.snappy(duration: 0.28), value: view.isBrowsing)
+        .animation(.snappy(duration: 0.28), value: view.isSignedIn)
     }
 
     /// The widget being configured, resolved against the live layout.
@@ -137,7 +140,20 @@ public struct NotchContentView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let widget = configuring {
+        if !view.isSignedIn {
+            // Before anything else, including the panes. A grid of tiles all
+            // reading "Sign in" said the same thing eight times and still
+            // left the user to work out where to do it.
+            SignedOutNotch(isSigningIn: view.isSigningIn, onSignIn: view.onSignIn)
+                .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+                .padding(.top, NotchWidgetCanvas.contentTop)
+                .padding(.bottom, Self.configureBottomInset)
+                .frame(height: Self.signedOutBodyHeight + NotchWidgetCanvas.contentTop
+                    + Self.configureBottomInset)
+                .transition(.opacity)
+        } else if view.isBrowsing {
+            browser
+        } else if let widget = configuring {
             WidgetConfigurePane(
                 widget: widget,
                 app: AppCatalog.resolve(widget.appId, overrides: appOverrides),
@@ -172,14 +188,34 @@ public struct NotchContentView: View {
         }
     }
 
+    /// Every widget that can be added, in the notch rather than in a window.
+    ///
+    /// The list itself comes from the app target — it needs the catalogue and
+    /// the connections. All this owns is the height, the insets and the way in
+    /// and out, which is exactly the split the configure pane uses.
+    private var browser: some View {
+        view.browserPanel()
+            .frame(height: Self.browseBodyHeight)
+            .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+            .padding(.top, NotchWidgetCanvas.contentTop)
+            // No grabber under this one either, so it owns its bottom margin.
+            .padding(.bottom, Self.configureBottomInset)
+            // The same arrival as the configure pane: in from the right, out
+            // by fading. Add Widget and a tile's sliders both move you
+            // *forward* into a pane, and the two should feel alike.
+            .transition(
+                .asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .opacity))
+    }
+
     private var grid: some View {
         NotchWidgetCanvas(
             model: model, states: states, appOverrides: appOverrides,
             connectionNames: view.connectionNames,
             timeWindowedMetrics: view.timeWindowedMetrics,
             onConfigureWidget: onConfigureWidget,
-            onShareWidget: onShareWidget,
-            onDropWidget: view.onDropWidget)
+            onShareWidget: onShareWidget)
             // The well, not the tiles, is what has to clear the panel edge —
             // so the tiles are inset by the margin the well wants *plus* the
             // distance the well extends past them.
@@ -220,7 +256,9 @@ public struct NotchContentView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NotchTheme.secondaryText)
 
-            refreshButton
+            // Both are about numbers there are none of yet. Settings stays:
+            // it is the way to the account pane and to quitting.
+            if view.isSignedIn { refreshButton }
             headerButton("gearshape", help: "Settings", action: onOpenSettings)
 
             Spacer(minLength: 0)
@@ -232,11 +270,26 @@ public struct NotchContentView: View {
             // camera housing on a notched display, so the text was half
             // hidden on exactly the machines this app is for — and the
             // selection outline and handles say what to do without words.
-            if configuring != nil {
+            if !view.isSignedIn {
+                // Nothing to edit, add or finish. The panel's own button is
+                // the only thing to press.
+                EmptyView()
+            } else if view.isBrowsing {
+                backFromBrowsingButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            } else if configuring != nil {
                 cancelConfiguringButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
-                doneConfiguringButton
-                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                // Add rather than Done for a widget that arrived from the
+                // browser a moment ago: the pane is the last step of adding
+                // it, not a visit to something already in the notch.
+                if view.configuringIsNew {
+                    addConfiguredButton
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                } else {
+                    doneConfiguringButton
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                }
             } else {
                 // Only in edit mode, beside Done. Adding a widget is a thing
                 // you do *while* arranging them, and a permanent button here
@@ -317,9 +370,6 @@ public struct NotchContentView: View {
         .animation(.easeOut(duration: 0.14), value: model.isEditing)
     }
 
-    /// Opens the gallery. Labelled, like Done, because the two read as a pair.
-    /// Leaves configuration. The same shape as Done in edit mode, because it
-    /// is the same idea: finish here and go back to the grid.
     /// Puts the widget back as it was and leaves.
     ///
     /// Left of Done, which is where the system puts the action that is not the
@@ -328,6 +378,29 @@ public struct NotchContentView: View {
     /// setting it up.
     private var cancelConfiguringButton: some View {
         Button {
+            if view.configuringIsNew {
+                // Picking a widget in the browser puts it on the grid
+                // straight away, because the pane previews the real tile.
+                // Cancel therefore has to take it back out — leaving it
+                // behind would mean "Cancel" added a widget.
+                if let id = view.configuringID { model.remove(id) }
+                withAnimation(.snappy(duration: 0.26)) {
+                    // Back to the list that was open, not to the grid: this
+                    // is "not that one", and the next thing wanted is almost
+                    // always another widget.
+                    //
+                    // Cleared by hand rather than through `endConfiguring`,
+                    // which tells the controller the pane is finished with —
+                    // and the controller answers that by handing the notch
+                    // back to hover. The browser is still up and still needs
+                    // holding open, so the hold has to stay where it is.
+                    view.configuringID = nil
+                    view.configuringSnapshot = nil
+                    view.configuringIsNew = false
+                    view.isBrowsing = true
+                }
+                return
+            }
             if let snapshot = view.configuringSnapshot { model.update(snapshot) }
             withAnimation(.snappy(duration: 0.26)) { endConfiguring() }
         } label: {
@@ -349,13 +422,70 @@ public struct NotchContentView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(NotchTheme.secondaryText)
-        .help("Discard these changes")
+        .help(view.configuringIsNew ? "Do not add this widget" : "Discard these changes")
     }
 
     private func endConfiguring() {
         view.configuringID = nil
         view.configuringSnapshot = nil
+        view.configuringIsNew = false
         view.onEndConfiguring()
+    }
+
+    /// Finishes adding a widget the browser just put on the grid.
+    ///
+    /// It confirms rather than inserts — the tile is already there. The label
+    /// is what the user is doing, not what the code is doing.
+    private var addConfiguredButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.26)) { endConfiguring() }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text("Add")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(NotchTheme.editHighlight.opacity(0.9)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.white)
+        .help("Add this widget to the notch")
+    }
+
+    /// Leaves the browser for the grid.
+    ///
+    /// Back rather than Done, and quiet rather than prominent: browsing
+    /// changes nothing on its own — adding happens on the pane after it — so
+    /// a blue confirm button here promised a commit that was not waiting to
+    /// be made. The same shape as the configure pane's Cancel, because both
+    /// are the way out of a pane and back to where you were.
+    private var backFromBrowsingButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.26)) {
+                view.isBrowsing = false
+                view.onEndBrowsing()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Back")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.1)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(NotchTheme.secondaryText)
+        .help("Back to the notch")
     }
 
     private var doneConfiguringButton: some View {
@@ -394,7 +524,7 @@ public struct NotchContentView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(NotchTheme.secondaryText)
-        .help("Browse widgets and drag one in")
+        .help("Browse widgets and add one")
     }
 
     /// Fetch every tile again, now.
@@ -573,20 +703,35 @@ public struct NotchContentView: View {
         // its own inset. Adding `grabberHeight` to both was counting a
         // control that is not on screen, which is space the form could not
         // use and padding the eye could not see.
-        let content: CGFloat =
-            configuring != nil
-            ? NotchWidgetCanvas.contentTop + configureBodyHeight + Self.configureBottomInset
-            : NotchWidgetCanvas.contentTop
+        let content: CGFloat
+        if !view.isSignedIn {
+            content =
+                NotchWidgetCanvas.contentTop + Self.signedOutBodyHeight
+                + Self.configureBottomInset
+        } else if view.isBrowsing {
+            content =
+                NotchWidgetCanvas.contentTop + Self.browseBodyHeight + Self.configureBottomInset
+        } else if configuring != nil {
+            content =
+                NotchWidgetCanvas.contentTop + configureBodyHeight + Self.configureBottomInset
+        } else {
+            content =
+                NotchWidgetCanvas.contentTop
                 + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
                 + NotchWidgetCanvas.contentBottom
                 + Self.grabberHeight
+        }
+        // Less the ears, which the panel frame adds back — the window is a
+        // fixed 900 and a body at the cap would push them outside it, where
+        // they are clipped away again.
+        let widest = NotchPanel.maxSize.width - Self.earOverhang
         return CGSize(
-            // Less the ears, which the panel frame adds back — the window is
-            // a fixed 900 and a body at the cap would push them outside it,
-            // where they are clipped away again.
-            width: min(
-                NotchPanel.maxSize.width - Self.earOverhang,
-                max(560, geometry.notchRect.width + 480)),
+            // The browser takes all of it. A sidebar, a search field and a
+            // grid of cards in the width a row of tiles needs leaves two
+            // columns of widgets to choose from.
+            width: view.isBrowsing
+                ? widest
+                : min(widest, max(560, geometry.notchRect.width + 480)),
             height: min(NotchPanel.maxSize.height, headerHeight + content)
         )
     }
@@ -605,6 +750,24 @@ public struct NotchContentView: View {
         guard measured > 0 else { return Self.configureFallbackHeight }
         return min(max(measured, Self.configureFallbackHeight), Self.configureMaxHeight)
     }
+
+    /// How tall the sign-in panel is.
+    ///
+    /// Taller than the message strictly needs. At the height of the text the
+    /// panel read as an error bar dropped out of the bezel rather than as the
+    /// app's front door, and the button — the only thing to do here — sat
+    /// squeezed against the bottom edge.
+    static let signedOutBodyHeight: CGFloat = 210
+
+    /// How tall the browser opens.
+    ///
+    /// Fixed rather than measured, unlike the configure form: the list is as
+    /// long as the catalogue and would ask for the whole screen if allowed
+    /// to. It scrolls, so the number only has to be enough to see two rows of
+    /// cards and a few connectors at once — and it has to leave the panel
+    /// under `NotchPanel.maxSize.height`, which is the window the notch is
+    /// drawn in.
+    static let browseBodyHeight: CGFloat = 440
 
     /// Used until the form has laid out once.
     static let configureFallbackHeight: CGFloat = 300
@@ -645,9 +808,6 @@ public struct NotchWidgetCanvas: View {
     /// Opens the share editor on a widget, with everything it is currently
     /// drawing. See `ShareRequest`.
     public var onShareWidget: (ShareRequest) -> Void = { _ in }
-    /// A payload dropped from the gallery, with the reading-order index it
-    /// landed on. Returns false when it did not produce a widget.
-    public var onDropWidget: (String, Int) -> Bool = { _, _ in false }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -666,9 +826,11 @@ public struct NotchWidgetCanvas: View {
     /// other half of the jitter.
     @State private var lastCell: GridCell?
     @State private var selectedID: String?
-    /// True while a gallery drag is over the grid.
-    @State private var isDropTargeted = false
     @State private var hoveredID: String?
+    /// The local key monitor that watches for Delete while something is
+    /// selected. Installed on selection and torn down with it — see
+    /// `watchForDelete`.
+    @State private var deleteKeyMonitor: Any?
     /// Where the pointer was when the span last changed, for hysteresis.
     @State private var resizeAnchorCell: CGPoint?
 
@@ -679,8 +841,7 @@ public struct NotchWidgetCanvas: View {
         connectionNames: [String: String] = [:],
         timeWindowedMetrics: Set<String> = [],
         onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
-        onShareWidget: @escaping (ShareRequest) -> Void = { _ in },
-        onDropWidget: @escaping (String, Int) -> Bool = { _, _ in false }
+        onShareWidget: @escaping (ShareRequest) -> Void = { _ in }
     ) {
         self.model = model
         self.states = states
@@ -689,7 +850,6 @@ public struct NotchWidgetCanvas: View {
         self.timeWindowedMetrics = timeWindowedMetrics
         self.onConfigureWidget = onConfigureWidget
         self.onShareWidget = onShareWidget
-        self.onDropWidget = onDropWidget
     }
 
     public var body: some View {
@@ -813,6 +973,17 @@ public struct NotchWidgetCanvas: View {
                     // spring's duration.
                     .animation(isDragging ? nil : .snappy(duration: 0.2), value: frame)
                     .animation(.easeOut(duration: 0.12), value: hoveredID)
+                    // Declared before the single tap so SwiftUI gives the
+                    // double click a chance to claim the press.
+                    .onTapGesture(count: 2) {
+                        // The other way into edit mode is a half-second
+                        // long press, which nobody discovers, or the button
+                        // in the header, which is nowhere near the tile you
+                        // want to move. A double click lands on the tile
+                        // itself and selects it on the way in.
+                        model.isEditing = true
+                        selectedID = widget.id
+                    }
                     .onTapGesture {
                         guard model.isEditing else { return }
                         // Exactly one selection at a time: tapping a
@@ -835,6 +1006,8 @@ public struct NotchWidgetCanvas: View {
             .onChange(of: model.isEditing) { _, editing in
                 if !editing { selectedID = nil }
             }
+            .onChange(of: selectedID) { _, id in watchForDelete(id) }
+            .onDisappear { watchForDelete(nil) }
             .frame(
                 width: grid.contentSize.width, height: grid.contentSize.height,
                 alignment: .topLeading)
@@ -873,32 +1046,6 @@ public struct NotchWidgetCanvas: View {
             // tile and the band only ever appeared above the first row.
             .padding(Self.editInset)
             .background { if model.isEditing { well } }
-            // Dropping is how a widget gets in from the gallery. The index is
-            // computed from the same `grid` the tiles are drawn with, so a
-            // widget lands where the pointer let go rather than on the end.
-            .dropDestination(for: String.self) { payloads, location in
-                guard let payload = payloads.first else { return false }
-                let inGrid = CGPoint(
-                    x: location.x - Self.editInset, y: location.y - Self.editInset)
-                let cell = grid.gridPoint(at: inGrid)
-                let index = GridPacker.index(
-                    at: cell, in: model.displayed, excluding: "")
-                return onDropWidget(payload, index)
-            } isTargeted: { targeted in
-                // Edit mode for the duration: the well is the only thing on
-                // screen that says "this is a grid and it takes tiles", and a
-                // drop onto a plain row of numbers looks like nothing.
-                if targeted { model.isEditing = true }
-                isDropTargeted = targeted
-            }
-            .overlay {
-                if isDropTargeted {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(NotchTheme.editHighlight, lineWidth: 2)
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeOut(duration: 0.12), value: isDropTargeted)
             }
             // A tile being dragged must not also scroll the view under it —
             // the drag's own vertical movement would be read as a scroll and
@@ -910,6 +1057,37 @@ public struct NotchWidgetCanvas: View {
         }
         // The viewport. The content inside is as tall as the flow needs.
         .frame(height: Self.viewportHeight(rows: model.visibleRows))
+    }
+
+    /// Watches for Delete while `id` is selected, and removes that widget.
+    ///
+    /// A local `NSEvent` monitor rather than `onKeyPress`, which needs the
+    /// view to hold focus — and the notch is a non-activating panel with no
+    /// focus ring, no text field and nothing a user would think to click to
+    /// give it focus. Re-installed on every selection change so the closure
+    /// always holds the current id rather than the one captured when the
+    /// grid first appeared.
+    ///
+    /// Torn down the moment nothing is selected, so a Delete pressed in
+    /// somebody's editor is not swallowed by a notch they are not looking at.
+    private func watchForDelete(_ id: String?) {
+        if let deleteKeyMonitor {
+            NSEvent.removeMonitor(deleteKeyMonitor)
+            self.deleteKeyMonitor = nil
+        }
+        guard let id else { return }
+        deleteKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // 51 is Delete, 117 is the forward Delete on a full keyboard.
+            // Both read as "remove this"; neither has another meaning in a
+            // panel with no text in it.
+            guard event.keyCode == 51 || event.keyCode == 117 else { return event }
+            selectedID = nil
+            hoveredID = nil
+            model.remove(id)
+            // Swallowed: handing it on would let the key reach whatever is
+            // behind the notch, which is somebody else's document.
+            return nil
+        }
     }
 
     /// Everything the share editor needs about one tile, resolved here.
@@ -1090,6 +1268,73 @@ public struct NotchWidgetCanvas: View {
 }
 
 
+/// What the notch says when nobody is signed in.
+///
+/// The grid is replaced rather than filled with tiles that each say "Sign
+/// in": the number of widgets somebody happens to have is not how many times
+/// they should be asked, and a tile is not a place anyone looks for a button.
+private struct SignedOutNotch: View {
+    let isSigningIn: Bool
+    let onSignIn: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            NotchLogo(size: 26)
+            Text("Sign in to see your numbers")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(NotchTheme.primaryText)
+                .padding(.top, 10)
+            Text("Your revenue, traffic and support figures, in the notch.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(NotchTheme.secondaryText)
+                .padding(.top, 3)
+            signInButton
+                .padding(.top, 14)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black.opacity(0.12)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    /// Deliberately the largest thing in the panel. It is the only action
+    /// available, and everything else here is explaining it.
+    private var signInButton: some View {
+        Button(action: onSignIn) {
+            HStack(spacing: 7) {
+                if isSigningIn {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                    Text("Waiting for the browser…")
+                        .font(.system(size: 13, weight: .semibold))
+                } else {
+                    Text("Sign in")
+                        .font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 12, weight: .bold))
+                }
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(NotchTheme.editHighlight))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isSigningIn)
+        // The handshake happens in a browser, which is a window away — so the
+        // button says where it is going before it goes.
+        .help("Opens your browser to sign in")
+        .animation(.easeOut(duration: 0.15), value: isSigningIn)
+    }
+}
+
 /// What the notch says before anything is in it.
 private struct EmptyNotch: View {
     var body: some View {
@@ -1100,7 +1345,7 @@ private struct EmptyNotch: View {
             Text("No widgets yet")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NotchTheme.secondaryText)
-            Text("Edit the notch, then Add Widget")
+            Text("Press Edit Widgets, then Add Widget")
                 .font(.system(size: 10.5))
                 .foregroundStyle(NotchTheme.tertiaryText)
         }
@@ -1271,12 +1516,29 @@ private struct TileBadge: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.black.opacity(0.78))
-                .frame(width: 17, height: 17)
-                .background(Circle().fill(isHovered ? Color.white : Color.white.opacity(0.88)))
-                .overlay(Circle().strokeBorder(.black.opacity(0.18), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                // Bigger than the 8pt it was. A glyph this small inside a
+                // circle this small reads as a dot with something in it,
+                // and the share arrow in particular was unrecognisable.
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.white.opacity(isHovered ? 1 : 0.92))
+                .frame(width: 25, height: 25)
+                // The notch's own recipe: frosted glass with a dark tint over
+                // it. The material alone goes milky over a bright tile and
+                // the glyph stops reading; the tint is what keeps the white
+                // legible. A white disc was the only light thing on a panel
+                // made of smoked glass, which is why it sat on the tile
+                // rather than belonging to it.
+                .background(
+                    Circle()
+                        .fill(NotchTheme.surfaceMaterial)
+                        .overlay(
+                            Circle().fill(Color.black.opacity(isHovered ? 0.34 : 0.48)))
+                )
+                // No stroke. A hairline on a dark disc over a dark tile drew
+                // a ring that read as the edge of something else sitting on
+                // the tile; the shadow alone is enough to lift it.
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
                 .scaleEffect(isHovered ? 1.12 : 1)
                 .contentShape(Circle())
         }

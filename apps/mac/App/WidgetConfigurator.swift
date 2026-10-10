@@ -108,11 +108,17 @@ struct WidgetConfigPanel: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task {
+        .task(id: env.catalogueRevision) {
             // The widget first, the catalogue second. They were the other way
             // round, so until the network came back the pane showed its
             // "no longer in the notch" state for a widget that was plainly
             // sitting in the preview beside it.
+            //
+            // Keyed on the revision so the Account picker fills in the moment
+            // a sign-in or a connect flow lands, rather than offering nothing
+            // to pick for a provider that is now connected. Re-reading the
+            // draft is safe: every edit is written straight through to the
+            // layout, so there is nothing buffered here to lose.
             draft = env.layoutModel.layout.widgets.first { $0.id == widgetId }
             await model.load(env: env)
         }
@@ -133,7 +139,11 @@ struct WidgetConfigPanel: View {
                 connectionSection(binding)
                 appearanceSection(binding)
                 dataSection(binding)
-                removeButton
+                // Not while the widget is being added: Cancel in the header
+                // already takes it back out, and two ways to undo one
+                // addition — one of them labelled as a destructive removal —
+                // only makes the pane read as riskier than it is.
+                if !env.notch.configuringIsNew { removeButton }
             }
             .padding(.trailing, 14)
             .padding(.bottom, 6)
