@@ -97,30 +97,95 @@ public struct ShareBackground: Identifiable, Hashable, Sendable {
 
     public let id: String
     public let name: String
+    /// Which set it belongs to. The picker groups by this — twenty pictures
+    /// in one flat menu is a scroll, not a choice.
+    public let category: String
     public let fill: Fill
 
-    public static let presets: [ShareBackground] = [
-        ShareBackground(
-            id: "brand", name: "Brand",
-            fill: .gradient([NotchTheme.gradientStart, NotchTheme.gradientEnd])),
-        ShareBackground(
-            id: "ink", name: "Ink", fill: .gradient([hex(0x0A_0A_0C), hex(0x1C_1C_20)])),
-        ShareBackground(id: "dune", name: "Dune", fill: .asset("share-bg-dune")),
-        ShareBackground(id: "monterey", name: "Monterey", fill: .asset("share-bg-monterey")),
-        ShareBackground(id: "facet", name: "Facet", fill: .asset("share-bg-facet")),
-        ShareBackground(id: "indigo", name: "Indigo", fill: .asset("share-bg-indigo")),
-        ShareBackground(id: "cobalt", name: "Cobalt", fill: .asset("share-bg-cobalt")),
-        ShareBackground(id: "iris", name: "Iris", fill: .asset("share-bg-iris")),
-        ShareBackground(id: "caustic", name: "Caustic", fill: .asset("share-bg-caustic")),
-        ShareBackground(id: "ember", name: "Ember", fill: .asset("share-bg-ember")),
+    /// The sets, in the order the picker lists them.
+    public struct Group: Identifiable, Hashable, Sendable {
+        public let id: String
+        public let label: String
+        public let backgrounds: [ShareBackground]
+    }
+
+    public static let groups: [Group] = [
+        Group(id: "aurora", label: "Aurora", backgrounds: aurora),
+        Group(id: "anime", label: "Anime", backgrounds: anime),
     ]
 
-    private static func hex(_ value: UInt32) -> Color {
-        Color(
-            red: Double((value >> 16) & 0xFF) / 255,
-            green: Double((value >> 8) & 0xFF) / 255,
-            blue: Double(value & 0xFF) / 255)
-    }
+    public static let presets: [ShareBackground] = groups.flatMap(\.backgrounds)
+
+    /// What the editor opens on. Named rather than `presets[0]`, so adding a
+    /// set or reordering the list cannot silently change what every share
+    /// starts as.
+    public static let initial: ShareBackground = aurora[0]
+
+    static let aurora: [ShareBackground] = [
+        ShareBackground(
+            id: "aurora-aurora", name: "Aurora", category: "aurora",
+            fill: .asset("share-bg-aurora-aurora")),
+        ShareBackground(
+            id: "aurora-blush", name: "Blush", category: "aurora",
+            fill: .asset("share-bg-aurora-blush")),
+        ShareBackground(
+            id: "aurora-cobalt", name: "Cobalt", category: "aurora",
+            fill: .asset("share-bg-aurora-cobalt")),
+        ShareBackground(
+            id: "aurora-dusk", name: "Dusk", category: "aurora",
+            fill: .asset("share-bg-aurora-dusk")),
+        ShareBackground(
+            id: "aurora-ember", name: "Ember", category: "aurora",
+            fill: .asset("share-bg-aurora-ember")),
+        ShareBackground(
+            id: "aurora-indigo", name: "Indigo", category: "aurora",
+            fill: .asset("share-bg-aurora-indigo")),
+        ShareBackground(
+            id: "aurora-iris", name: "Iris", category: "aurora",
+            fill: .asset("share-bg-aurora-iris")),
+        ShareBackground(
+            id: "aurora-lilac", name: "Lilac", category: "aurora",
+            fill: .asset("share-bg-aurora-lilac")),
+        ShareBackground(
+            id: "aurora-nebula", name: "Nebula", category: "aurora",
+            fill: .asset("share-bg-aurora-nebula")),
+        ShareBackground(
+            id: "aurora-sage", name: "Sage", category: "aurora",
+            fill: .asset("share-bg-aurora-sage")),
+    ]
+
+    static let anime: [ShareBackground] = [
+        ShareBackground(
+            id: "anime-bloom", name: "Bloom", category: "anime",
+            fill: .asset("share-bg-anime-bloom")),
+        ShareBackground(
+            id: "anime-blossom", name: "Blossom", category: "anime",
+            fill: .asset("share-bg-anime-blossom")),
+        ShareBackground(
+            id: "anime-cumulus", name: "Cumulus", category: "anime",
+            fill: .asset("share-bg-anime-cumulus")),
+        ShareBackground(
+            id: "anime-daybreak", name: "Daybreak", category: "anime",
+            fill: .asset("share-bg-anime-daybreak")),
+        ShareBackground(
+            id: "anime-monsoon", name: "Monsoon", category: "anime",
+            fill: .asset("share-bg-anime-monsoon")),
+        ShareBackground(
+            id: "anime-skyline", name: "Skyline", category: "anime",
+            fill: .asset("share-bg-anime-skyline")),
+        ShareBackground(
+            id: "anime-stardust", name: "Stardust", category: "anime",
+            fill: .asset("share-bg-anime-stardust")),
+        ShareBackground(
+            id: "anime-summit", name: "Summit", category: "anime",
+            fill: .asset("share-bg-anime-summit")),
+        ShareBackground(
+            id: "anime-sunbeam", name: "Sunbeam", category: "anime",
+            fill: .asset("share-bg-anime-sunbeam")),
+        ShareBackground(
+            id: "anime-twilight", name: "Twilight", category: "anime",
+            fill: .asset("share-bg-anime-twilight")),
+    ]
 }
 
 /// A background, filling whatever it is given.
@@ -207,16 +272,21 @@ public struct ShareCard: View {
     public let request: ShareRequest
     public let widgetSize: WidgetSize
     public let background: ShareBackground
+    /// The chart the card draws, when it is not the widget's own. The user's
+    /// widget is never touched — see `tileWidget`.
+    public let chart: ChartKind?
     /// The card's size in points. The export multiplies this by
     /// `ShareFrame.renderScale`.
     public let size: CGSize
 
     public init(
-        request: ShareRequest, widgetSize: WidgetSize, background: ShareBackground, size: CGSize
+        request: ShareRequest, widgetSize: WidgetSize, background: ShareBackground,
+        chart: ChartKind? = nil, size: CGSize
     ) {
         self.request = request
         self.widgetSize = widgetSize
         self.background = background
+        self.chart = chart
         self.size = size
     }
 
@@ -227,7 +297,7 @@ public struct ShareCard: View {
     /// aspect allows, and letting it grow into that space would blow the
     /// figure up to the width of the card.
     private var allowance: CGSize {
-        CGSize(width: size.width * 0.84, height: size.height * 0.62)
+        CGSize(width: size.width * 0.68, height: size.height * 0.5)
     }
 
     /// How far the tile is scaled from the size the notch draws it at.
@@ -245,56 +315,71 @@ public struct ShareCard: View {
         let natural = ShareTileMetrics.size(for: widgetSize)
         let scale = tileScale
 
-        ZStack {
-            ShareBackgroundView(background)
+        // The background goes *behind* the content rather than beside it in
+        // a ZStack. A ZStack takes the size of its largest child, and a
+        // `.fill` image reports a size larger than the card in whichever
+        // axis its aspect ratio overflows — so the stack grew past the card,
+        // the outer frame centred it, and the signature laid out against the
+        // picture ended up below the crop. It only showed on the wallpapers
+        // whose shape overflowed vertically, which is why some backgrounds
+        // pushed the logo down and others did not. A `.background` is sized
+        // by its host and can never move it.
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
 
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
+            // The dark surface sits *behind the tile itself*, at the
+            // tile's own shape, rather than on a second rounded plate
+            // around it. It is not decoration either way: `WidgetTile`
+            // fills itself with 5.5% white, which is a tile over the
+            // notch's smoked glass and an invisible rectangle over a
+            // bright gradient — the figures would be white on yellow.
+            // This restores the surface the tile was designed against
+            // with one rounded rectangle on the card instead of two
+            // nested ones, which read as a card inside a card.
+            WidgetTile(
+                widget: tileWidget,
+                app: request.app,
+                state: request.state,
+                connectionName: request.connectionName,
+                showsRange: request.showsRange
+            )
+            .frame(width: natural.width, height: natural.height)
+            .scaleEffect(scale)
+            .frame(width: natural.width * scale, height: natural.height * scale)
+            .background(
+                RoundedRectangle(cornerRadius: tileCornerRadius * scale, style: .continuous)
+                    .fill(Color.black.opacity(0.55))
+            )
+            .shadow(color: .black.opacity(0.38), radius: unit * 0.04, y: unit * 0.014)
 
-                // The dark plate under the tile is not decoration. `WidgetTile`
-                // fills itself with 5.5% white, which is a tile over the
-                // notch's smoked glass and an invisible rectangle over a
-                // bright gradient — the figures would be white on yellow. The
-                // plate restores the surface the tile was designed against,
-                // and happens to make the card read as a piece of the app.
-                WidgetTile(
-                    widget: tileWidget,
-                    app: request.app,
-                    state: request.state,
-                    connectionName: request.connectionName,
-                    showsRange: request.showsRange
-                )
-                .frame(width: natural.width, height: natural.height)
-                .scaleEffect(scale)
-                .frame(width: natural.width * scale, height: natural.height * scale)
-                .padding(unit * 0.045)
-                .background(
-                    RoundedRectangle(cornerRadius: unit * 0.055, style: .continuous)
-                        .fill(Color.black.opacity(0.58))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: unit * 0.055, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: max(1, unit * 0.0025))
-                )
-                .shadow(color: .black.opacity(0.32), radius: unit * 0.045, y: unit * 0.016)
+            Spacer(minLength: 0)
 
-                Spacer(minLength: 0)
-
-                signature
-                    .padding(.bottom, unit * 0.07)
-            }
+            signature
+                .padding(.bottom, unit * 0.07)
         }
         .frame(width: size.width, height: size.height)
+        .background(ShareBackgroundView(background))
         .clipped()
     }
 
-    /// The widget as the card draws it, at the size the editor picked.
+    /// `WidgetTile`'s own corner radius, which the surface behind it has to
+    /// match exactly or the dark shows as a lip around two of the corners.
+    /// A literal for the same reason `ShareTileMetrics` uses them — the tile's
+    /// are private — and the tile is scaled, so this is too.
+    private var tileCornerRadius: CGFloat {
+        widgetSize.cols == 1 && widgetSize.rows == 1 ? 12 : 16
+    }
+
+    /// The widget as the card draws it, at the size and chart the editor
+    /// picked.
     ///
-    /// The user's own widget is left alone: resizing the tile for a screenshot
-    /// must not rearrange the grid they are about to go back to.
+    /// The user's own widget is left alone: resizing the tile for a
+    /// screenshot, or drawing it as bars for one, must not change the grid
+    /// they are about to go back to.
     private var tileWidget: NotchWidget {
         var copy = request.widget
         copy.size = widgetSize
+        if let chart { copy.chart = chart }
         return copy
     }
 
@@ -303,13 +388,22 @@ public struct ShareCard: View {
             NotchLogo(size: unit * 0.042)
             Text("Notch Metrics")
                 .font(.system(size: unit * 0.032, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.9))
-                // Every background in the set is dark, but a photograph is
-                // not uniformly dark — the signature sits over whatever the
-                // bottom of the picture happens to be, so it carries its own
-                // shadow rather than trusting the backdrop.
-                .shadow(color: .black.opacity(0.45), radius: unit * 0.012, y: unit * 0.003)
+                .foregroundStyle(Color.white.opacity(0.92))
         }
+        .padding(.horizontal, unit * 0.038)
+        .padding(.vertical, unit * 0.022)
+        // A tinted capsule rather than `.ultraThinMaterial`. A real material
+        // samples what is behind it in the *window*, and `ImageRenderer`
+        // does not draw one at all — the exported PNG would have a hole
+        // where the pill is. A dark translucent fill with a hairline lip
+        // reads as the same glass and survives the export, which is the only
+        // place this view actually matters.
+        .background(Capsule().fill(Color.black.opacity(0.34)))
+        .overlay(
+            Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: max(1, unit * 0.0022)))
+        // A photograph is not uniformly dark, and the signature sits over
+        // whatever the bottom of the picture happens to be.
+        .shadow(color: .black.opacity(0.3), radius: unit * 0.02, y: unit * 0.006)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Notch Metrics")
     }
@@ -326,10 +420,10 @@ public struct ShareCard: View {
 public enum ShareExport {
     public static func png(
         request: ShareRequest, widgetSize: WidgetSize, background: ShareBackground,
-        frame: ShareFrame
+        chart: ChartKind? = nil, frame: ShareFrame
     ) -> Data? {
         let card = ShareCard(
-            request: request, widgetSize: widgetSize, background: background,
+            request: request, widgetSize: widgetSize, background: background, chart: chart,
             size: frame.layoutSize)
         let renderer = ImageRenderer(content: card)
         renderer.scale = ShareFrame.renderScale
@@ -420,6 +514,21 @@ public enum ShareMenuIcon {
 
     /// The background itself, as it will appear behind the card. Not a
     /// template: the colour *is* the information.
+    /// The chart choice, as the system's own glyph. Unlike the other three
+    /// this needs no drawing — "a line", "bars" and "no chart" are exactly
+    /// what SF Symbols is for.
+    public static func chart(_ kind: ChartKind) -> NSImage {
+        let name: String
+        switch kind {
+        case .none: name = "number"
+        case .sparkline: name = "chart.xyaxis.line"
+        case .bars: name = "chart.bar.fill"
+        }
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage()
+        image.isTemplate = true
+        return image
+    }
+
     public static func swatch(_ background: ShareBackground) -> NSImage {
         let box = CGSize(width: 18, height: 14)
         let source: NSImage? = {

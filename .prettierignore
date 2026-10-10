@@ -9,4 +9,7 @@ build
 node_modules
 contracts/jsonschema
 apps/mac/**/*.xcodeproj
+# Xcode writes these and rewrites them in its own style whenever the
+# catalogue is touched. Formatting them here only starts a tug-of-war.
+apps/mac/**/*.xcassets
 CHANGELOG.md

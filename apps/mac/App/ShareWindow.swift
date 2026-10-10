@@ -4,14 +4,15 @@ import SwiftUI
 
 /// Owns the share editor window.
 ///
-/// Plain AppKit for the same reason the gallery is: this app is an accessory
-/// with no scene phase to hang a SwiftUI `Window` off, and the editor wants a
-/// transparent title bar over a visual effect view that covers the whole
-/// content — which a `Window` scene does not expose.
+/// Plain AppKit rather than a SwiftUI `Window` scene: this app is an accessory
+/// with no scene phase to hang one off, and the editor wants a transparent
+/// title bar over content that fills the window — which a `Window` scene does
+/// not expose.
 ///
-/// A titled window rather than the gallery's borderless panel. The gallery is
-/// a palette you drag out of and dismiss; this is a thing you sit in front of
-/// and resize, so it gets traffic lights and a real window to drag by.
+/// The one window this app still opens. Everything else — browsing widgets,
+/// configuring one — happens in the notch, but the editor is a thing you sit
+/// in front of and resize, so it gets traffic lights and a real window to
+/// drag by.
 @MainActor
 final class ShareWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
@@ -28,12 +29,10 @@ final class ShareWindowController: NSObject, NSWindowDelegate {
         // on the first one's frame and background with no way to tell why.
         window?.close()
 
-        // An `NSHostingController`, not a hosting view inside a
-        // `NSVisualEffectView` the way the gallery does it. The gallery is
-        // frosted so it can sit over the desktop; this window is filled edge
-        // to edge by a preview whose whole job is to show one gradient
-        // honestly, and a translucent chrome around it makes every dark
-        // background in the picker look lighter than it exports.
+        // Opaque, not frosted. This window is filled edge to edge by a
+        // preview whose whole job is to show one gradient honestly, and a
+        // translucent chrome around it makes every dark background in the
+        // picker look lighter than it exports.
         let window = NSWindow(
             contentRect: Self.frame(),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
@@ -49,7 +48,10 @@ final class ShareWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         // Dark regardless of the system setting, for the same reason.
         window.appearance = NSAppearance(named: .darkAqua)
-        window.minSize = CGSize(width: 760, height: 660)
+        // Small enough that the bar's narrow layouts are actually reachable.
+        // At the old 760x660 the window could never get tight enough for the
+        // controls to collapse, so the fallbacks were unreachable code.
+        window.minSize = CGSize(width: 520, height: 480)
 
         self.window = window
 
