@@ -69,8 +69,6 @@ export const CONNECTOR_GROUPS: ConnectorGroup[] = [
         status: "beta",
       },
       { id: "youtube", name: "YouTube", accentColor: "#FF0000", status: "beta" },
-      { id: "google-ads", name: "Google Ads", accentColor: "#4285F4", status: "coming_soon" },
-      { id: "meta-ads", name: "Meta Ads", accentColor: "#0866FF", status: "coming_soon" },
     ],
   },
   {

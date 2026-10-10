@@ -43,8 +43,6 @@ const BRANDS = {
   mixpanel: "Mixpanel",
   "google-analytics": "Google Analytics",
   "google-search-console": "Google Search Console",
-  "google-ads": "Google Ads",
-  "meta-ads": "Meta",
   youtube: "YouTube",
   hubspot: "HubSpot",
   intercom: "Intercom",

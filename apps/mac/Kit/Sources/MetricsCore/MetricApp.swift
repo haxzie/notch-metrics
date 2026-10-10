@@ -93,10 +93,6 @@ public enum AppCatalog {
         MetricApp(
             id: "google-search-console", name: "Google Search Console", symbol: "magnifyingglass", accentHex: "4285F4"),
         MetricApp(
-            id: "google-ads", name: "Google Ads", symbol: "megaphone.fill", accentHex: "4285F4"),
-        MetricApp(
-            id: "meta-ads", name: "Meta Ads", symbol: "bubble.left.and.bubble.right.fill", accentHex: "0866FF"),
-        MetricApp(
             id: "youtube", name: "YouTube", symbol: "play.rectangle.fill", accentHex: "FF0000"),
         MetricApp(
             id: "hubspot", name: "HubSpot", symbol: "person.crop.circle.badge.checkmark", accentHex: "FF7A59"),
@@ -105,10 +101,22 @@ public enum AppCatalog {
         MetricApp(
             id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right",
             accentHex: "F0F6FC"),
+        // Apps with no connector in the registry, which is why they are down
+        // here rather than in its order. A custom metric names the app its
+        // number came from, and these are ones somebody plausibly reads
+        // themselves — Google Ads and Meta Ads had connectors that were
+        // withdrawn, and a custom metric against either still reads as itself
+        // rather than as "Custom". No vendored mark, so each falls back to its
+        // symbol.
         MetricApp(
             id: "linear", name: "Linear", symbol: "square.stack.3d.up.fill", accentHex: "5E6AD2"),
         MetricApp(
             id: "plausible-selfhost", name: "Plausible (self-hosted)", symbol: "chart.xyaxis.line", accentHex: "5850EC"),
+        MetricApp(
+            id: "google-ads", name: "Google Ads", symbol: "megaphone.fill", accentHex: "4285F4"),
+        MetricApp(
+            id: "meta-ads", name: "Meta Ads", symbol: "bubble.left.and.bubble.right.fill",
+            accentHex: "0866FF"),
         MetricApp(id: customId, name: "Custom", symbol: "curlybraces", accentHex: "D819C2"),
     ]
 

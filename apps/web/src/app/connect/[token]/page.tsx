@@ -403,7 +403,7 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
 /**
  * Every Google connector shares one OAuth client, so every one of them is
  * covered by the same policy — `google-` is the registry's own prefix for
- * most of them (`google-analytics`, `google-ads`, `google-search-console`).
+ * most of them (`google-analytics`, `google-search-console`).
  *
  * `youtube` is the exception, and it is not a cosmetic one: it runs through
  * the same Google client and the same consent screen, so without it here the

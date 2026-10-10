@@ -5,9 +5,9 @@
  * every one is a plausible setup rather than a showcase of everything: a
  * founder's notch has revenue on it, not GitHub stars.
  *
- * The Marketing and Sales layouts lean on connectors that are still marked
- * "Soon" in the catalogue. That is deliberate but worth knowing: they show
- * where the product is going, and the connector wall below says what is live.
+ * The Sales layout leans on connectors that are still marked "Soon" in the
+ * catalogue. That is deliberate but worth knowing: it shows where the product
+ * is going, and the connector wall below says what is live.
  */
 export type WidgetSpan = "1x1" | "2x1" | "2x2";
 
@@ -64,8 +64,6 @@ const gsc = {
   accent: "#4285F4",
   colour: "#7aa9ff",
 };
-const googleAds = { provider: "google-ads", name: "Google Ads", accent: "#4285F4" };
-const metaAds = { provider: "meta-ads", name: "Meta Ads", accent: "#0866FF", colour: "#5e9bff" };
 const hubspot = { provider: "hubspot", name: "HubSpot", accent: "#FF7A59" };
 const intercom = { provider: "intercom", name: "Intercom", accent: "#1F8DED", colour: "#5fb0ff" };
 
@@ -195,14 +193,14 @@ export const PERSONAS: Persona[] = [
       { ...gsc, label: "Avg position", value: "8.4" },
       { ...ga, label: "Signups", value: "386" },
       {
-        ...metaAds,
-        label: "Ad spend · 7d",
+        ...plausible,
+        label: "Pageviews · 7d",
         span: "2x1",
-        value: "$2,140",
-        delta: "ROAS 3.2×",
+        value: "126k",
+        delta: "+12% vs last week",
         bars: [40, 44, 42, 48, 52, 50, 56],
       },
-      { ...googleAds, label: "CPC", value: "$0.84" },
+      { ...ga, label: "Sessions", value: "61,400" },
       {
         ...gsc,
         label: "Impressions",

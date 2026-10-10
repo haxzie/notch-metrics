@@ -17,13 +17,11 @@ export const MONOCHROME_MARKS: ReadonlySet<string> = new Set(["github"]);
 export const MARKS: ReadonlySet<string> = new Set([
   "dodopayments",
   "github",
-  "google-ads",
   "google-analytics",
   "google-search-console",
   "hubspot",
   "intercom",
   "lemonsqueezy",
-  "meta-ads",
   "mixpanel",
   "paddle",
   "plausible",

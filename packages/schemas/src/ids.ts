@@ -36,8 +36,6 @@ export const ProviderId = z.enum([
   "google-analytics",
   // Marketing and SEO
   "google-search-console",
-  "google-ads",
-  "meta-ads",
   "youtube",
   // CRM
   "hubspot",
@@ -128,8 +126,6 @@ export const MetricId = z.enum([
   "impressions",
   "ctr",
   "average_position",
-  "ad_spend",
-  "ad_conversions",
   // Audience and content
   //
   // `subscribers` is a channel's audience, not a billing book —
