@@ -42,6 +42,9 @@ export const ProviderId = z.enum([
   "intercom",
   // Developer
   "github",
+  // AI
+  "openai",
+  "anthropic",
 ]);
 export type ProviderId = z.infer<typeof ProviderId>;
 
@@ -52,7 +55,14 @@ export type ProviderId = z.infer<typeof ProviderId>;
  * "where do my signups come from" should find one short list, not eleven
  * categories of one.
  */
-export const ConnectorCategory = z.enum(["revenue", "analytics", "marketing", "crm", "developer"]);
+export const ConnectorCategory = z.enum([
+  "revenue",
+  "analytics",
+  "marketing",
+  "crm",
+  "developer",
+  "ai",
+]);
 export type ConnectorCategory = z.infer<typeof ConnectorCategory>;
 
 export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
@@ -61,6 +71,7 @@ export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
   marketing: "Marketing & SEO",
   crm: "CRM",
   developer: "Developer",
+  ai: "AI",
 };
 
 /**
@@ -150,6 +161,12 @@ export const MetricId = z.enum([
   "forks",
   "open_issues",
   "open_pull_requests",
+  // AI
+  "tokens",
+  "input_tokens",
+  "output_tokens",
+  "api_requests",
+  "api_spend",
   "followers",
   // CRM
   "contacts",

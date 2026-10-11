@@ -5,16 +5,19 @@ export const LIGHT_TILE_MARKS: ReadonlySet<string> = new Set([
   "google-search-console",
 ]);
 export const OWN_COLOUR_MARKS: ReadonlySet<string> = new Set([
+  "anthropic",
   "dodopayments",
   "github",
   "google-analytics",
   "google-search-console",
+  "openai",
   "polar",
   "posthog",
 ]);
 export const FULL_BLEED_MARKS: ReadonlySet<string> = new Set(["dodopayments"]);
 export const MONOCHROME_MARKS: ReadonlySet<string> = new Set(["github"]);
 export const MARKS: ReadonlySet<string> = new Set([
+  "anthropic",
   "dodopayments",
   "github",
   "google-analytics",
@@ -23,6 +26,7 @@ export const MARKS: ReadonlySet<string> = new Set([
   "intercom",
   "lemonsqueezy",
   "mixpanel",
+  "openai",
   "paddle",
   "plausible",
   "polar",

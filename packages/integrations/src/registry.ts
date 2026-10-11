@@ -29,6 +29,10 @@ import { hubspot } from "./providers/hubspot/index.ts";
 import { intercom } from "./providers/intercom/index.ts";
 import { github } from "./providers/github/index.ts";
 
+// AI
+import { openai } from "./providers/openai/index.ts";
+import { anthropic } from "./providers/anthropic/index.ts";
+
 /**
  * Every provider the API knows about.
  *
@@ -65,6 +69,8 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   hubspot,
   intercom,
   github,
+  openai,
+  anthropic,
 };
 
 /**
@@ -156,6 +162,7 @@ export function catalogue(): { category: ConnectorCategory; connectors: Provider
     marketing: 2,
     crm: 3,
     developer: 4,
+    ai: 5,
   };
   const order = (Object.keys(position) as ConnectorCategory[]).sort(
     (a, b) => position[a] - position[b],

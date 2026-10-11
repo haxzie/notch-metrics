@@ -21,7 +21,9 @@
         "youtube",
         "hubspot",
         "intercom",
-        "github"
+        "github",
+        "openai",
+        "anthropic"
       ]
     },
     "name": {
@@ -34,7 +36,8 @@
         "analytics",
         "marketing",
         "crm",
-        "developer"
+        "developer",
+        "ai"
       ]
     },
     "tagline": {
@@ -201,6 +204,11 @@
               "forks",
               "open_issues",
               "open_pull_requests",
+              "tokens",
+              "input_tokens",
+              "output_tokens",
+              "api_requests",
+              "api_spend",
               "followers",
               "contacts",
               "new_contacts",

@@ -111,6 +111,11 @@ public enum AppCatalog {
         MetricApp(
             id: "linear", name: "Linear", symbol: "square.stack.3d.up.fill", accentHex: "5E6AD2"),
         MetricApp(
+            id: "openai", name: "OpenAI", symbol: "circle.hexagongrid.fill", accentHex: "000000",
+            chartHex: "10A37F"),
+        MetricApp(
+            id: "anthropic", name: "Claude", symbol: "sparkles", accentHex: "D97757"),
+        MetricApp(
             id: "plausible-selfhost", name: "Plausible (self-hosted)", symbol: "chart.xyaxis.line", accentHex: "5850EC"),
         MetricApp(
             id: "google-ads", name: "Google Ads", symbol: "megaphone.fill", accentHex: "4285F4"),

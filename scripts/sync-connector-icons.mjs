@@ -58,7 +58,7 @@ const BRANDS = {
  * light and white on dark, and we take the dark half. PostHog's carries a
  * white glyph inside the hedgehog, which disappears entirely on a light tile.
  */
-const BRAND_TILE = new Set(["dodopayments", "polar", "posthog"]);
+const BRAND_TILE = new Set(["dodopayments", "polar", "posthog", "openai", "anthropic"]);
 
 /**
  * Overrides that *are* the tile: artwork already square, already filled to

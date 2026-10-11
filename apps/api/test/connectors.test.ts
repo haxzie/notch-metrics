@@ -60,6 +60,7 @@ describe("the connector catalogue", () => {
       "marketing",
       "crm",
       "developer",
+      "ai",
     ]);
     expect(body.categories.map((c) => c.label)).toEqual([
       "Revenue",
@@ -67,6 +68,7 @@ describe("the connector catalogue", () => {
       "Marketing & SEO",
       "CRM",
       "Developer",
+      "AI",
     ]);
     // Money first is the deliberate part. The rest is grouping; this asserts
     // none of them went missing, which is the failure that actually happens.

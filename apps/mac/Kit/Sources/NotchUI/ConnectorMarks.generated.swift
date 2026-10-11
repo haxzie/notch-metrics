@@ -11,10 +11,12 @@ public enum ConnectorMarks {
     /// Marks with their own colours, whose tile is used exactly as the
     /// brand specifies it — no luminance floor.
     public static let ownColour: Set<String> = [
+        "anthropic",
         "dodopayments",
         "github",
         "google-analytics",
         "google-search-console",
+        "openai",
         "polar",
         "posthog",
     ]

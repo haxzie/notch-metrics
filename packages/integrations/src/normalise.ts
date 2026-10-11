@@ -1,4 +1,5 @@
 import type { Granularity } from "@notch/schemas";
+import { ProviderError } from "./types.ts";
 
 /** Start of the bucket `date` falls in, in the given IANA zone. */
 export function bucketStart(date: Date, granularity: Granularity, timeZone: string): Date {
@@ -233,4 +234,45 @@ const MINOR_UNIT_EXPONENT: Record<string, number> = {
 export function toMinorUnits(amount: number, currency: string): number {
   const exponent = MINOR_UNIT_EXPONENT[currency.toUpperCase()] ?? 2;
   return Math.round(amount * 10 ** exponent);
+}
+
+/**
+ * How far back a bounded page walk can reach, and whether the comparison
+ * window fits inside it.
+ *
+ * Both LLM usage APIs cap a response at 31 daily buckets, so a window is a
+ * page count rather than one call: 90 days is three requests, and 90 days plus
+ * its comparison window is six. Left unbounded, a yearly range becomes two
+ * dozen sequential requests and the Worker is killed mid-walk — which surfaces
+ * as a widget that spins forever rather than as anything a user can act on.
+ *
+ * Degrades before it fails. The comparison window is the first thing dropped,
+ * because a number with no delta is still the number somebody asked for; only
+ * when the plain window alone is over budget does this refuse, and say so.
+ */
+export function planWalk(options: {
+  from: Date;
+  to: Date;
+  /** What the request asked for; false in the returned plan if it did not fit. */
+  comparePrevious: boolean;
+  /** Length of one provider-side bucket. */
+  bucketMs: number;
+  /** Buckets the provider returns in one response. */
+  bucketsPerPage: number;
+  maxPages: number;
+}): { start: Date; comparePrevious: boolean } {
+  const { from, to, bucketMs, bucketsPerPage, maxPages } = options;
+  const budget = bucketsPerPage * maxPages * bucketMs;
+  const window = to.getTime() - from.getTime();
+
+  if (options.comparePrevious && window * 2 <= budget) {
+    return { start: new Date(from.getTime() - window), comparePrevious: true };
+  }
+  if (window <= budget) return { start: from, comparePrevious: false };
+
+  const days = Math.ceil(budget / (24 * 60 * 60 * 1000));
+  throw new ProviderError(
+    "unsupported",
+    `That range is longer than the ${days} days this connector will page through. Pick a shorter one.`,
+  );
 }

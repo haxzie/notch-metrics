@@ -53,6 +53,12 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   pipeline_value: ["pipeline", "forecast", "crm", "sales"],
   open_conversations: ["support", "tickets", "inbox", "chats"],
 
+  tokens: ["llm", "ai", "usage", "consumption", "context", "prompt"],
+  input_tokens: ["prompt", "llm", "ai", "context", "usage"],
+  output_tokens: ["completion", "generated", "llm", "ai", "usage"],
+  api_requests: ["calls", "requests", "llm", "ai", "volume", "traffic"],
+  api_spend: ["cost", "bill", "burn", "llm", "ai", "spend", "inference"],
+
   stars: ["github", "stargazers", "popularity", "repo"],
   forks: ["github", "repo", "clones"],
   open_issues: ["github", "bugs", "tickets", "repo"],
