@@ -68,6 +68,20 @@ enum SeriesPath {
 
     /// Catmull-Rom, converted to cubic Béziers. Straight segments between
     /// daily points look like a seismograph at tile size.
+    ///
+    /// The vertical control points are clamped to the segment they belong
+    /// to. Unclamped, Catmull-Rom overshoots either side of a sharp turn —
+    /// by over 4pt on a 40pt chart for a series that dips and recovers —
+    /// and the curve is then drawn outside the rect the data was normalised
+    /// into. Visibly that is a peak with its top shaved flat against the
+    /// edge of the tile; it also means the chart draws a value higher than
+    /// any the metric ever reported. A cubic Bézier is contained by the
+    /// convex hull of its control points, so clamping those to the
+    /// segment's own y-range is what guarantees the path stays inside.
+    ///
+    /// Only y. The x controls are what give the curve its horizontal ease,
+    /// they are monotonic by construction, and the drawing rect is inset
+    /// horizontally anyway.
     static func smoothed(_ points: [CGPoint], tension: CGFloat = 0.2) -> Path {
         var path = Path()
         guard let first = points.first else { return path }
@@ -83,10 +97,14 @@ enum SeriesPath {
             let p2 = points[index + 1]
             let p3 = points[min(index + 2, points.count - 1)]
 
+            let lowest = min(p1.y, p2.y)
+            let highest = max(p1.y, p2.y)
+            let clamp = { (y: CGFloat) in min(max(y, lowest), highest) }
+
             let control1 = CGPoint(
-                x: p1.x + (p2.x - p0.x) * tension, y: p1.y + (p2.y - p0.y) * tension)
+                x: p1.x + (p2.x - p0.x) * tension, y: clamp(p1.y + (p2.y - p0.y) * tension))
             let control2 = CGPoint(
-                x: p2.x - (p3.x - p1.x) * tension, y: p2.y - (p3.y - p1.y) * tension)
+                x: p2.x - (p3.x - p1.x) * tension, y: clamp(p2.y - (p3.y - p1.y) * tension))
             path.addCurve(to: p2, control1: control1, control2: control2)
         }
         return path
@@ -117,9 +135,37 @@ public struct Sparkline: View {
         self.fillOpacity = fillOpacity
     }
 
+    /// The line, and the marker on its last point.
+    ///
+    /// Named because the drawing rect is derived from them. They are what
+    /// sticks out past the path, and the inset that ignored them is what cut
+    /// the chart off.
+    static let lineWidth: CGFloat = 1.5
+    static let dotRadius: CGFloat = 2
+
+    /// Where the series is actually plotted inside the canvas.
+    ///
+    /// Inset by what is drawn *around* the path, not by a flat couple of
+    /// points. The stroke is centred on the line, so half of it sits above
+    /// the highest sample; the end dot is a circle centred on the last one,
+    /// so it needs its whole radius to the right and — when the most recent
+    /// value is also the maximum, which is what a metric having a good week
+    /// looks like — above.
+    ///
+    /// At the old `dx: 1, dy: 2` the dot was clipped by the right edge of
+    /// every chart in the notch, and a series peaking on its last point had
+    /// the top of that dot sliced off as well.
+    ///
+    /// Separate from `body` so the containment can be asserted directly
+    /// rather than inferred from pixels.
+    static func drawingRect(in size: CGSize) -> CGRect {
+        CGRect(origin: .zero, size: size)
+            .insetBy(dx: dotRadius, dy: dotRadius + lineWidth / 2)
+    }
+
     public var body: some View {
         Canvas { context, size in
-            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 2)
+            let rect = Self.drawingRect(in: size)
             guard values.count > 1, rect.width > 0, rect.height > 0 else { return }
 
             let maxPoints = max(2, Int(rect.width / 2))
@@ -152,11 +198,15 @@ public struct Sparkline: View {
                         endPoint: CGPoint(x: rect.midX, y: rect.maxY)))
             }
 
-            context.stroke(line, with: .color(tint), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            context.stroke(
+                line, with: .color(tint),
+                style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round, lineJoin: .round))
 
             if let last = points.last {
                 context.fill(
-                    Path(ellipseIn: CGRect(x: last.x - 2, y: last.y - 2, width: 4, height: 4)),
+                    Path(ellipseIn: CGRect(
+                        x: last.x - Self.dotRadius, y: last.y - Self.dotRadius,
+                        width: Self.dotRadius * 2, height: Self.dotRadius * 2)),
                     with: .color(tint))
             }
         }
