@@ -47,11 +47,6 @@ export function clusterOf(slug: string, posts: Post[] = allPosts()): Post[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** Every pillar, newest first. The posts that lead a cluster. */
-export function pillars(posts: Post[] = allPosts()): Post[] {
-  return posts.filter((post) => !post.pillar);
-}
-
 /**
  * Every tag in use, most-used first, ties broken alphabetically.
  *
