@@ -80,7 +80,14 @@ public struct WidgetTile: View {
             // keeps it on the same line across tiles of different heights.
             // Pinned to the bottom, a 2x2 and a 2x1 side by side had their
             // figures at different heights and the row read as misaligned.
-            if case .value(let series) = state, let items = series.items {
+            if case .loading = state {
+                // One view for the whole body rather than a bar here and a
+                // block below: the skeleton has to lay out as a unit to sit
+                // where the figure and the chart actually will.
+                TileSkeleton(
+                    valueHeight: valueFontSize, chartHeight: skeletonChartHeight,
+                    chart: widget.chart)
+            } else if case .value(let series) = state, let items = series.items {
                 // A list fills the tile from the label down. The headline
                 // figure is dropped: the rows are the number, itemised.
                 list(items, stale: series.stale)
@@ -164,10 +171,9 @@ public struct WidgetTile: View {
     private var value: some View {
         switch state {
         case .loading:
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color.white.opacity(0.07))
-                .frame(height: valueFontSize * 0.8)
-                .frame(maxWidth: valueFontSize * 3.2, alignment: .leading)
+            // Drawn by `TileSkeleton` in the body, which needs the chart and
+            // the figure together to place them.
+            EmptyView()
 
         case .value(let series):
             VStack(alignment: .leading, spacing: 4) {
@@ -353,6 +359,16 @@ public struct WidgetTile: View {
         // fixed height, so what is left for the figure is known.
         let byHeight: CGFloat = widget.size.rows == 1 ? 21 : 10 + CGFloat(widget.size.rows) * 17
         return min(min(byWidth, byHeight), 48)
+    }
+
+    /// The chart block's height for a tile with no data yet.
+    ///
+    /// Gated on the same conditions the real chart is, minus the point count
+    /// — which is the one thing a loading tile cannot know. A widget set to
+    /// draw no chart gets no chart-shaped hole.
+    private var skeletonChartHeight: CGFloat {
+        guard widget.chart != .none, widget.size != .small else { return 0 }
+        return chartHeight
     }
 
     private var chartHeight: CGFloat {

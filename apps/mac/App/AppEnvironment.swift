@@ -39,12 +39,44 @@ final class AppEnvironment {
     /// has not been pointed at one".
     private(set) var connectionsByProvider: [String: [String]] = [:]
 
+    /// Whether `connectionsByProvider` has been filled yet.
+    ///
+    /// A tile with no `integrationId` is either "nothing connected" or
+    /// "connected, not yet pointed at an account" — and before the
+    /// connections have loaded it is neither, it is unknown. Telling those
+    /// apart requires the list; guessing before it arrives is what put
+    /// "Connect Stripe" on six tiles belonging to four live accounts for the
+    /// first second of every launch.
+    private enum ConnectionsKnowledge {
+        /// Not asked yet, or the answer has not come back.
+        case unknown
+        case loaded
+        /// Asked and could not reach the server. Distinct from `unknown`
+        /// because a tile should eventually say something, and "offline" is
+        /// true where "Connect Stripe" is not.
+        case unreachable
+    }
+
+    private var connectionsKnowledge: ConnectionsKnowledge = .unknown
+
     /// Something changed server-side; reload anything built from the
     /// catalogue.
     func catalogueChanged() { catalogueRevision += 1 }
 
     /// Plausible numbers, no account, no network. For screenshots.
-    static var isDemo: Bool { ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" }
+    static var isDemo: Bool {
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" || isSkeletonDemo
+    }
+
+    /// The demo layout with every tile still loading.
+    ///
+    /// Implies demo mode, so it needs no account and touches no network. The
+    /// skeletons are otherwise on screen for the half second a cold fetch
+    /// takes, which is not long enough to tell a chart-shaped placeholder
+    /// from a bar-shaped one — and they are the whole point of the state.
+    static var isSkeletonDemo: Bool {
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_SKELETON"] == "1"
+    }
     private(set) var isSignedIn = false {
         // The notch shows the sign-in panel in place of the grid, so it has
         // to hear about this the moment it changes rather than on the next
@@ -179,9 +211,13 @@ final class AppEnvironment {
             Task { await refreshMetricWindows() }
         }
 
-        states = Self.isDemo
-            ? Self.demoStates(for: layoutModel.layout)
-            : Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
+        states =
+            Self.isSkeletonDemo
+            ? Dictionary(
+                uniqueKeysWithValues: layoutModel.layout.widgets.map { ($0.id, TileState.loading) })
+            : Self.isDemo
+                ? Self.demoStates(for: layoutModel.layout)
+                : Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
         notch.update(states: states)
 
         // Demo mode has numbers without an account, and the sign-in panel
@@ -190,13 +226,23 @@ final class AppEnvironment {
         // decides whether to hit the network, which demo mode must not.
         if Self.isDemo { notch.isSignedIn = true }
 
-        startRefreshing()
-
         // Signing in is the moment every catalogue-backed view is wrong: it
         // was rendered against an anonymous catalogue with no accounts in it.
-        if isSignedIn {
-            catalogueChanged()
-            Task { if await adoptConnections() { await refresh() } }
+        guard isSignedIn else {
+            startRefreshing()
+            return
+        }
+        catalogueChanged()
+
+        // Connections first, then the poll. Adoption used to race the first
+        // refresh, so a widget it was about to bind spent that round trip
+        // saying "Connect Stripe" — and the fix arrived as a second render a
+        // second later, which read as the notch changing its mind. Nothing
+        // is painted from a guess now: until the list is in, the tiles are
+        // skeletons.
+        Task {
+            await adoptConnections()
+            startRefreshing()
         }
     }
 
@@ -215,7 +261,11 @@ final class AppEnvironment {
     @discardableResult
     func adoptConnections() async -> Bool {
         guard isSignedIn else { return false }
-        if connectionsByProvider.isEmpty { await refreshConnectionNames() }
+        // Keyed on whether the list has been fetched, not on whether it came
+        // back with anything in it: a user with no connections at all has an
+        // empty dictionary legitimately, and testing that re-requested the
+        // list on every call.
+        if case .loaded = connectionsKnowledge {} else { await refreshConnectionNames() }
 
         var changed = false
         for widget in layoutModel.layout.widgets
@@ -300,7 +350,14 @@ final class AppEnvironment {
     /// the tiles showing numbers rather than take them down with it.
     func refreshConnectionNames() async {
         guard isSignedIn else { return }
-        guard let all = try? await api.connections() else { return }
+        guard let all = try? await api.connections() else {
+            // Only downgrade a first attempt. A poll that fails while the
+            // list is already known should leave the tiles reading off the
+            // list we have rather than fall back to "offline".
+            if case .unknown = connectionsKnowledge { connectionsKnowledge = .unreachable }
+            return
+        }
+        connectionsKnowledge = .loaded
         notch.update(
             connectionNames: Dictionary(
                 uniqueKeysWithValues: all.map { ($0.id, $0.label) }))
@@ -337,7 +394,12 @@ final class AppEnvironment {
 
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
     /// added so a new tile fills in rather than sitting on "Loading".
-    func refresh() async {
+    /// `rebindAllowed` is the recursion stop. A widget whose account 404s is
+    /// unbound and re-adopted, which re-enters here — and if the rebound id
+    /// 404s too (a connections list that disagrees with the metrics route)
+    /// that is an unbounded loop hammering the Worker. One attempt, then the
+    /// tile says "Pick a connection" and waits for the next poll.
+    func refresh(rebindAllowed: Bool = true) async {
         // Demo mode draws its own numbers and must not reach the network for
         // real ones. The poll already skips it; this covers every other way
         // in — the refresh button, and the connection adoption that follows
@@ -366,11 +428,7 @@ final class AppEnvironment {
         // second and the reason a signed-in notch could look signed out.
         let fetchable = Set(widgets.map(\.id))
         for widget in layoutModel.layout.widgets where !fetchable.contains(widget.id) {
-            let app = AppCatalog.resolve(widget.appId)
-            states[widget.id] =
-                connectionsByProvider[widget.appId]?.isEmpty == false
-                ? .needsSetup("Pick a connection")
-                : .needsSetup("Connect \(app.name)")
+            states[widget.id] = setupState(for: widget)
         }
 
         guard !widgets.isEmpty else {
@@ -382,8 +440,17 @@ final class AppEnvironment {
 
         // Last known values first, so a tile shows yesterday's number while
         // the request is in flight rather than a skeleton.
+        //
+        // Keyed on "has nothing to say yet" rather than on `== nil`:
+        // `start()` seeds a state for every widget before the first refresh
+        // runs, so nothing was ever nil here and the disk cache was never
+        // read — the notch went to a skeleton on every launch with a
+        // perfectly good number sitting on disk. Deliberately not "is not a
+        // value": that would also overwrite a `.failed` tile with yesterday's
+        // number on every poll, and a provider that is still broken an hour
+        // later should say so rather than quietly serve stale data forever.
         var next = states
-        for widget in widgets where next[widget.id] == nil {
+        for widget in widgets where isPending(next[widget.id]) {
             if let cached = await cache.load(
                 widgetID: widget.id, range: widget.range, params: widget.params)
             {
@@ -394,6 +461,10 @@ final class AppEnvironment {
         }
         states = next
         notch.update(states: states)
+
+        // Set when a widget turned out to point at an account that is gone,
+        // so adoption gets a chance to rebind it before the next poll.
+        var staleBindings = false
 
         do {
             let results = try await api.batch(widgets.map(MetricQueryRequest.init(widget:)))
@@ -406,6 +477,28 @@ final class AppEnvironment {
                     await cache.store(
                         series, widgetID: widget.id, range: widget.range, params: widget.params)
                 case .failure(let failure):
+                    // `not_found` is the server saying this widget points at
+                    // an account that is gone — disconnected, or reconnected
+                    // under a new id. Left alone the tile reads "That
+                    // integration no longer exists", which is both alarming
+                    // and useless: there is no such thing to go and look at.
+                    // Clearing the id turns it back into an unbound widget,
+                    // which `adoptConnections` rebinds on the next pass when
+                    // the provider has exactly one account — so the usual
+                    // case fixes itself and the rest say "Pick a connection".
+                    if failure.code == .notFound {
+                        // The verdict either way — never the server's
+                        // sentence, which names a thing there is no way to
+                        // go and look at.
+                        next[widget.id] = setupState(for: widget)
+                        if rebindAllowed {
+                            var rebound = widget
+                            rebound.integrationId = nil
+                            layoutModel.update(rebound)
+                            staleBindings = true
+                        }
+                        continue
+                    }
                     // Keep a cached number on screen rather than replacing it
                     // with an error: a stale figure with a mark against it
                     // beats a blank tile while a provider is down.
@@ -422,6 +515,11 @@ final class AppEnvironment {
             }
             states = next
             notch.update(states: states)
+
+            // Once, and only when something actually came loose: `refresh()`
+            // is reentered here, and adoption only reports a change when it
+            // bound a widget that had nothing.
+            if staleBindings, await adoptConnections() { await refresh(rebindAllowed: false) }
         } catch {
             let state = Self.tileState(for: error)
             for widget in widgets where !isValue(next[widget.id]) {
@@ -463,6 +561,35 @@ final class AppEnvironment {
 
     private func isValue(_ state: TileState?) -> Bool {
         if case .value = state { return true }
+        return false
+    }
+
+    /// What a widget with no usable account should say.
+    ///
+    /// Only ever a verdict once the connections are in. Before that the tile
+    /// keeps loading: "Connect Stripe" is a specific, actionable and wrong
+    /// instruction when the account is connected and the list simply has not
+    /// arrived, and it is the message somebody sees for the whole of a cold
+    /// launch. Saying nothing for a moment costs nothing; sending somebody to
+    /// reconnect an account that works costs them the trip.
+    private func setupState(for widget: NotchWidget) -> TileState {
+        switch connectionsKnowledge {
+        case .unknown:
+            return .loading
+        case .unreachable:
+            return .failed(reason: "Could not reach Notch Metrics")
+        case .loaded:
+            return connectionsByProvider[widget.appId]?.isEmpty == false
+                ? .needsSetup("Pick a connection")
+                : .needsSetup("Connect \(AppCatalog.resolve(widget.appId).name)")
+        }
+    }
+
+    /// A tile that has not yet been told anything — nothing on screen that
+    /// the last-known number would be displacing.
+    private func isPending(_ state: TileState?) -> Bool {
+        guard let state else { return true }
+        if case .loading = state { return true }
         return false
     }
 
@@ -652,9 +779,14 @@ final class AppEnvironment {
     ) -> [String: TileState] {
         Dictionary(uniqueKeysWithValues: layout.widgets.map { widget in
             guard signedIn else { return (widget.id, TileState.needsSetup("Sign in")) }
-            // Names the app the tile belongs to rather than a hardcoded one.
-            let app = AppCatalog.resolve(widget.appId)
-            return (widget.id, TileState.needsSetup("Connect \(app.name)"))
+            // Signed in, so this tile is about to be fetched and the honest
+            // answer is "not yet". It used to say "Connect <app>" for the
+            // whole of the first fetch, which told somebody with four
+            // working connections to go and make them again — and was the
+            // reason a slow first load read as a broken one. `refresh()`
+            // corrects the tiles that genuinely have no account, by name,
+            // before the request leaves.
+            return (widget.id, TileState.loading)
         })
     }
 }
