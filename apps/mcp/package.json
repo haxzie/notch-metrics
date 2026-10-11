@@ -1,6 +1,6 @@
 {
   "name": "@notch/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Author custom Notch Metrics dashboard metrics from Claude Code or any MCP client.",
   "license": "MIT",
   "type": "module",
