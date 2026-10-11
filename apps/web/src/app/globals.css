@@ -20,6 +20,12 @@
 body {
   background: var(--color-ink);
   color: #f5f3f7;
+  /* The guard for `.hero-glow`'s full-bleed breakout below. On a platform
+     with a classic scrollbar, `100vw` is wider than the visible viewport, so
+     a viewport-wide decoration would add a horizontal scrollbar to every
+     page. `clip` rather than `hidden` because `hidden` on the body makes it
+     a scroll container, which breaks `position: sticky` anywhere inside. */
+  overflow-x: clip;
 }
 
 .brand-gradient {
@@ -63,9 +69,30 @@ body {
 /* The soft colour behind the hero. Two blobs of the brand gradient's ends,
    blurred until they are weather rather than shapes. Kept to the hero
    because the same wash behind every section stops reading as light. */
+/**
+ * The brand glow behind the top of a page.
+ *
+ * Full-bleed on purpose. It is absolutely positioned, so without the
+ * breakout it would size itself to the nearest positioned ancestor, and on
+ * every page except the home page that ancestor is a `max-w-*` column. The
+ * `overflow: hidden` then clipped the blurs to the text column and drew two
+ * hard vertical edges down the page, which is what this fixes.
+ *
+ * `left: 50%` with a `-50vw` margin is the full-bleed breakout: it spans the
+ * viewport from inside a centred column without needing a transform, which
+ * would create a containing block for anything positioned inside it.
+ *
+ * `inset-block: 0` keeps the previous behaviour on the vertical axis: the
+ * box is as tall as its parent, and the blurs sit near its top.
+ */
 .hero-glow {
   position: absolute;
-  inset: 0;
+  inset-block: 0;
+  left: 50%;
+  width: 100vw;
+  margin-left: -50vw;
+  /* Clips at the viewport edge now rather than at the text column, so the
+     cut is off-screen and invisible. */
   overflow: hidden;
   pointer-events: none;
   z-index: -1;
