@@ -72,6 +72,64 @@ export interface FetchOptions {
   force?: boolean;
 }
 
+/**
+ * Runs `work` over every item, concurrently across keys and sequentially
+ * within one, and returns the answers in the order the items came in.
+ *
+ * Generic so the ordering — the part that goes wrong silently — is testable
+ * without a database behind it. Writing each answer at its own index is what
+ * makes the result safe whatever order the groups finish in.
+ */
+export async function runGrouped<Item, Result>(
+  items: readonly Item[],
+  keyOf: (item: Item) => string,
+  work: (item: Item) => Promise<Result>,
+): Promise<Result[]> {
+  const groups = new Map<string, number[]>();
+  items.forEach((item, index) => {
+    const group = groups.get(keyOf(item));
+    if (group) group.push(index);
+    else groups.set(keyOf(item), [index]);
+  });
+
+  const results: Result[] = new Array(items.length);
+  await Promise.all(
+    [...groups.values()].map(async (indices) => {
+      for (const index of indices) results[index] = await work(items[index]!);
+    }),
+  );
+  return results;
+}
+
+/**
+ * Every widget's number, concurrent across integrations and sequential
+ * within one.
+ *
+ * Serialising the whole batch made the notch's first paint the *sum* of
+ * every provider's latency — six widgets over four providers was ten
+ * seconds of "Loading" on a cold cache, and the ceiling was six times the
+ * 20s adapter timeout. Grouping by integration keeps the one thing
+ * serialising actually bought: two widgets on the same integration cannot
+ * race each other's token refresh, nor hit the provider in the same instant.
+ * Across different integrations there is nothing to protect — separate
+ * credentials, separate rate limits.
+ *
+ * The reply stays index-aligned with the request array: the Mac app zips the
+ * two together, and a shuffled reply would show every tile another widget's
+ * number — a real figure, under the wrong label, with nothing on screen to
+ * suggest it.
+ */
+export async function queryMetrics(
+  options: FetchOptions,
+  requests: readonly MetricQuery[],
+): Promise<MetricResult[]> {
+  return runGrouped(
+    requests,
+    (query) => query.integrationId,
+    (query) => queryMetric(options, query),
+  );
+}
+
 export async function queryMetric(
   options: FetchOptions,
   query: MetricQuery,

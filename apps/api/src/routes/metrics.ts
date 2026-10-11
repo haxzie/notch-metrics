@@ -4,7 +4,7 @@ import { MetricBatchRequest, MetricQuery } from "@notch/schemas";
 import { getAdapter } from "@notch/integrations";
 import { integration as integrationTable } from "@notch/db";
 import { authenticate, rateLimited, requireAccess, type AppContext } from "../middleware.ts";
-import { queryMetric, sweepCache } from "../lib/metrics.ts";
+import { queryMetric, queryMetrics, sweepCache } from "../lib/metrics.ts";
 import { loadUser } from "../lib/identity.ts";
 
 export const metrics = new Hono<AppContext>();
@@ -71,13 +71,7 @@ metrics.post("/batch", async (c) => {
     preferredCurrency: user.preferredCurrency,
   };
 
-  // Sequential rather than Promise.all. Several widgets usually point at the
-  // same integration, and firing them concurrently defeats the per-integration
-  // spacing that keeps us inside the provider's rate limit.
-  const results = [];
-  for (const query of parsed.data.requests) {
-    results.push(await queryMetric(options, query));
-  }
+  const results = await queryMetrics(options, parsed.data.requests);
 
   c.executionCtx.waitUntil(sweepCache(db));
   return c.json({ results });
