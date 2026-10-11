@@ -74,12 +74,15 @@ export default function BlogIndex() {
       {posts.length === 0 ? (
         <p className="mt-16 text-white/40">Nothing published yet.</p>
       ) : (
-        <ul className="mt-14 flex flex-col gap-3">
+        /* One panel, with a rule between posts, rather than a card each.
+           `overflow-hidden` so a row's hover fill is clipped by the panel's
+           corner radius instead of squaring off the first and last rows. */
+        <ul className="panel mt-14 overflow-hidden">
           {posts.map((post) => (
-            <li key={post.slug}>
+            <li key={post.slug} className="border-t border-white/[0.07] first:border-t-0">
               <Link
                 href={`/blog/${post.slug}`}
-                className="panel group block p-6 transition hover:border-white/15 hover:bg-white/[0.05] sm:p-7"
+                className="group block px-6 py-6 transition hover:bg-white/[0.04] sm:px-7"
               >
                 <div className="flex flex-wrap items-center gap-x-2.5 font-mono text-[11px] tracking-wide text-white/40">
                   <time dateTime={post.date}>{formatDate(post.date)}</time>
@@ -91,10 +94,10 @@ export default function BlogIndex() {
                     </span>
                   )}
                 </div>
-                <h2 className="mt-3 text-pretty text-xl font-semibold tracking-tight transition group-hover:text-white sm:text-2xl">
+                <h2 className="mt-2.5 text-pretty text-lg font-semibold tracking-tight transition group-hover:text-white sm:text-xl">
                   {post.title}
                 </h2>
-                <p className="mt-2.5 text-pretty text-[15px] leading-relaxed text-white/55">
+                <p className="mt-2 text-pretty text-[15px] leading-relaxed text-white/55">
                   {post.description}
                 </p>
               </Link>
