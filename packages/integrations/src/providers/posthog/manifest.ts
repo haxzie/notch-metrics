@@ -4,7 +4,7 @@ export const manifest: ProviderManifest = {
   id: "posthog",
   name: "PostHog",
   category: "analytics",
-  tagline: "Product analytics — users, events and conversion from PostHog.",
+  tagline: "Product analytics: users, events and conversion from PostHog.",
   docsUrl: "https://posthog.com/docs/api/personal-api-keys",
   dashboardUrl: "https://app.posthog.com",
   iconPath: "/connectors/posthog.svg",
@@ -59,7 +59,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "People with at least one event in the window, de-duplicated. The headline counts each person once across the whole window, so the bars do not add up to it — one person on three days is one user and three bars. Days are your PostHog project's timezone, so the figures match its own dashboards.",
+        "People with at least one event in the window, de-duplicated. The headline counts each person once across the whole window, so the bars do not add up to it: one person on three days is one user and three bars. Days are your PostHog project's timezone, so the figures match its own dashboards.",
     },
     {
       id: "new_users",

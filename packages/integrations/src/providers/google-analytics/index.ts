@@ -43,7 +43,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "GA4 `activeUsers`. The headline is the de-duplicated count over the whole window, as GA reports it; the chart is per day, so its bars do not add up to the headline — one person on three days is one user and three bars.",
+        "GA4 `activeUsers`. The headline is the de-duplicated count over the whole window, as GA reports it; the chart is per day, so its bars do not add up to the headline: one person on three days is one user and three bars.",
     },
     {
       id: "new_users",

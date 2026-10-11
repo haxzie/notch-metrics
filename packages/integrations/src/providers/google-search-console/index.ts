@@ -61,7 +61,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Clicks divided by impressions over the window — not the mean of daily rates, which would weight a quiet day the same as a busy one.",
+        "Clicks divided by impressions over the window, rather than the mean of daily rates, which would weight a quiet day the same as a busy one.",
     },
     {
       id: "average_position",

@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { allPosts, formatDate, lastModified, postBySlug } from "@/lib/blog";
-import { LLM_ALTERNATES, SITE_NAME, absoluteUrl } from "@/lib/site";
+import { JsonLd } from "@/components/JsonLd";
+import { allPosts, clusterOf, formatDate, lastModified, postBySlug } from "@/lib/blog";
+import { FaqSection } from "@/lib/faq";
+import { articleJsonLd, breadcrumbJsonLd, faqPageJsonLd, graph } from "@/lib/jsonld";
+import { LLM_ALTERNATES, absoluteUrl } from "@/lib/site";
 
 // Read with `node:fs` at build time — see the note in src/lib/blog.ts.
 export const dynamic = "force-static";
@@ -65,53 +68,26 @@ export default async function BlogPost({ params }: { params: Promise<{ slug: str
   const newer = index > 0 ? posts[index - 1] : undefined;
   const older = index >= 0 ? posts[index + 1] : undefined;
 
-  const url = absoluteUrl(`/blog/${post.slug}`);
-  const publisher = { "@type": "Organization", name: SITE_NAME, url: absoluteUrl("/") };
+  const path = `/blog/${post.slug}`;
+  const cluster = clusterOf(post.slug, posts);
+  const parent = post.pillar ? posts.find((p) => p.slug === post.pillar) : undefined;
 
-  /**
-   * `BlogPosting` and a `BreadcrumbList`, in one graph.
-   *
-   * `mainEntityOfPage` pointing back at the canonical URL is what stops a
-   * syndicated or scraped copy of the text from being read as the original.
-   */
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "BlogPosting",
-        "@id": `${url}#post`,
-        headline: post.title,
-        description: post.description,
-        url,
-        mainEntityOfPage: { "@type": "WebPage", "@id": url },
-        datePublished: post.date,
-        dateModified: lastModified(post),
-        author: { "@type": "Organization", name: post.author, url: absoluteUrl("/") },
-        publisher,
-        isPartOf: { "@type": "Blog", "@id": absoluteUrl("/blog#blog") },
-        keywords: post.tags.join(", "),
-        wordCount: post.markdown.split(/\s+/).filter(Boolean).length,
-        inLanguage: "en",
-      },
-      {
-        "@type": "BreadcrumbList",
-        "@id": `${url}#breadcrumbs`,
-        itemListElement: [
-          { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
-          { "@type": "ListItem", position: 2, name: "Blog", item: absoluteUrl("/blog") },
-          { "@type": "ListItem", position: 3, name: post.title, item: url },
-        ],
-      },
-    ],
-  };
+  const jsonLd = graph(
+    articleJsonLd(post, { path, modified: lastModified(post), collection: "/blog#blog" }),
+    faqPageJsonLd(post.faq, path),
+    breadcrumbJsonLd(
+      [
+        { name: "Home", path: "/" },
+        { name: "Blog", path: "/blog" },
+        { name: post.title, path },
+      ],
+      path,
+    ),
+  );
 
   return (
     <main className="relative isolate mx-auto max-w-2xl px-6 pb-16 pt-36">
-      <script
-        type="application/ld+json"
-        // Our own strings, assembled above — not user input.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
       <div className="hero-glow" />
 
       {/* Visible breadcrumbs as well as the structured kind: the markup tells a
@@ -154,6 +130,18 @@ export default async function BlogPost({ params }: { params: Promise<{ slug: str
           )}
         </div>
 
+        {parent && (
+          <p className="mt-6 text-[14px] text-white/45">
+            Part of{" "}
+            <Link
+              href={`/blog/${parent.slug}`}
+              className="text-white/70 underline-offset-4 transition hover:text-white hover:underline"
+            >
+              {parent.title}
+            </Link>
+          </p>
+        )}
+
         {post.headings.length > 2 && (
           <nav aria-label="On this page" className="panel mt-10 p-5">
             <p className="eyebrow">On this page</p>
@@ -192,6 +180,28 @@ export default async function BlogPost({ params }: { params: Promise<{ slug: str
           </ul>
         )}
       </article>
+
+      {cluster.length > 0 && (
+        <section className="mt-16 border-t border-white/[0.06] pt-10">
+          <h2 className="text-xl font-semibold tracking-tight">Read next</h2>
+          <ul className="mt-6 flex flex-col gap-3">
+            {cluster.map((next) => (
+              <li key={next.slug}>
+                <Link href={`/blog/${next.slug}`} className="group flex flex-col gap-1 py-1">
+                  <span className="text-[15px] font-medium text-white/85 transition group-hover:text-white">
+                    {next.title}
+                  </span>
+                  <span className="text-sm leading-relaxed text-white/45">{next.description}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* After the body, because an FAQ answers what is left over rather
+          than what the post is about. Same array as the FAQPage markup. */}
+      <FaqSection entries={post.faq} />
 
       {(newer || older) && (
         <nav

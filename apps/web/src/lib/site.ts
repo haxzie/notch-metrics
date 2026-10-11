@@ -44,7 +44,7 @@ export function absoluteUrl(path: string): string {
  */
 export const LLM_ALTERNATES: NonNullable<NonNullable<Metadata["alternates"]>["types"]> = {
   "text/plain": [
-    { url: "/llms.txt", title: `${SITE_NAME} — index for LLMs` },
-    { url: "/llms-full.txt", title: `${SITE_NAME} — full text for LLMs` },
+    { url: "/llms.txt", title: `${SITE_NAME}: index for LLMs` },
+    { url: "/llms-full.txt", title: `${SITE_NAME}: full text for LLMs` },
   ],
 };

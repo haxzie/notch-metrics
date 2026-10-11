@@ -9,10 +9,12 @@
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --env production",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf .next .open-next .turbo node_modules *.tsbuildinfo"
+    "clean": "rm -rf .next .open-next .turbo node_modules *.tsbuildinfo",
+    "seo:thin": "node scripts/seo-thin.mjs"
   },
   "dependencies": {
     "@notch/env": "workspace:*",
+    "@notch/integrations": "workspace:*",
     "@notch/schemas": "workspace:*",
     "better-auth": "^1.7.7",
     "gray-matter": "^4.0.3",

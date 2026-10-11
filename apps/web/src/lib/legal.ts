@@ -11,4 +11,5 @@
 export const LEGAL_UPDATED = {
   privacy: "2026-10-09",
   terms: "2026-10-09",
+  security: "2026-10-11",
 } as const;

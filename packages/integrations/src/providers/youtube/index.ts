@@ -67,7 +67,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Watch time divided by views over the whole window — not the mean of the daily averages, which would weight a quiet day the same as a busy one.",
+        "Watch time divided by views over the whole window, rather than the mean of the daily averages, which would weight a quiet day the same as a busy one.",
     },
     {
       id: "subscribers",
@@ -80,7 +80,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: false,
       supportsCompare: true,
       methodology:
-        "Subscribers on the channel right now, as the YouTube Data API reports it — which rounds anything over a thousand to three figures, so 12,345 reads as 12,300. The change against the previous window is the exact net gain from Analytics, so the arrow is right even where the total is rounded.",
+        "Subscribers on the channel right now, as the YouTube Data API reports it, which rounds anything over a thousand to three figures, so 12,345 reads as 12,300. The change against the previous window is the exact net gain from Analytics, so the arrow is right even where the total is rounded.",
     },
     {
       id: "new_subscribers",
@@ -92,7 +92,7 @@ export const manifest: ProviderManifest = {
       supportsCompare: true,
       keywords: ["youtube", "subs gained", "audience"],
       methodology:
-        "YouTube Analytics `subscribersGained`: people who subscribed in the window. Gross, not net — unsubscribes are not deducted, so this does not match the change in the subscriber total.",
+        "YouTube Analytics `subscribersGained`: people who subscribed in the window. Gross, not net: unsubscribes are not deducted, so this does not match the change in the subscriber total.",
     },
     {
       id: "likes",
@@ -146,7 +146,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Estimated revenue per thousand views, computed over the whole window rather than averaged across daily rates. This is RPM as YouTube Studio reports it — total revenue over total views, every view counted — not CPM, which is per thousand ad impressions and counts only monetised playbacks.",
+        "Estimated revenue per thousand views, computed over the whole window rather than averaged across daily rates. This is RPM as YouTube Studio reports it, meaning total revenue over total views with every view counted. It is not CPM, which is per thousand ad impressions and counts only monetised playbacks.",
     },
   ],
   allowedHosts: [

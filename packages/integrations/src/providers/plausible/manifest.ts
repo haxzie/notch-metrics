@@ -62,7 +62,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
-      methodology: `Total pages viewed in the window — repeat views by one visitor all count. ${ZONE_NOTE}`,
+      methodology: `Total pages viewed in the window, with repeat views by one visitor all counted. ${ZONE_NOTE}`,
     },
     {
       id: "bounce_rate",
@@ -82,7 +82,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
-      methodology: `Visits started in the window — Plausible's "visits". A session that spans midnight is counted in the bucket it started in. ${ZONE_NOTE}`,
+      methodology: `Visits started in the window, which Plausible calls "visits". A session that spans midnight is counted in the bucket it started in. ${ZONE_NOTE}`,
     },
   ],
   // Cloud only. Self-hosted Plausible speaks the same API on the operator's

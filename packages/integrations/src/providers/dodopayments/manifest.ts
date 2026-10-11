@@ -62,7 +62,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Every succeeded payment in the window, subscription renewals and one-time purchases together, by `total_amount`. Gross — before refunds and fees.",
+        "Every succeeded payment in the window, subscription renewals and one-time purchases together, by `total_amount`. Gross, before refunds and fees.",
     },
     {
       id: "one_time_sales",
@@ -73,7 +73,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Succeeded payments in the window that are not tied to a subscription, by `total_amount`. Gross — before refunds and fees.",
+        "Succeeded payments in the window that are not tied to a subscription, by `total_amount`. Gross, before refunds and fees.",
     },
     {
       id: "active_subscribers",

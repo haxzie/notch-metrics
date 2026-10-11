@@ -60,7 +60,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
-      methodology: `Users who did anything in the window — Amplitude's "Any Active Event". The headline is Amplitude's own de-duplicated figure for the whole window, so the bars do not add up to it: one person active on three days is one user and three bars. ${ZONE_NOTE}`,
+      methodology: `Users who did anything in the window, which Amplitude calls "Any Active Event". The headline is Amplitude's own de-duplicated figure for the whole window, so the bars do not add up to it: one person active on three days is one user and three bars. ${ZONE_NOTE}`,
     },
     {
       id: "new_users",
@@ -80,7 +80,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
-      methodology: `Every event recorded in the window, of every type — Amplitude's "Any Event". ${ZONE_NOTE}`,
+      methodology: `Every event recorded in the window, of every type, which Amplitude calls "Any Event". ${ZONE_NOTE}`,
     },
   ],
   allowedHosts: ["amplitude.com", "analytics.eu.amplitude.com"],

@@ -120,6 +120,9 @@ importers:
       '@notch/env':
         specifier: workspace:*
         version: link:../../packages/env
+      '@notch/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@notch/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

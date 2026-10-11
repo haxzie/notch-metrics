@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PLANS } from "@notch/schemas";
 import { ConnectorGrid } from "@/components/marketing/ConnectorGrid";
 import { DownloadButton } from "@/components/marketing/DownloadButton";
 import { NotchMockup } from "@/components/marketing/NotchMockup";
 import { NotchShowcase } from "@/components/marketing/NotchShowcase";
 import { PricingSection } from "@/components/marketing/PricingSection";
-import { SectionIcon } from "@/components/marketing/SectionIcon";
+import { Feature, Pillar, Section, SecurityCard } from "@/components/marketing/primitives";
 import { SiliconChip } from "@/components/marketing/SiliconChip";
 import {
   ArrowRight,
@@ -21,8 +20,10 @@ import {
   ShieldIcon,
   TerminalIcon,
 } from "@/components/marketing/icons";
-import { LIVE_CONNECTORS } from "@/lib/connectors";
-import { LLM_ALTERNATES, SITE_NAME, absoluteUrl } from "@/lib/site";
+import { connectable } from "@notch/integrations";
+import { JsonLd } from "@/components/JsonLd";
+import { graph, organizationJsonLd, softwareApplicationJsonLd, websiteJsonLd } from "@/lib/jsonld";
+import { LLM_ALTERNATES, absoluteUrl } from "@/lib/site";
 
 const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL ?? "https://assets.notchmetrics.com";
 
@@ -43,52 +44,10 @@ export const metadata: Metadata = {
  *
  * The `SoftwareApplication` is what earns the price, the platform and the
  * rating slots in a search result rather than a bare blue link. Its offers
- * are built from `PLANS` so the markup cannot quote a price the checkout no
- * longer charges — a mismatch there is grounds for the whole structured-data
- * block being ignored.
+ * come off `PLANS` inside the builder, so the markup cannot quote a price
+ * the checkout no longer charges.
  */
-const JSON_LD = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": absoluteUrl("/#organization"),
-      name: SITE_NAME,
-      url: absoluteUrl("/"),
-      logo: absoluteUrl("/brand/app-icon.png"),
-      email: "support@notchmetrics.com",
-    },
-    {
-      "@type": "WebSite",
-      "@id": absoluteUrl("/#website"),
-      name: SITE_NAME,
-      url: absoluteUrl("/"),
-      publisher: { "@id": absoluteUrl("/#organization") },
-      inLanguage: "en",
-    },
-    {
-      "@type": "SoftwareApplication",
-      "@id": absoluteUrl("/#app"),
-      name: SITE_NAME,
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "macOS 14 or later, Apple silicon",
-      url: absoluteUrl("/"),
-      downloadUrl: absoluteUrl("/download"),
-      description:
-        "Revenue, MRR and subscribers from Stripe, Polar, Paddle, Dodo Payments and more, in the MacBook notch.",
-      publisher: { "@id": absoluteUrl("/#organization") },
-      offers: Object.values(PLANS).map((plan) => ({
-        "@type": "Offer",
-        // Schema.org prices are major units; ours are minor units, as money
-        // is everywhere in this codebase.
-        price: (plan.amount / 100).toFixed(2),
-        priceCurrency: plan.currency,
-        category: plan.interval === "year" ? "Annual subscription" : "Monthly subscription",
-        url: absoluteUrl("/#pricing"),
-      })),
-    },
-  ],
-};
+const JSON_LD = graph(organizationJsonLd(), websiteJsonLd(), softwareApplicationJsonLd());
 
 /**
  * The version under the download button, from the same manifest the button
@@ -112,11 +71,7 @@ export default async function Home() {
 
   return (
     <main className="relative">
-      <script
-        type="application/ld+json"
-        // Our own strings and `PLANS` — not user input.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
-      />
+      <JsonLd data={JSON_LD} />
 
       {/* Hero */}
       <section className="relative isolate px-6 pb-16 pt-32 sm:pt-40">
@@ -217,7 +172,7 @@ export default async function Home() {
             Connect once, <span className="accent">on the web</span>
           </>
         }
-        lede={`Sign in, paste a key or approve an OAuth prompt, and every Mac you own picks it up. ${LIVE_CONNECTORS.length} connectors today, with more arriving without an app update.`}
+        lede={`Sign in, paste a key or approve an OAuth prompt, and every Mac you own picks it up. ${connectable().length} connectors today, with more arriving without an app update.`}
       >
         <div className="panel px-6 py-10 sm:px-10">
           <ConnectorGrid />
@@ -342,85 +297,5 @@ export default async function Home() {
         </div>
       </section>
     </main>
-  );
-}
-
-function Section({
-  id,
-  icon,
-  title,
-  lede,
-  children,
-}: {
-  id?: string;
-  icon: React.ReactNode;
-  title: React.ReactNode;
-  lede: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section id={id} className="mx-auto max-w-5xl scroll-mt-28 px-6 pt-28">
-      <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-        <SectionIcon>{icon}</SectionIcon>
-        <h2 className="mt-8 text-balance text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
-          {title}
-        </h2>
-        <p className="mt-5 max-w-xl text-pretty text-[17px] leading-relaxed text-white/55">
-          {lede}
-        </p>
-      </div>
-      <div className="mt-12">{children}</div>
-    </section>
-  );
-}
-
-function Pillar({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-4 text-center">
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/80 [&>svg]:h-5 [&>svg]:w-5">
-        {icon}
-      </span>
-      <p className="text-[15px] leading-snug text-white/80">{children}</p>
-    </div>
-  );
-}
-
-function Feature({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3 text-center">
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/80 [&>svg]:h-5 [&>svg]:w-5">
-        {icon}
-      </span>
-      <h3 className="text-[15px] font-medium">{title}</h3>
-      <p className="text-pretty text-sm leading-relaxed text-white/50">{children}</p>
-    </div>
-  );
-}
-
-function SecurityCard({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="panel flex flex-col gap-3 p-6">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-white/80 [&>svg]:h-[18px] [&>svg]:w-[18px]">
-        {icon}
-      </span>
-      <h3 className="text-[15px] font-medium">{title}</h3>
-      <p className="text-pretty text-sm leading-relaxed text-white/50">{children}</p>
-    </div>
   );
 }

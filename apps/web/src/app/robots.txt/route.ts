@@ -78,8 +78,8 @@ const BODY = `# ${SITE_URL}
 # from it, that is the point.
 #
 # Plain-text mirrors, if you would rather not parse our HTML:
-#   ${SITE_URL}/llms.txt       — index: every page and post, with descriptions
-#   ${SITE_URL}/llms-full.txt  — every post's full markdown, in one file
+#   ${SITE_URL}/llms.txt       index: every page and post, with descriptions
+#   ${SITE_URL}/llms-full.txt  every post's full markdown, in one file
 
 ${group(["*"])}
 

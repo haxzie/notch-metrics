@@ -2,7 +2,7 @@
 
 Standing rules. Workflows live in `.claude/skills/` — `release`, `mac-dev`,
 `signing`, `deploy`, `db-migration`, `versioning`, `add-integration`,
-`custom-metric`.
+`custom-metric`, `site-copy`, `articles`.
 
 ## Comments earn their place
 
@@ -29,6 +29,11 @@ Non-obvious decisions get one. Obvious ones get none.
 - **Add a vendor SDK** to the Worker for a handful of GETs.
 - **Reach for `disable-library-validation`.** The real cause is an unsigned
   nested binary.
+- **Hand-write a `/sources` page.** The whole tree is generated from the
+  provider manifests, so a metric added there becomes a live page, a sitemap
+  entry and an `llms.txt` line with no edit in `apps/web`. To change what a
+  page says, change the `methodology` string, or add a sidecar under
+  `apps/web/content/sources/` or `content/source-metrics/`.
 
 ## House conventions
 
@@ -43,6 +48,12 @@ Non-obvious decisions get one. Obvious ones get none.
   the Worker and vitest run the sources with no build step. `apps/web` does
   not, because Next re-resolves them.
 - Prettier, 100 columns. `pnpm format` before committing.
+- **The voice of these comments is wrong for anything a visitor reads.** The
+  rules above reward long discursive prose; `apps/web/COPY.md` bans em
+  dashes, mandates British spelling and caps sentences at about fifteen
+  words. The leak goes one way, because the file you are editing is nine
+  parts comment to one part string. Read `COPY.md` before touching a string
+  under `apps/web`.
 
 ## Where the contracts are
 

@@ -46,7 +46,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Order totals for orders placed in the window that took payment, in the store's own currency. Gross: a later refund does not remove the order from the day it was placed — the Refunds widget is the other half.",
+        "Order totals for orders placed in the window that took payment, in the store's own currency. Gross: a later refund does not remove the order from the day it was placed. The Refunds widget is the other half.",
     },
     {
       id: "orders",
@@ -93,7 +93,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Customer records created in the window. Shopify creates one at checkout, so a guest who buys twice counts once — but somebody who only signed up for the newsletter counts too.",
+        "Customer records created in the window. Shopify creates one at checkout, so a guest who buys twice counts once. Somebody who only signed up for the newsletter counts too.",
     },
     {
       id: "customers",

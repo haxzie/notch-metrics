@@ -7,6 +7,7 @@ import { AppleMark } from "./icons";
 const LINKS = [
   { href: "/", label: "Home" },
   { href: "/#pricing", label: "Pricing" },
+  { href: "/sources", label: "Sources" },
   { href: "/blog", label: "Blog" },
   { href: "/login", label: "Sign in" },
 ];

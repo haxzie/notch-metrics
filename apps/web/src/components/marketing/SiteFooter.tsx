@@ -6,8 +6,15 @@ const COLUMNS: { title: string; links: { href: string; label: string; external?:
     links: [
       { href: "/download", label: "Download" },
       { href: "/#pricing", label: "Pricing" },
-      { href: "/blog", label: "Blog" },
+      { href: "/sources", label: "Sources" },
       { href: "/login", label: "Sign in" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { href: "/blog", label: "Blog" },
+      { href: "/library", label: "Content library" },
     ],
   },
   {
@@ -33,7 +40,7 @@ const COLUMNS: { title: string; links: { href: string; label: string; external?:
 export function SiteFooter() {
   return (
     <footer className="relative mt-32 overflow-hidden border-t border-white/[0.06]">
-      <div className="mx-auto grid max-w-6xl gap-12 px-6 pb-10 pt-16 sm:grid-cols-[1.4fr_repeat(3,1fr)]">
+      <div className="mx-auto grid max-w-6xl gap-12 px-6 pb-10 pt-16 sm:grid-cols-[1.4fr_repeat(4,1fr)]">
         <div className="flex flex-col gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Notch Metrics" width={28} height={28} />

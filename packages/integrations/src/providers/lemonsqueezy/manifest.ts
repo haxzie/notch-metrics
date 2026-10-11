@@ -50,7 +50,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Orders in the window that took payment, by `total`. Gross — a later refund does not remove the order from the day it was paid.",
+        "Orders in the window that took payment, by `total`. Gross: a later refund does not remove the order from the day it was paid.",
     },
     {
       id: "active_subscribers",
