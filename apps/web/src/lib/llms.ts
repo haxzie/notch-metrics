@@ -2,6 +2,7 @@ import { allPosts, formatDate, type Post } from "@/lib/blog";
 import { allLibraryEntries, type LibraryEntry } from "@/lib/library";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { metricPages, sourcePages } from "@/lib/sources";
+import { allTools } from "@/lib/tools";
 
 /**
  * The `/llms.txt` family.
@@ -36,6 +37,12 @@ const PAGES: { path: string; title: string; description: string }[] = [
     title: "Sources",
     description:
       "Every service Notch Metrics reads a number from, and every number it reports, with how each one is calculated.",
+  },
+  {
+    path: "/free-tools",
+    title: "Free tools",
+    description:
+      "Free browser calculators for MRR, ARR, churn, lifetime value, CAC payback, net revenue retention, average order value, CTR, RPM and payment fees.",
   },
   {
     path: "/library",
@@ -104,6 +111,13 @@ export function llmsIndex(): string {
     ...metricPages().map(
       ({ manifest, metric, path }) =>
         `- [${manifest.name} ${metric.label.toLowerCase()}](${absoluteUrl(path)}): ${metric.methodology}`,
+    ),
+    "",
+    "## Free tools",
+    "",
+    ...allTools().map(
+      (tool) =>
+        `- [${tool.name}](${absoluteUrl(`/free-tools/${tool.slug}`)}): ${tool.description} Formula: ${tool.formula}.`,
     ),
     "",
     "## Blog",

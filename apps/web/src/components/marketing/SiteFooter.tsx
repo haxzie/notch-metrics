@@ -14,6 +14,7 @@ const COLUMNS: { title: string; links: { href: string; label: string; external?:
     title: "Resources",
     links: [
       { href: "/blog", label: "Blog" },
+      { href: "/free-tools", label: "Free tools" },
       { href: "/library", label: "Content library" },
     ],
   },

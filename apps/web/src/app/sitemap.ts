@@ -4,6 +4,7 @@ import { LEGAL_UPDATED } from "@/lib/legal";
 import { allLibraryEntries } from "@/lib/library";
 import { SITE_URL } from "@/lib/site";
 import { metricPages, sourcePages } from "@/lib/sources";
+import { allTools } from "@/lib/tools";
 
 // `allPosts()` reads the filesystem — see the note in src/lib/collection.ts.
 export const dynamic = "force-static";
@@ -28,6 +29,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const library = allLibraryEntries().filter((entry) => !entry.draft);
   const sources = sourcePages();
   const metrics = metricPages();
+  const tools = allTools();
 
   const newestPost = posts[0];
   const newestLibrary = library[0];
@@ -52,6 +54,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${SITE_URL}${metric.path}`,
       changeFrequency: "monthly" as const,
       priority: 0.6,
+    })),
+    {
+      url: `${SITE_URL}/free-tools`,
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    ...tools.map((tool) => ({
+      url: `${SITE_URL}/free-tools/${tool.slug}`,
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
     })),
     {
       url: `${SITE_URL}/blog`,
