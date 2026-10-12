@@ -99,16 +99,16 @@ jobs:
         # A runner image change that quietly drops Xcode 26 should fail loudly
         # rather than compile against something older.
         #
-        # Asserted on Xcode, not on `swift --version`. That string is free
-        # text and it changed: the runner now prints the swift-driver version
-        # and no "Apple Swift version" on that line, so a pattern written
-        # against the old shape failed on every build for days — on a step
-        # whose `grep -q` printed nothing, so the log said only "exit 1" and
-        # the toolchain looked broken rather than the regex.
+        # Asserted on Xcode, not on Swift. This demanded `version 6.[3-9]`
+        # and the runner's Xcode 26.3 ships Swift 6.2.4, so it failed every
+        # build for days while the local toolchain — 6.3 — was fine. Pinning
+        # a minimum Swift here says nothing the Xcode version does not, and
+        # ties the build to whichever compiler the developer happens to have.
         #
-        # Both versions are echoed for the next time a format moves, and the
-        # step above already fails when no Xcode 26 exists at all, so this is
-        # about what is inside the one it picked.
+        # Both versions are echoed rather than swallowed. `grep -q` is why
+        # this cost days: the step printed nothing on failure, so the log
+        # said "exit 1" and the toolchain looked broken rather than the
+        # regex that tested it.
         run: |
           swift --version
           xcodebuild -version

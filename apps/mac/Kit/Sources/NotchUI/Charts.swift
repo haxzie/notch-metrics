@@ -28,10 +28,14 @@ public enum SeriesDownsampler {
             var bestArea = -1.0
 
             for point in points[rangeStart..<max(rangeStart, rangeEnd)] {
-                let area = abs(
-                    (previous.x - avgX) * (point.y - previous.y)
-                        - (previous.x - point.x) * (avgY - previous.y)
-                ) / 2
+                // Split, and annotated, because the one-expression form took
+                // Swift 6.2 past its type-checking budget — six CGFloat
+                // operands and a literal divisor is enough for the solver to
+                // give up. It compiles on 6.3, which is why it only ever
+                // failed on CI.
+                let left: CGFloat = (previous.x - avgX) * (point.y - previous.y)
+                let right: CGFloat = (previous.x - point.x) * (avgY - previous.y)
+                let area = abs(left - right) / 2
                 if area > bestArea {
                     bestArea = area
                     best = point
