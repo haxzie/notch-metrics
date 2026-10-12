@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { bucketSum, planWalk } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -25,6 +25,24 @@ const HOST = "api.anthropic.com";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Midnight UTC at the start of the day `date` falls in.
+ *
+ * The cost report's `starting_at` is snapped *up* to the next day boundary
+ * and its `ending_at` defaults to the start of today, so an unaligned
+ * timestamp inside the current day snaps to exactly that default and the
+ * request is refused with "ending date must be after starting date" — a 400
+ * that reads as a bad key. `now - 24h` is inside the current day for all but
+ * the midnight UTC hour, which is why the connector could not be connected
+ * at all.
+ *
+ * The docs say the timestamp is simply snapped, so this is not inferable
+ * from them; it was found by walking the boundary against the live API.
+ */
+function startOfUTCDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
 
 /** Buckets one response carries, by `bucket_width`. The cost report is daily only. */
 const PER_PAGE = { "1h": 168, "1d": 31 } as const;
@@ -79,7 +97,7 @@ async function get<T>(ctx: AdapterContext, creds: AnthropicCredentials, url: URL
       "Claude would not read your usage. This needs an organisation Admin key — workspace keys and individual accounts cannot read the Admin API.",
     );
   }
-  if (!response.ok) throw errorForStatus(HOST, response);
+  if (!response.ok) throw await errorForResponse(HOST, response);
   return response.json<T>();
 }
 
@@ -146,15 +164,28 @@ export const anthropic: ProviderAdapter<AnthropicCredentials> = {
     // own, and the two reports are separately available on a scoped key.
     try {
       const costs = new URL(`${API}/organizations/cost_report`);
-      costs.searchParams.set("starting_at", new Date(ctx.now().getTime() - DAY_MS).toISOString());
+      // Yesterday 00:00 UTC: the most recent range that is a whole bucket.
+      costs.searchParams.set(
+        "starting_at",
+        new Date(startOfUTCDay(ctx.now()).getTime() - DAY_MS).toISOString(),
+      );
       costs.searchParams.set("limit", "1");
       await get<Page<CostResult>>(ctx, creds, costs);
       available.push("api_spend");
     } catch (error) {
-      // Only a refusal narrows — see the note on OpenAI's. A transient failure
-      // here would otherwise hide spend until the user reconnects.
-      if (!(error instanceof ProviderError) || error.code !== "auth_failed") throw error;
-      ctx.log("anthropic cost report refused, narrowing metrics", { code: error.code });
+      // A permanent refusal narrows; a transient one is fatal.
+      //
+      // `availableMetrics` is written once at connect, so letting a 503 pass
+      // would hide spend until the user reconnected. But re-throwing
+      // everything else meant an optional probe could fail the entire
+      // connection — which is what a malformed cost request did, leaving
+      // Claude unconnectable even though all three token metrics worked.
+      const permanent = new Set(["auth_failed", "bad_response", "unsupported", "not_found"]);
+      if (!(error instanceof ProviderError) || !permanent.has(error.code)) throw error;
+      ctx.log("anthropic cost report refused, narrowing metrics", {
+        code: error.code,
+        message: error.message,
+      });
     }
 
     return {
@@ -249,7 +280,9 @@ async function spend(
     creds,
     "/organizations/cost_report",
     {
-      starting_at: plan.start.toISOString(),
+      // Floored, not passed through: an unaligned start is snapped up to the
+      // next midnight, which silently drops the first day of the window.
+      starting_at: startOfUTCDay(plan.start).toISOString(),
       ending_at: request.to.toISOString(),
       limit: String(PER_PAGE["1d"]),
     },

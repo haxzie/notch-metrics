@@ -89,6 +89,54 @@ export function createHttp(options: {
   };
 }
 
+/**
+ * `errorForStatus`, with the provider's own explanation attached.
+ *
+ * A 4xx that is not 401, 403 or 429 is the provider saying the *request* was
+ * wrong, and it almost always says which part in the body. Throwing that away
+ * leaves "api.anthropic.com returned 400" on screen, and the cause then has
+ * to be guessed from outside the system — which is how a bad query parameter
+ * survives a release.
+ *
+ * Only for 4xx, and only once. A 5xx body is usually an HTML error page, and
+ * 401/403/429 are already fully described by their status — attaching a
+ * provider's "invalid x-api-key" to our own sentence about admin keys makes
+ * the tile read like two different problems.
+ */
+export async function errorForResponse(
+  host: string,
+  response: HttpResponse,
+): Promise<ProviderError> {
+  const base = errorForStatus(host, response);
+  if (response.status >= 500 || base.code !== "bad_response") return base;
+
+  const detail = await providerMessage(response);
+  return detail
+    ? new ProviderError(base.code, `${base.message}: ${detail}`, base.retryAfterSeconds)
+    : base;
+}
+
+/**
+ * The human-readable half of a provider's error body.
+ *
+ * `{ error: { message } }` is what OpenAI and Anthropic both send, and what
+ * most of the rest copied. Anything unrecognised is dropped rather than
+ * pasted in raw: an HTML page or a stack trace in a notch tile is worse than
+ * the bare status it would replace.
+ */
+async function providerMessage(response: HttpResponse): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error?: { message?: unknown }; message?: unknown };
+    const raw = typeof body?.error?.message === "string" ? body.error.message : body?.message;
+    if (typeof raw !== "string" || raw.trim() === "") return null;
+    // Bounded. Some providers return a paragraph with a request id in it, and
+    // the tile has one line.
+    return raw.length > 200 ? `${raw.slice(0, 197)}...` : raw;
+  } catch {
+    return null;
+  }
+}
+
 /** Turns a provider's HTTP status into our taxonomy, honouring Retry-After. */
 export function errorForStatus(host: string, response: HttpResponse): ProviderError {
   if (response.status === 401 || response.status === 403) {

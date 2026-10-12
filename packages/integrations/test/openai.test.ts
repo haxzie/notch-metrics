@@ -31,6 +31,22 @@ const usageRow = (input: number, output: number, requests = 1) => ({
 });
 
 describe("openai", () => {
+  it("keeps the token metrics when the cost report is refused outright", async () => {
+    // An optional probe must not fail the whole connection: four working
+    // metrics beat a connector that cannot be connected at all.
+    const ctx = stubContext({
+      "/organization/usage/completions": { data: [], has_more: false, next_page: null },
+      "/organization/costs": { __status: 400 },
+    });
+    const result = await openai.verify(ctx, creds);
+    expect(result.availableMetrics).toEqual([
+      "tokens",
+      "input_tokens",
+      "output_tokens",
+      "api_requests",
+    ]);
+  });
+
   it("names the admin key as the problem rather than the key", async () => {
     // A perfectly valid `sk-proj-` key gets this 401. "Rejected the
     // credentials" sends somebody off to mint another one of the same kind.

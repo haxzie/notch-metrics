@@ -49,6 +49,62 @@ describe("anthropic", () => {
     expect((error as ProviderError).message).toMatch(/workspace/i);
   });
 
+  /**
+   * The bug that made the connector unconnectable, and the reason no fixture
+   * caught it: every other test here stubs by path and asserts the parsing,
+   * so the query string the adapter actually builds was never looked at.
+   *
+   * The cost report snaps `starting_at` up to the next UTC day and defaults
+   * `ending_at` to the start of today. `now - 24h` therefore snaps to exactly
+   * that default for all but the midnight hour, and the API answers 400
+   * "ending date must be after starting date" — which surfaced as a connect
+   * failure that read like a rejected key.
+   */
+  it("asks the cost report for a range that is a whole bucket", async () => {
+    const ctx = stubContext({
+      "/organizations/usage_report/messages": { data: [], has_more: false, next_page: null },
+      "/organizations/cost_report": { data: [], has_more: false, next_page: null },
+    });
+    await anthropic.verify(ctx, creds);
+
+    const cost = ctx.calls.find((url) => url.includes("/organizations/cost_report"));
+    const startingAt = new URL(scalar(cost)).searchParams.get("starting_at") ?? "";
+
+    // Midnight UTC, and strictly before today — `ending_at` defaults to the
+    // start of today, and the two being equal is the 400.
+    expect(startingAt).toMatch(/T00:00:00\.000Z$/);
+    expect(new Date(startingAt).getTime()).toBeLessThan(
+      Date.UTC(2026, 9, 5), // ctx.now() is 2026-10-05T12:00Z
+    );
+  });
+
+  it("floors the spend window so the first day is not snapped away", async () => {
+    const ctx = stubContext({
+      "/organizations/cost_report": { data: [], has_more: false, next_page: null },
+    });
+    await anthropic.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "api_spend",
+      // Deliberately mid-afternoon: passed through, this whole day is lost.
+      from: new Date("2026-09-20T15:30:00.000Z"),
+      to: new Date("2026-10-05T12:00:00.000Z"),
+    });
+
+    const cost = ctx.calls.find((url) => url.includes("/organizations/cost_report"));
+    const startingAt = new URL(scalar(cost)).searchParams.get("starting_at") ?? "";
+    expect(startingAt).toMatch(/T00:00:00\.000Z$/);
+  });
+
+  it("keeps the token metrics when the cost report is refused outright", async () => {
+    // A 400 from an optional probe used to fail the whole connection.
+    const ctx = stubContext({
+      "/organizations/usage_report/messages": { data: [], has_more: false, next_page: null },
+      "/organizations/cost_report": { __status: 400 },
+    });
+    const result = await anthropic.verify(ctx, creds);
+    expect(result.availableMetrics).toEqual(["tokens", "input_tokens", "output_tokens"]);
+  });
+
   it("offers no request count, because the usage report has none", async () => {
     const ctx = stubContext({
       "/organizations/usage_report/messages": { data: [], has_more: false, next_page: null },

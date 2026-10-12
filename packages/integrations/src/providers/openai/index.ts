@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { bucketSum, planWalk } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -71,7 +71,7 @@ async function get<T>(ctx: AdapterContext, creds: OpenAICredentials, url: URL): 
       "OpenAI would not read your usage. This needs an organisation Admin key, not a project or user key.",
     );
   }
-  if (!response.ok) throw errorForStatus(HOST, response);
+  if (!response.ok) throw await errorForResponse(HOST, response);
   return response.json<T>();
 }
 
@@ -154,12 +154,20 @@ export const openai: ProviderAdapter<OpenAICredentials> = {
         body.data.flatMap((bucket) => bucket.results).find((r) => r.organization_id)
           ?.organization_id ?? accountLabel;
     } catch (error) {
-      // Only a refusal narrows. A 500 or a rate limit here is transient, and
-      // `availableMetrics` is written once at connect time — swallowing those
-      // would hide spend permanently over a bad thirty seconds, with nothing
-      // short of reconnecting to bring it back.
-      if (!(error instanceof ProviderError) || error.code !== "auth_failed") throw error;
-      ctx.log("openai cost report refused, narrowing metrics", { code: error.code });
+      // A permanent refusal narrows; a transient one is fatal.
+      //
+      // `availableMetrics` is written once at connect time, so swallowing a
+      // 500 or a rate limit would hide spend permanently over a bad thirty
+      // seconds. But re-throwing everything else lets an *optional* probe
+      // fail the whole connection — which is exactly what a malformed cost
+      // request did on the Claude connector, leaving it unconnectable while
+      // all four token metrics worked.
+      const permanent = new Set(["auth_failed", "bad_response", "unsupported", "not_found"]);
+      if (!(error instanceof ProviderError) || !permanent.has(error.code)) throw error;
+      ctx.log("openai cost report refused, narrowing metrics", {
+        code: error.code,
+        message: error.message,
+      });
     }
 
     return { accountLabel, currency: "USD", availableMetrics: available };
