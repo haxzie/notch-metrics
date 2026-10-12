@@ -89,8 +89,28 @@ pnpm --filter @notch/api dev &
 curl -s localhost:8787/v1/providers | jq '.providers[] | {id, status}'
 ```
 
-Then connect a real **test-mode** key through the dashboard and confirm the
-numbers match the provider's own.
+Your test file owes one sweep as well as its fixtures:
+
+```ts
+it("serves every range its manifest offers", async () => {
+  expect(await refusedOfferedRanges(myprovider, creds, routes)).toEqual([]);
+});
+```
+
+Fixtures assert the parsing; this asserts that the adapter answers every
+range its own `granularities` advertises. The combination nobody writes a
+case for is the one that reaches a tile. See `widget-creator` for what the
+declaration promises.
+
+Then connect a real key and confirm the numbers match the provider's own —
+in **test mode** where the provider has one.
+
+A green suite does not mean the provider accepts the request. Every stub
+answers whatever the fixture says, so a query string the API rejects outright
+passes every test in the file: the LLM connectors shipped asking their cost
+report for a window it refuses, and the first thing anyone saw was a 400 on
+connect that read like a bad key. Walk every metric and every range once
+against a real key before calling it done.
 
 ## OAuth connectors whose tokens expire
 

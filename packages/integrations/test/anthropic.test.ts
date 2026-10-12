@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { anthropic } from "../src/providers/anthropic/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { refusedOfferedRanges, scalar, stubContext } from "./helpers.ts";
 
 const creds = { admin_key: "sk-ant-admin01-0123456789abcdef" };
 
@@ -40,6 +40,20 @@ const usageRow = (options: {
 });
 
 describe("anthropic", () => {
+  /**
+   * The sweep. Every metric against every range its own manifest offers —
+   * which is the combination nobody writes a case for and the one that
+   * reached users: "12m" on all of them and "24h" on spend both came back as
+   * errors on the tile.
+   */
+  it("serves every range its manifest offers", async () => {
+    expect(
+      await refusedOfferedRanges(anthropic, creds, {
+        "/organizations/usage_report/messages": { data: [], has_more: false, next_page: null },
+        "/organizations/cost_report": { data: [], has_more: false, next_page: null },
+      }),
+    ).toEqual([]);
+  });
   it("names all three things a 401 can mean", async () => {
     const ctx = stubContext({ "/organizations/usage_report/messages": { __status: 401 } });
     const error = await anthropic.verify(ctx, creds).catch((e: unknown) => e);

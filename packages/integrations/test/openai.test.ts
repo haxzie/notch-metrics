@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openai } from "../src/providers/openai/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { refusedOfferedRanges, scalar, stubContext } from "./helpers.ts";
 
 const creds = { admin_key: "sk-admin-0123456789abcdefghij" };
 
@@ -31,6 +31,20 @@ const usageRow = (input: number, output: number, requests = 1) => ({
 });
 
 describe("openai", () => {
+  /**
+   * The sweep. Every metric against every range its own manifest offers —
+   * which is the combination nobody writes a case for and the one that
+   * reached users: "12m" on all of them and "24h" on spend both came back as
+   * errors on the tile.
+   */
+  it("serves every range its manifest offers", async () => {
+    expect(
+      await refusedOfferedRanges(openai, creds, {
+        "/organization/usage/completions": { data: [], has_more: false, next_page: null },
+        "/organization/costs": { data: [], has_more: false, next_page: null },
+      }),
+    ).toEqual([]);
+  });
   it("keeps the token metrics when the cost report is refused outright", async () => {
     // An optional probe must not fail the whole connection: four working
     // metrics beat a connector that cannot be connected at all.
