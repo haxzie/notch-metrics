@@ -255,7 +255,7 @@ struct WidgetBrowserPane: View {
             metric: metric.id,
             title: metric.shortLabel,
             size: .wide,
-            granularity: metric.granularities.first ?? .day,
+            granularity: TimeRange.month.defaultGranularity,
             range: .month,
             chart: metric.supportsSeries ? .sparkline : .none,
             format: WidgetFormat(compact: true))
@@ -362,7 +362,7 @@ private struct BrowseCard: View {
             // is a different shape from the tile you get is a preview of
             // something else.
             size: .wide,
-            granularity: metric.granularities.first ?? .day,
+            granularity: TimeRange.month.defaultGranularity,
             range: .month,
             chart: metric.supportsSeries ? .sparkline : .none,
             format: WidgetFormat(compact: true))
@@ -412,7 +412,7 @@ enum WidgetSample {
             previousValue: base * 0.8,
             delta: MetricDelta(absolute: base * 0.2, percent: 25.6),
             points: metric.supportsSeries ? points : [],
-            granularity: metric.granularities.first ?? .day,
+            granularity: TimeRange.month.defaultGranularity,
             range: .month,
             items: rows)
     }

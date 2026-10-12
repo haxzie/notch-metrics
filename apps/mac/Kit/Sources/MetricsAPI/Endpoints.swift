@@ -15,7 +15,19 @@ public struct MetricQueryRequest: Codable, Sendable {
     public init(widget: NotchWidget) {
         self.integrationId = widget.integrationId ?? ""
         self.metric = widget.metric ?? ""
-        self.granularity = widget.granularity.rawValue
+        // Derived from the range, not read off the widget.
+        //
+        // `widget.granularity` is frozen when the widget is created — the
+        // browser seeds it from `granularities.first` — and no control has
+        // ever changed it, so it stayed whatever the metric happened to list
+        // first while the range moved underneath it. For both LLM connectors
+        // that is `hour`, so a 90-day tile asked for ninety days of hourly
+        // buckets and the adapter refused a walk it would never finish.
+        //
+        // The server derives the same value from the range when none is
+        // sent, and the configure pane filters the range picker on this
+        // table too — three places agreeing is the point.
+        self.granularity = widget.range.defaultGranularity.rawValue
         self.range = widget.range.rawValue
         // A tile with no chart does not need the series, and saying so lets
         // the adapter skip a page walk rather than computing data nobody draws.
