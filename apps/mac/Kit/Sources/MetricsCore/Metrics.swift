@@ -45,6 +45,25 @@ public enum TimeRange: String, Codable, Sendable, CaseIterable {
         self = TimeRange(rawValue: raw) ?? .month
     }
 
+    /// The bucket the server will choose for this range.
+    ///
+    /// Mirrors `DEFAULT_GRANULARITY` in `packages/schemas`. A widget sends a
+    /// range and no granularity, so the two are the same choice made twice —
+    /// which is what lets a metric's declared `granularities` say which
+    /// ranges it can actually answer for.
+    ///
+    /// Duplicated rather than fetched because it decides what the configure
+    /// pane may offer, and a pane that cannot lay out its own picker until
+    /// the network answers is worse than one constant kept in step.
+    public var defaultGranularity: Granularity {
+        switch self {
+        case .day: .hour
+        case .week, .month: .day
+        case .quarter: .week
+        case .year: .month
+        }
+    }
+
     public var label: String {
         switch self {
         case .day: "24 hours"

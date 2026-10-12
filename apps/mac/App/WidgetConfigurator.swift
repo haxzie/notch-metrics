@@ -43,6 +43,55 @@ struct WidgetConfigPanel: View {
     /// Whether this metric can be drawn as a chart at all.
     private var usesChart: Bool { descriptor?.supportsSeries != false }
 
+    /// The ranges this metric can actually answer for.
+    ///
+    /// A range is a granularity in disguise: the widget sends only a range
+    /// and the server derives the bucket from it, so a metric that cannot
+    /// bucket by month cannot serve "12m". Every manifest has declared
+    /// `granularities` since the first connector and nothing has ever read
+    /// them — the picker offered all five regardless, and the two the AI
+    /// connectors cannot serve came back as errors on the tile: "12m" on any
+    /// of them, and "24h" on spend, which both report once a day.
+    ///
+    /// The widget's own range is still offered when unsupported, so the
+    /// picker has a row matching its selection and does not render blank in
+    /// the moment before `clampRange` moves it.
+    private func offeredRanges(_ widget: NotchWidget) -> [TimeRange] {
+        guard let descriptor else { return TimeRange.allCases }
+        let offered = TimeRange.allCases.filter {
+            descriptor.granularities.contains($0.defaultGranularity)
+        }
+        if offered.isEmpty { return TimeRange.allCases }
+        return offered.contains(widget.range) ? offered : offered + [widget.range]
+    }
+
+    /// Moves a widget off a range its metric cannot serve.
+    ///
+    /// Only ever runs on a widget that is already broken: its tile answers
+    /// every refresh with an error for a combination the picker should never
+    /// have offered. That is a bad state rather than a preference, so it is
+    /// corrected rather than preserved — and visibly, in the picker the user
+    /// is looking at.
+    ///
+    /// The nearest supported range is the longest one no longer than what
+    /// they had, so "12m" lands on "90d" rather than on "24h".
+    private func clampRange() {
+        guard var widget = draft, let descriptor else { return }
+        guard !descriptor.granularities.contains(widget.range.defaultGranularity) else { return }
+        let supported = TimeRange.allCases.filter {
+            descriptor.granularities.contains($0.defaultGranularity)
+        }
+        guard !supported.isEmpty else { return }
+
+        let current = TimeRange.allCases.firstIndex(of: widget.range) ?? 0
+        widget.range =
+            supported.last { (TimeRange.allCases.firstIndex(of: $0) ?? 0) <= current }
+            ?? supported[0]
+        draft = widget
+        env.layoutModel.update(widget)
+        Task { await env.refresh() }
+    }
+
     /// The connection this widget reads, if the catalogue knows it.
     private var selectedConnection: ConnectorConnection? {
         guard let id = draft?.integrationId else { return nil }
@@ -121,12 +170,23 @@ struct WidgetConfigPanel: View {
             // layout, so there is nothing buffered here to lose.
             draft = env.layoutModel.layout.widgets.first { $0.id == widgetId }
             await model.load(env: env)
+            // After the catalogue, because there is no descriptor to ask
+            // before it lands and every range looks supported without one.
+            clampRange()
         }
     }
 
     private func form(_ widget: NotchWidget) -> some View {
         let binding = Binding<NotchWidget>(
-            get: { draft ?? widget },
+            // The widget as it is *now*, not as it was when the pane opened.
+            //
+            // Every setter below reads this, changes one field and writes the
+            // whole widget back, so reading a snapshot meant each edit also
+            // restored every field that had changed elsewhere since — and
+            // `size` is the one that shows. Resize a tile with the pane open,
+            // then touch any picker, and the tile sprang back to the size it
+            // had when the pane was opened.
+            get: { env.layoutModel.layout.widgets.first { $0.id == widgetId } ?? draft ?? widget },
             set: { next in
                 draft = next
                 // Written straight through rather than on a Done button: the
@@ -330,7 +390,7 @@ struct WidgetConfigPanel: View {
                             Task { await env.refresh() }
                         }
                     )) {
-                        ForEach(TimeRange.allCases, id: \.self) { range in
+                        ForEach(offeredRanges(binding.wrappedValue), id: \.self) { range in
                             Text(range.rawValue).tag(range)
                         }
                     }
