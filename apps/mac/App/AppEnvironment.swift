@@ -190,6 +190,17 @@ final class AppEnvironment {
     }
 
     func start() async {
+        // First line of every run. A log that does not say which build wrote
+        // it, or which server it was talking to, is a log that answers the
+        // wrong question — most reports arrive after an update.
+        Task { [api = Self.apiURL] in
+            let info = Bundle.main.infoDictionary
+            let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+            let build = info?["CFBundleVersion"] as? String ?? "?"
+            await LogFile.shared.write(
+                "app", "started \(version) (\(build)) — api \(api.absoluteString)")
+        }
+
         settings = await settingsStore.current
         plugins.setApproved(settings.approvedPluginIDs)
         plugins.start()
@@ -477,6 +488,17 @@ final class AppEnvironment {
                     await cache.store(
                         series, widgetID: widget.id, range: widget.range, params: widget.params)
                 case .failure(let failure):
+                    // The one line worth having when a widget misbehaves on
+                    // one range and not another: which widget, which window,
+                    // and the server's own sentence — which now carries the
+                    // provider's, rather than a bare status.
+                    Task {
+                        await LogFile.shared.write(
+                            "metric",
+                            "\(widget.appId)/\(widget.metric ?? "?") \(widget.range.rawValue)"
+                                + " [\(widget.granularity.rawValue)] → \(failure.code.rawValue):"
+                                + " \(failure.message)")
+                    }
                     // `not_found` is the server saying this widget points at
                     // an account that is gone — disconnected, or reconnected
                     // under a new id. Left alone the tile reads "That
@@ -499,10 +521,23 @@ final class AppEnvironment {
                         }
                         continue
                     }
-                    // Keep a cached number on screen rather than replacing it
-                    // with an error: a stale figure with a mark against it
-                    // beats a blank tile while a provider is down.
-                    if case .value = next[widget.id] { continue }
+                    // Keep a cached number on screen rather than replacing
+                    // it with an error: a stale figure beats a blank tile
+                    // while a provider is down.
+                    //
+                    // Only while it still answers the question being asked.
+                    // The number carries the window and the metric it was
+                    // fetched for, and holding it through a failure on a
+                    // *different* range left the old figure under the new
+                    // range's title — "Tokens · 7d" showing the 30-day total,
+                    // with nothing on screen to say the switch had failed.
+                    // A wrong number labelled confidently is worse than the
+                    // error it is standing in for.
+                    if case .value(let shown) = next[widget.id],
+                       shown.range == widget.range,
+                       widget.metric == nil || shown.metric == widget.metric {
+                        continue
+                    }
                     // `unsupported` is the server saying the widget is not
                     // finished — a GitHub tile with no repository picked yet,
                     // say. That is a setup step, not a failure, and a freshly
@@ -521,6 +556,10 @@ final class AppEnvironment {
             // bound a widget that had nothing.
             if staleBindings, await adoptConnections() { await refresh(rebindAllowed: false) }
         } catch {
+            Task {
+                await LogFile.shared.write(
+                    "metric", "batch of \(widgets.count) failed: \(error)")
+            }
             let state = Self.tileState(for: error)
             for widget in widgets where !isValue(next[widget.id]) {
                 next[widget.id] = state

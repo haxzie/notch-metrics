@@ -107,19 +107,40 @@ public actor APIClient {
             }
         }
 
+        // Logged on both sides, because the interesting failures are the ones
+        // with no exception: a 200 whose body is not what this build expects,
+        // and a 4xx whose message is the only statement of what went wrong.
+        // The path and the elapsed time are enough to line a tile's error up
+        // against the Worker's own log for the same request.
+        let started = Date()
+        let label = "\(method) \(path)\(query.isEmpty ? "" : "?" + query.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&"))"
+
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError where error.code == .notConnectedToInternet {
+            await LogFile.shared.write("api", "\(label) — offline")
             throw APIError.offline
         } catch {
+            await LogFile.shared.write("api", "\(label) — transport: \(error.localizedDescription)")
             throw APIError.transport(error.localizedDescription)
         }
 
         guard let http = response as? HTTPURLResponse else {
+            await LogFile.shared.write("api", "\(label) — not an HTTP response")
             throw APIError.transport("not an HTTP response")
         }
+
+        let ms = Int(Date().timeIntervalSince(started) * 1000)
+        // The body only on a failure. A catalogue response is tens of
+        // kilobytes and would bury everything around it, and a successful
+        // metric body is the number already on screen.
+        let detail =
+            (200..<300).contains(http.statusCode)
+            ? ""
+            : " " + LogFile.redacted(String(decoding: data.prefix(400), as: UTF8.self))
+        await LogFile.shared.write("api", "\(label) → \(http.statusCode) in \(ms)ms\(detail)")
 
         switch http.statusCode {
         case 200..<300:
