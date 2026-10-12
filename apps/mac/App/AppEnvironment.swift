@@ -307,6 +307,35 @@ final class AppEnvironment {
 
     private var refreshTask: Task<Void, Never>?
 
+    /// The refresh a user action asked for, so the next action can cancel it.
+    ///
+    /// Separate from `refreshTask`, which is the five-minute poll: a config
+    /// change should supersede the previous change's request, not the timer.
+    private var pendingRefresh: Task<Void, Never>?
+
+    /// A widget's settings changed, so its number is answering the old
+    /// question.
+    ///
+    /// Three things, and the order matters. The tile drops to loading
+    /// immediately — `refresh()` then fills it from disk if it has a number
+    /// for the *new* range and shows a skeleton if it does not, which is
+    /// what makes a range switch look like a fetch rather than like nothing
+    /// happening. The previous request is cancelled, because its answer is
+    /// for a window nobody is looking at any more. And the new one waits a
+    /// moment first: arrowing through a picker is four changes in a second,
+    /// and each one is a batch for the whole notch.
+    func widgetConfigurationChanged(_ widgetId: String) {
+        states[widgetId] = .loading
+        notch.update(states: states)
+
+        pendingRefresh?.cancel()
+        pendingRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+    }
+
     /// Keeps the notch's tiles filled from the API.
     ///
     /// One batch request for the whole layout rather than one per tile: eight
@@ -479,6 +508,11 @@ final class AppEnvironment {
 
         do {
             let results = try await api.batch(widgets.map(MetricQueryRequest.init(widget:)))
+            // Superseded while it was in flight. The answer is for the
+            // settings the user has already moved on from, and writing it
+            // would flash the old window's number over the new one's
+            // skeleton a beat before the current request lands.
+            guard !Task.isCancelled else { return }
             guard results.count == widgets.count else { return }
 
             for (widget, result) in zip(widgets, results) {
@@ -556,6 +590,13 @@ final class AppEnvironment {
             // bound a widget that had nothing.
             if staleBindings, await adoptConnections() { await refresh(rebindAllowed: false) }
         } catch {
+            // A cancelled request is not a failure, it is a request nobody
+            // wants the answer to any more. URLSession surfaces cancellation
+            // as a transport error, which `tileState` reads as "could not
+            // reach Notch Metrics" — so without this, changing a setting
+            // twice quickly painted a network error across the whole notch.
+            if Task.isCancelled { return }
+
             Task {
                 await LogFile.shared.write(
                     "metric", "batch of \(widgets.count) failed: \(error)")

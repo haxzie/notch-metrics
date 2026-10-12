@@ -89,7 +89,7 @@ struct WidgetConfigPanel: View {
             ?? supported[0]
         draft = widget
         env.layoutModel.update(widget)
-        Task { await env.refresh() }
+        env.widgetConfigurationChanged(widgetId)
     }
 
     /// The connection this widget reads, if the catalogue knows it.
@@ -132,7 +132,7 @@ struct WidgetConfigPanel: View {
                     next.params[key] = trimmed
                 }
                 binding.wrappedValue = next
-                Task { await env.refresh() }
+                env.widgetConfigurationChanged(widgetId)
             })
     }
 
@@ -236,7 +236,7 @@ struct WidgetConfigPanel: View {
                             var next = binding.wrappedValue
                             next.integrationId = newId
                             binding.wrappedValue = next
-                            Task { await env.refresh() }
+                            env.widgetConfigurationChanged(widgetId)
                         }
                     }
                 } else {
@@ -258,7 +258,7 @@ struct WidgetConfigPanel: View {
                                 var next = binding.wrappedValue
                                 next.integrationId = id.isEmpty ? nil : id
                                 binding.wrappedValue = next
-                                Task { await env.refresh() }
+                                env.widgetConfigurationChanged(widgetId)
                             }
                         )) {
                             Text("None").tag("")
@@ -288,7 +288,7 @@ struct WidgetConfigPanel: View {
                             var next = binding.wrappedValue
                             next.integrationId = newId
                             binding.wrappedValue = next
-                            Task { await env.refresh() }
+                            env.widgetConfigurationChanged(widgetId)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -387,7 +387,7 @@ struct WidgetConfigPanel: View {
                             var next = binding.wrappedValue
                             next.range = range
                             binding.wrappedValue = next
-                            Task { await env.refresh() }
+                            env.widgetConfigurationChanged(widgetId)
                         }
                     )) {
                         ForEach(offeredRanges(binding.wrappedValue), id: \.self) { range in
