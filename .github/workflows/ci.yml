@@ -98,7 +98,21 @@ jobs:
       - name: Assert the toolchain
         # A runner image change that quietly drops Xcode 26 should fail loudly
         # rather than compile against something older.
-        run: swift --version | grep -qE 'version 6\.[3-9]'
+        #
+        # Asserted on Xcode, not on `swift --version`. That string is free
+        # text and it changed: the runner now prints the swift-driver version
+        # and no "Apple Swift version" on that line, so a pattern written
+        # against the old shape failed on every build for days — on a step
+        # whose `grep -q` printed nothing, so the log said only "exit 1" and
+        # the toolchain looked broken rather than the regex.
+        #
+        # Both versions are echoed for the next time a format moves, and the
+        # step above already fails when no Xcode 26 exists at all, so this is
+        # about what is inside the one it picked.
+        run: |
+          swift --version
+          xcodebuild -version
+          xcodebuild -version | grep -qE '^Xcode 26\.'
 
       - run: brew install xcodegen
 

@@ -12,6 +12,24 @@ import SwiftUI
 struct AppsPane: View {
     @Environment(AppEnvironment.self) private var env
     @State private var model = ConnectorsModel()
+    @State private var query = ""
+
+    /// The catalogue, filtered, with empty categories dropped.
+    ///
+    /// `WidgetSearch` rather than a second matcher: it is what the widget
+    /// browser searches with, so "mrr" finds Stripe in both places instead
+    /// of in one. It matches metric labels too, which is the useful part —
+    /// people look for the number they want, not the company that sells it.
+    private func sections(_ catalogue: ConnectorCatalogue) -> [ConnectorCategoryGroup] {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return catalogue.categories }
+        let matched = Set(WidgetSearch.run(query, over: catalogue.allConnectors).map(\.app.id))
+        return catalogue.categories.compactMap { group in
+            let kept = group.connectors.filter { matched.contains($0.id) }
+            return kept.isEmpty
+                ? nil
+                : ConnectorCategoryGroup(id: group.id, label: group.label, connectors: kept)
+        }
+    }
 
     var body: some View {
         Form {
@@ -31,7 +49,37 @@ struct AppsPane: View {
                     }
                 }
 
-                ForEach(catalogue.categories) { group in
+                // Above the list, because it filters the list. A field in
+                // the window's toolbar — which is where `.searchable` puts
+                // one — is the same distance from the thing it changes as
+                // the title is.
+                Section {
+                    HStack(spacing: 7) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Search integrations…", text: $query)
+                            .textFieldStyle(.plain)
+                        if !query.isEmpty {
+                            Button {
+                                query = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Clear search")
+                        }
+                    }
+                }
+
+                let groups = sections(catalogue)
+                if groups.isEmpty {
+                    Section {
+                        ContentUnavailableView.search(text: query)
+                    }
+                }
+
+                ForEach(groups) { group in
                     Section(group.label) {
                         ForEach(group.connectors) { connector in
                             ConnectorRow(
