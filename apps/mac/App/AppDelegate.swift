@@ -146,11 +146,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // provider's only account at it.
                 env.catalogueChanged()
                 Task { if await env.adoptConnections() { await env.refresh() } }
-                // The browser finished a connect flow. Land on Integrations
-                // so the newly connected account is visible rather than
-                // leaving the user to go looking for it.
-                env.settingsPane = .connections
-                openSettings()
+
+                // Back where it started. The same link arrives whether
+                // Connect was pressed in the notch or on the Integrations
+                // pane, and only the notch leaves a suspended pane behind —
+                // so that is the one signal that says which. Opening
+                // Settings on a flow begun in the notch threw away the
+                // widget the user was half-way through configuring.
+                if env.notch.hasSuspendedPane {
+                    env.notch.resumeAfterExternalFlow()
+                } else {
+                    // Land on Integrations so the new account is visible
+                    // rather than leaving the user to go looking for it.
+                    env.settingsPane = .connections
+                    openSettings()
+                }
             case "settings":
                 // `notchmetrics://settings/integrations` lands on that pane.
                 // The path is matched leniently — an unknown one opens
@@ -224,6 +234,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func openSettings() {
+        // The notch is pinned above every window, including the one about to
+        // be brought forward, so it would sit on top of Settings. Discarded
+        // rather than suspended: Settings is somewhere to stay, and a notch
+        // springing back over it the moment a connection lands is the
+        // behaviour this is here to prevent.
+        env.notch.close()
+        env.notch.discardSuspendedPane()
+
         // A Dock icon appearing while Settings is open is correct, not a bug:
         // without .regular there is no Cmd-Tab entry and no window ordering,
         // and the window cannot be brought back once it is behind something.

@@ -406,6 +406,62 @@ public final class NotchWindowController {
         updateHitRect()
     }
 
+    /// What the notch was showing before something opened a window elsewhere.
+    ///
+    /// `nil` means nothing was suspended, which is what makes `resume` safe
+    /// to call from more than one place: a connect flow finishes through the
+    /// poll *and* through the `notchmetrics://connected` deep link, and
+    /// whichever arrives second must not reopen a notch the user has since
+    /// closed themselves.
+    private var suspendedPane: (configuring: String?, isNew: Bool, browsing: Bool)?
+
+    /// Collapse because this action opens a window somewhere else.
+    ///
+    /// The notch is a hover panel pinned over everything, so leaving it up
+    /// in front of the browser tab it just opened is both in the way and
+    /// confusing about which window is being asked for input. What it was
+    /// showing is remembered so the user comes back to the pane they left,
+    /// rather than to a closed notch and the job of finding it again.
+    public func suspendForExternalFlow() {
+        guard let view else { return }
+        suspendedPane = (view.configuringID, view.configuringIsNew, view.isBrowsing)
+        close()
+    }
+
+    /// Put back whatever `suspendForExternalFlow` took down.
+    ///
+    /// Only ever reopens a notch this object closed, and only once — a flow
+    /// that was started from Settings never suspended anything, so finishing
+    /// it must not make a notch appear over the window the user is actually
+    /// looking at.
+    public func resumeAfterExternalFlow() {
+        guard let pane = suspendedPane else { return }
+        suspendedPane = nil
+
+        if let id = pane.configuring {
+            beginConfiguring(id, isNew: pane.isNew)
+        } else if pane.browsing {
+            beginBrowsing()
+        } else {
+            expand()
+            holdOpenForPane()
+        }
+    }
+
+    /// Whether a flow currently running elsewhere was started from the notch.
+    ///
+    /// The deep link that ends a connect flow cannot otherwise tell: the same
+    /// `notchmetrics://connected` arrives whether the user pressed Connect in
+    /// the notch or on the Integrations pane, and the right place to put them
+    /// back is not the same for both.
+    public var hasSuspendedPane: Bool { suspendedPane != nil }
+
+    /// Forgets a suspended pane without reopening it.
+    ///
+    /// For the case where the flow ends somewhere the notch should not
+    /// follow — the user closed the browser tab, or carried on in Settings.
+    public func discardSuspendedPane() { suspendedPane = nil }
+
     /// The × in the header. Leaves edit mode and collapses, whether pinned or
     /// not — a close button that does nothing because the panel is pinned is a
     /// close button that looks broken.

@@ -62,14 +62,26 @@ struct ConnectButton: View {
             do {
                 let before = Set(model.entry(app.id)?.connections.map(\.id) ?? [])
                 let link = try await env.api.connectLink(for: app.id)
+                // Out of the way before the browser comes forward. The notch
+                // is pinned over everything, so it sits on top of the tab it
+                // just opened — and the pane it was showing is remembered,
+                // so finishing the flow comes back to it.
+                env.notch.suspendForExternalFlow()
                 NSWorkspace.shared.open(link.url)
+
                 if let added = await model.waitForNewConnection(to: app.id, notIn: before, env: env)
                 {
+                    env.notch.resumeAfterExternalFlow()
                     onConnected?(added)
                 } else {
+                    // The tab was closed, or the flow was abandoned. Reopening
+                    // on the pane they left is the only way to report that at
+                    // all — the message below has nowhere else to appear.
+                    env.notch.resumeAfterExternalFlow()
                     problem = "No new account appeared. You can close the browser tab."
                 }
             } catch {
+                env.notch.resumeAfterExternalFlow()
                 problem = "Could not start that connection."
             }
         }

@@ -129,6 +129,9 @@ final class AppEnvironment {
         do {
             let url = try AuthCoordinator().signInURL(appBase: Self.appURL)
             signInStarted()
+            // Same reason as a connect: the panel is pinned above the browser
+            // window it is about to hand over to.
+            notch.suspendForExternalFlow()
             NSWorkspace.shared.open(url)
             return nil
         } catch {
