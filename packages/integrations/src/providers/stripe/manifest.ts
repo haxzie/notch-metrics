@@ -1,5 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 import { recentPaymentsDescriptor } from "../../list.ts";
+import { paymentReceivedNotification, metricThresholdNotification } from "../../notifications.ts";
 
 export const manifest: ProviderManifest = {
   id: "stripe",
@@ -90,6 +91,51 @@ export const manifest: ProviderManifest = {
     recentPaymentsDescriptor(
       "The latest succeeded charges, newest first, with the payer's billing name or receipt email and the charge description. The headline is their total in your currency.",
     ),
+  ],
+  notifications: [
+    paymentReceivedNotification(
+      "A charge that succeeded. One that fails and is later retried successfully arrives once, when it succeeds.",
+    ),
+    {
+      id: "payment_failed",
+      kind: "event",
+      label: "Failed payment",
+      shortLabel: "Failed payment",
+      severity: "warning",
+      methodology:
+        "A charge Stripe declined, with the reason it gave. A charge that fails and is " +
+        "then retried successfully still arrives once, when it fails.",
+      source: { from: "adapter_events", stream: "charges" },
+      // The one notification worth interrupting somebody for, and the reason
+      // most people turn this feature on at all.
+      defaultEnabled: true,
+      userConfigurable: true,
+      minIntervalSeconds: 60,
+      maxBurst: 5,
+    },
+    {
+      id: "refund_issued",
+      kind: "event",
+      label: "Refund issued",
+      shortLabel: "Refund",
+      severity: "info",
+      methodology:
+        "A charge refunded in full or in part. The amount shown is what was refunded, " +
+        "not what was originally charged.",
+      source: { from: "adapter_events", stream: "charges" },
+      defaultEnabled: false,
+      userConfigurable: true,
+      minIntervalSeconds: 60,
+      maxBurst: 5,
+    },
+    metricThresholdNotification({
+      metric: "mrr",
+      unit: "currency",
+      label: "MRR crosses a figure",
+      suggestedValue: 1_000_000,
+      methodology:
+        "Checked against the same monthly recurring revenue figure the tile shows, so it can be announced on a reading up to fifteen minutes old.",
+    }),
   ],
   allowedHosts: ["api.stripe.com"],
   status: "stable",

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { boolean, createdAt, json, timestamp, updatedAt } from "./columns.ts";
 import { user } from "./auth-schema.ts";
 
@@ -318,3 +318,205 @@ export const webhookEvent = sqliteTable("webhook_event", {
   type: text("type").notNull(),
   createdAt: createdAt(),
 });
+
+/**
+ * Per-user notification state, and the one row the Mac's cheap poll reads.
+ *
+ * One row per user, like `widget_revision` and for the same two reasons: the
+ * counter is bumped by code Better Auth knows nothing about, and a poll on the
+ * hot path has to touch exactly one primary key and no index.
+ */
+export const notificationState = sqliteTable("notification_state", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /**
+   * Monotonic per user, bumped with `SET seq = seq + 1 RETURNING seq`. SQLite
+   * serialises writes — the same property `rate-limit.ts` already leans on —
+   * so two concurrent emits cannot share a seq.
+   */
+  seq: integer("seq").notNull().default(0),
+  /** Denormalised so the cursor poll is one row read and never a COUNT. */
+  unread: integer("unread").notNull().default(0),
+  /**
+   * The settings' optimistic-concurrency token. Same mechanism as
+   * `widget_revision.revision`, opposite direction: the server is
+   * authoritative for notification settings, and the Mac holds a cache.
+   */
+  revision: integer("revision").notNull().default(0),
+  /**
+   * Master switch. Off means the evaluator skips the user entirely, which is
+   * cheaper than evaluating and then discarding the result.
+   */
+  enabled: boolean("enabled").notNull().default(true),
+  /**
+   * Local minutes from midnight in `user.timezone`, or null for none.
+   *
+   * Minutes rather than an instant: a quiet-hours timestamp persisted across a
+   * timezone change means quiet hours silently move. Inside the window a row is
+   * still written and still unread — it just carries no alert, so the Mac files
+   * it without raising a banner. Decided here rather than on the client so two
+   * Macs agree about what was quiet.
+   */
+  quietFromMinute: integer("quiet_from_minute"),
+  quietToMinute: integer("quiet_to_minute"),
+  updatedAt: updatedAt(),
+});
+
+/** One row per (connection, notification type). The user's toggles. */
+export const notificationSubscription = sqliteTable(
+  "notification_subscription",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /**
+     * CASCADE, unlike `widget.integration_id`.
+     *
+     * A widget whose integration is gone still has to say which app to
+     * reconnect. A *subscription* with no connection behind it is nothing the
+     * user can act on, and the toggle is recreated from the manifest when they
+     * connect again.
+     */
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integration.id, { onDelete: "cascade" }),
+    /**
+     * A `NotificationTypeId`. Text rather than an enum: the catalogue is
+     * served, so a provider shipping a new type must not need a migration.
+     */
+    typeId: text("type_id").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    /**
+     * Arguments the descriptor declared. Unlike a widget-scoped metric — which
+     * the cron cannot warm because it knows the connection and not which
+     * repository some tile points at — a subscription carries its own params,
+     * so a param'd metric *is* warmable from the cron.
+     */
+    params: json<Record<string, string>>("params")
+      .notNull()
+      .$defaultFn(() => ({})),
+    /** Threshold types only: `{ metric, comparator, value }`. Null for events. */
+    threshold: json<{ metric: string; comparator: string; value: number }>("threshold"),
+    /**
+     * Re-arm floor, seeded from the descriptor so a provider can be
+     * conservative without a migration.
+     */
+    minIntervalSeconds: integer("min_interval_seconds").notNull().default(3600),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("notification_subscription_unique_idx").on(t.integrationId, t.typeId),
+    /** The cron's "which integrations owe me work?" query. */
+    index("notification_subscription_enabled_idx").on(t.enabled, t.integrationId),
+    index("notification_subscription_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Evaluator state.
+ *
+ * Deliberately not columns on the subscription: a user flipping a switch must
+ * never write a cursor, and the cron must never write a user's settings.
+ */
+export const notificationCursor = sqliteTable("notification_cursor", {
+  subscriptionId: text("subscription_id")
+    .primaryKey()
+    .references(() => notificationSubscription.id, { onDelete: "cascade" }),
+  lastEventId: text("last_event_id"),
+  /**
+   * Nothing older than this is news; it is history.
+   *
+   * On a cursor with `seenThrough` null the evaluator writes `now`, emits
+   * nothing and returns. Without that, enabling a toggle delivers a month of
+   * back-history at once — the single bug that would make this feature look
+   * broken on the day it ships.
+   */
+  seenThrough: timestamp("seen_through"),
+  /** Adapter-opaque, straight from `EventPage.cursor`. Never parsed by us. */
+  providerCursor: text("provider_cursor"),
+  /** Threshold types: the previous reading, so firing is edge-triggered. */
+  lastValue: real("last_value"),
+  /**
+   * "above" | "below" | null. A number resting exactly on the line must not
+   * fire every tick, which is what this and not `lastValue` prevents.
+   */
+  lastState: text("last_state"),
+  firedAt: timestamp("fired_at"),
+  evaluatedAt: timestamp("evaluated_at"),
+});
+
+/** A delivered notification. */
+export const notification = sqliteTable(
+  "notification",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Per-user monotonic. Both the client's `?since=` and the ETag are this. */
+    seq: integer("seq").notNull().default(0),
+    /**
+     * SET NULL, not CASCADE: "Stripe payment received" is still a true thing to
+     * have been told after Stripe is disconnected, and a notification centre
+     * that empties itself on disconnect reads as data loss.
+     */
+    integrationId: text("integration_id").references(() => integration.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Denormalised so a row outlives its integration and can still group and
+     * render itself. Same reasoning as `widget.app_id`.
+     */
+    provider: text("provider").notNull(),
+    connectionLabel: text("connection_label").notNull(),
+    typeId: text("type_id").notNull(),
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    body: text("body"),
+    /** Minor units of `currency`. Never a float. */
+    amount: integer("amount"),
+    currency: text("currency"),
+    /**
+     * The provider deep link. Host-checked against the manifest's
+     * `allowedHosts` before it is written, because the Mac opens it.
+     */
+    url: text("url"),
+    /**
+     * When the thing happened, not when we noticed. The UI sorts on this, and
+     * the gap between the two is the latency the user actually feels.
+     */
+    occurredAt: timestamp("occurred_at").notNull(),
+    /**
+     * `<integrationId>:<typeId>:<providerEventId>` for an event,
+     * `<integrationId>:<typeId>:<metric>:<direction>:<bucket>` for a threshold.
+     *
+     * The unique index below *is* the idempotency check — the `webhook_event`
+     * pattern. The cron, a manual refresh and a later re-evaluation can all
+     * find the same payment, and all but one must lose.
+     */
+    dedupeKey: text("dedupe_key").notNull(),
+    readAt: timestamp("read_at"),
+    /**
+     * Whether this was allowed to interrupt: false inside the user's quiet
+     * hours. The row is still written and still unread — it just gets filed
+     * rather than raised.
+     *
+     * Decided here, server-side, rather than on the client, so two Macs agree
+     * about what was quiet and a laptop in another timezone does not re-raise
+     * what the desktop already filed.
+     */
+    alert: boolean("alert").notNull().default(true),
+    /** "cron" | "internal". Diagnostics only. */
+    source: text("source").notNull().default("cron"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("notification_dedupe_idx").on(t.userId, t.dedupeKey),
+    /** The feed query: everything after the client's cursor. */
+    index("notification_feed_idx").on(t.userId, t.seq),
+    index("notification_sweep_idx").on(t.createdAt),
+  ],
+);

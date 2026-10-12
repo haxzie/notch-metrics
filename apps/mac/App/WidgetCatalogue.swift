@@ -129,6 +129,9 @@ final class WidgetCatalogueModel {
             }
             categoryGroups = groups
             state = .loaded(groups.flatMap(\.connectors))
+            // Every connector, not just the ones offering a widget: a provider
+            // that notifies but has no tile still owns notification toggles.
+            env.adoptAlertCatalogue(catalogue.categories.flatMap(\.connectors))
         } catch {
             state = .failed("Could not load the app catalogue.")
         }

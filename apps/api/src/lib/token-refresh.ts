@@ -13,6 +13,7 @@ import type { Database } from "./db.ts";
 import { oauthClient } from "./oauth-client.ts";
 import { logError } from "./redact.ts";
 import { notifyBroken } from "./slack.ts";
+import { emitConnectionBroken } from "./notifications.ts";
 
 type Row = typeof integrationTable.$inferSelect;
 
@@ -118,6 +119,9 @@ export async function openFreshCredentials(
           lastRefreshAttemptAt: now,
         })
         .where(eq(integrationTable.id, row.id));
+      // The user's notification first, then ours. The Slack ping is gated on a
+      // webhook secret being configured; the user's is not.
+      await emitConnectionBroken(db, row.status, row);
       await notifyBroken(env, db, row.status, row);
       return { credentials, refreshed: false };
     }
@@ -136,7 +140,10 @@ export async function openFreshCredentials(
           : {}),
       })
       .where(eq(integrationTable.id, row.id));
-    if (giveUp) await notifyBroken(env, db, row.status, row);
+    if (giveUp) {
+      await emitConnectionBroken(db, row.status, row);
+      await notifyBroken(env, db, row.status, row);
+    }
     return { credentials, refreshed: false };
   }
 }

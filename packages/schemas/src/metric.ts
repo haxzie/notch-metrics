@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CurrencyCode, Granularity, TimeRange } from "./money.ts";
 import { IntegrationId, MetricId } from "./ids.ts";
+import { NotificationCursor } from "./notification.ts";
 
 export const MetricUnit = z.enum(["currency", "count", "ratio", "duration", "bytes"]);
 export type MetricUnit = z.infer<typeof MetricUnit>;
@@ -164,6 +165,19 @@ export type MetricBatchRequest = z.infer<typeof MetricBatchRequest>;
 export const MetricBatchResponse = z.object({
   /** Index-aligned with the request array. */
   results: z.array(MetricResult),
+  /**
+   * Notification state, riding along.
+   *
+   * The Mac already makes this request on a timer for the whole layout, so
+   * carrying the unread count here costs zero extra requests and keeps working
+   * in every power state — including Low Power Mode, where the cheap cursor
+   * poll is switched off entirely. It is the backstop under that poll, not a
+   * replacement for it.
+   *
+   * Optional rather than defaulted so the committed `metric-batch` fixture and
+   * every already-shipped Swift decoder are untouched by this field arriving.
+   */
+  notifications: NotificationCursor.optional(),
 });
 export type MetricBatchResponse = z.infer<typeof MetricBatchResponse>;
 

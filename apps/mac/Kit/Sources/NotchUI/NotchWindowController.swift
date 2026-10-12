@@ -59,6 +59,30 @@ public final class NotchWindowController {
         didSet { view?.browserPanel = browserPanel }
     }
 
+    /// The notification centre shown in the notch. See
+    /// `NotchViewModel.alertCentrePanel`.
+    public var alertCentrePanel: @MainActor () -> AnyView = { AnyView(EmptyView()) } {
+        didSet { view?.alertCentrePanel = alertCentrePanel }
+    }
+
+    /// Drives the bell's badge and the dot on the collapsed notch.
+    public var unreadAlertCount: Int = 0 {
+        didSet { view?.unreadAlertCount = unreadAlertCount }
+    }
+
+    /// Which connection the notification centre should open on.
+    ///
+    /// Forwarded rather than reached through the view model, so the app target
+    /// talks to one object — and settable from the pane, which clears it once
+    /// it has been honoured.
+    public var alertsFocus: AlertFocus? {
+        get { view?.alertsFocus }
+        set { view?.alertsFocus = newValue }
+    }
+
+    /// A banner was clicked.
+    public var onBannerTapped: @MainActor (NotchAlert) -> Void = { _ in }
+
     /// Opens the configure pane, remembering what the widget looked like so
     /// Cancel has something to put back.
     ///
@@ -110,6 +134,9 @@ public final class NotchWindowController {
     /// the notch themselves. Without the distinction, closing a pane would
     /// quietly unpin a notch that edit mode had pinned.
     private var pinnedForPane = false
+    /// The banner's retract timer. Cancellable, so a hover can hold it open and
+    /// a second notification can replace it — the `dwellTask` idiom.
+    private var bannerTask: Task<Void, Never>?
 
     public init(model: NotchLayoutModel, settings: AppSettings = AppSettings()) {
         self.model = model
@@ -234,6 +261,17 @@ public final class NotchWindowController {
         viewModel.isSigningIn = isSigningIn
         viewModel.configuratorPanel = configuratorPanel
         viewModel.browserPanel = browserPanel
+        viewModel.alertCentrePanel = alertCentrePanel
+        viewModel.unreadAlertCount = unreadAlertCount
+        viewModel.onOpenAlerts = { [weak self] in self?.beginAlerts() }
+        viewModel.onEndAlerts = { [weak self] in self?.endAlerts() }
+        viewModel.onBannerTapped = { [weak self] in
+            guard let self, let alert = self.view?.bannerAlert else { return }
+            // Retract first: the click is being handled, and leaving the
+            // banner up while a browser opens over it looks like a stuck view.
+            self.retractBanner()
+            self.onBannerTapped(alert)
+        }
         viewModel.onRefresh = { [weak self] in self?.onRefresh() }
         viewModel.onEndConfiguring = { [weak self] in self?.paneEnded() }
         viewModel.onEndBrowsing = { [weak self] in self?.paneEnded() }
@@ -268,6 +306,10 @@ public final class NotchWindowController {
         monitor.collapseDelay = .milliseconds(settings.collapseDelayMilliseconds)
         monitor.triggerScreenRect = { [weak self] in self?.triggerScreenRect ?? .zero }
         monitor.expandedScreenRect = { [weak self] in self?.expandedScreenRect ?? .zero }
+        // Still `== .expanded`, deliberately. This is what the exit watch keys
+        // off, and a banner nobody is pointing at must not start the global
+        // mouse monitor — see `showBanner`. A hover *over* a banner comes
+        // through `expand()` below and gets the watch as a side effect.
         monitor.isExpanded = { [weak self] in self?.presentation == .expanded }
         container.onPointerEntered = { [weak monitor] in monitor?.pointerEntered() }
         container.onPointerExited = { [weak monitor] in monitor?.pointerExited() }
@@ -309,14 +351,45 @@ public final class NotchWindowController {
         )
     }
 
+    /// The card's clickable area, in the container's coordinates.
+    ///
+    /// Without this the banner would be visible but dead — `hitTest` returns
+    /// nil outside `activeHitRect`, so the click would fall through to the menu
+    /// bar and do nothing.
+    ///
+    /// Computed from `NotchBannerMetrics` rather than from the panel's reported
+    /// size, because the drawn container is deliberately larger than the card:
+    /// it carries slack for the shadow and a clipped band for the circle to
+    /// hide behind, and neither of those should swallow a click.
+    private func bannerRect(for geometry: NotchGeometry) -> CGRect {
+        let open = view?.bannerIsOpen ?? false
+        let size = NotchBannerMetrics.size(open: open)
+        let notchHeight = geometry.hasNotch ? geometry.notchRect.height : 6
+        let top = notchHeight + NotchBannerMetrics.gap
+        return CGRect(
+            x: (NotchPanel.maxSize.width - size.width) / 2,
+            // The container's origin is bottom-left, so the card's bottom edge
+            // is measured down from the top of the window.
+            y: NotchPanel.maxSize.height - top - size.height,
+            width: size.width,
+            height: size.height)
+    }
+
     private func updateHitRect() {
         guard let container, let geometry else { return }
         // Collapsed, only the trigger strip is clickable and everything else
         // falls through to the menu bar below. Without this a 720x260
         // invisible window eats the top of the screen.
-        container.activeHitRect = presentation == .expanded
-            ? container.bounds
-            : triggerRect(for: geometry)
+        switch presentation {
+        case .expanded:
+            container.activeHitRect = container.bounds
+        case .banner:
+            // Union with the trigger strip, so the notch still opens on hover
+            // while a banner is up.
+            container.activeHitRect = bannerRect(for: geometry).union(triggerRect(for: geometry))
+        case .collapsed, .hinting:
+            container.activeHitRect = triggerRect(for: geometry)
+        }
     }
 
     /// The strip that opens the notch, in screen coordinates.
@@ -356,6 +429,10 @@ public final class NotchWindowController {
 
     public func expand() {
         guard let view, view.presentation != .expanded else { return }
+        // A hover during a banner escalates to the full notch. The retract
+        // timer has to go with it, or it fires a moment later and tries to
+        // collapse a notch the user has just opened.
+        cancelBanner()
         // Animated here rather than inside the view, so the frame change and
         // the content transition are driven by one spring. Without an explicit
         // transaction the change arrives from AppKit outside any animation and
@@ -393,6 +470,10 @@ public final class NotchWindowController {
             // half-scrolled widget list rather than on their numbers is not
             // what the next hover was asking for.
             view.isBrowsing = false
+            // And the notification centre, for the same reason: the next hover
+            // is asking for their numbers, not for the list they left open.
+            view.isShowingAlerts = false
+            view.alertsFocus = nil
             self.pinnedForPane = false
         }
         if animated {
@@ -485,6 +566,139 @@ public final class NotchWindowController {
         // see `expandedContent`.
         view.isBrowsing = true
         holdOpenForPane()
+    }
+
+    /// Opens the notification centre, optionally on one connection.
+    public func beginAlerts(focus: AlertFocus? = nil) {
+        guard let view else { return }
+        // A banner on screen has been superseded by the thing it was
+        // advertising. Cancel the retract before expanding, or it fires
+        // mid-pane and tries to put the notch back.
+        cancelBanner()
+        view.configuringID = nil
+        view.configuringSnapshot = nil
+        view.configuringIsNew = false
+        view.isBrowsing = false
+        view.alertsFocus = focus
+        expand()
+        model.isEditing = false
+        view.isShowingAlerts = true
+        // A notification list is read, not hovered: without the hold the exit
+        // watch collapses it the moment the pointer stops moving inside it.
+        holdOpenForPane()
+    }
+
+    public func endAlerts() {
+        guard let view else { return }
+        view.isShowingAlerts = false
+        view.alertsFocus = nil
+        paneEnded()
+    }
+
+    /// How long the circle falls before it opens into the card.
+    ///
+    /// Just short of the drop spring's settle, so the card starts opening as
+    /// the circle arrives rather than after a visible pause. The two motions
+    /// overlap by design — a strict sequence reads as two separate animations
+    /// rather than one gesture.
+    private static let bannerOpenDelay = Duration.milliseconds(230)
+
+    /// How long the card takes to close back into the circle before it rises.
+    private static let bannerCloseDelay = Duration.milliseconds(160)
+
+    /// Drops one notification out of the notch and takes it back.
+    ///
+    /// Two steps, because the shape is doing two things: a circle falls clear
+    /// of the notch, then opens into a card. The exit mirrors it — the card
+    /// closes back to a circle before the circle goes up, so the notification
+    /// appears to be swallowed rather than to vanish.
+    ///
+    /// Deliberately **not** routed through `expand()`. That is what starts the
+    /// global mouse monitor and the 0.1s poll, and an unattended banner must
+    /// pay neither — so the presentation is set directly and idle cost stays at
+    /// zero until somebody actually hovers it.
+    public func showBanner(_ alert: NotchAlert, seconds: Double) {
+        showBanner(alert, seconds: seconds, holdClosed: false)
+    }
+
+    /// `holdClosed` stops at the circle, for `NOTCH_DEBUG_BANNER=circle`.
+    ///
+    /// The circle is on screen for about a fifth of a second, which no
+    /// screenshot can catch reliably — and it is the half of this animation
+    /// most likely to regress unnoticed.
+    public func showBanner(_ alert: NotchAlert, seconds: Double, holdClosed: Bool) {
+        guard let view, seconds > 0 else { return }
+        // Never over an open notch: the user is already looking at the thing
+        // this would be telling them about.
+        guard view.presentation == .collapsed || view.presentation == .banner else { return }
+
+        bannerTask?.cancel()
+        view.bannerAlert = alert
+        // Always starts closed, even when one banner replaces another: a card
+        // that morphs straight into the next notification's text reads as a
+        // glitch rather than as a second arrival.
+        view.bannerIsOpen = false
+
+        withAnimation(NotchMotion.bannerDrop(reduceMotion: reduceMotion)) {
+            view.presentation = .banner
+        }
+        updateHitRect()
+
+        bannerTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.bannerOpenDelay)
+            guard !Task.isCancelled, let self, self.view?.presentation == .banner else { return }
+            guard !holdClosed else { return }
+
+            withAnimation(NotchMotion.bannerOpen(reduceMotion: self.reduceMotion)) {
+                self.view?.bannerIsOpen = true
+            }
+            self.updateHitRect()
+
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self.retractBanner()
+        }
+    }
+
+    /// Takes the banner back, without touching anything `collapse` would.
+    ///
+    /// `collapse(animated:)` also drops the pin, leaves edit mode and discards
+    /// the open pane — none of which a banner expiring has any business doing.
+    public func retractBanner() {
+        guard let view, view.presentation == .banner else { return }
+        bannerTask?.cancel()
+
+        // Close the card first, then let the circle go up. Collapsing both at
+        // once reads as the card being deleted; this reads as it being put
+        // back where it came from.
+        withAnimation(NotchMotion.bannerRetract(reduceMotion: reduceMotion)) {
+            view.bannerIsOpen = false
+        }
+        updateHitRect()
+
+        bannerTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.bannerCloseDelay)
+            guard !Task.isCancelled, let self, let view = self.view else { return }
+            guard view.presentation == .banner else { return }
+
+            withAnimation(NotchMotion.bannerRetract(reduceMotion: self.reduceMotion)) {
+                view.presentation = .collapsed
+            }
+            // Cleared after the rise, not before: clearing it now would empty
+            // the card mid-animation and the circle would go up blank.
+            try? await Task.sleep(for: .milliseconds(260))
+            guard !Task.isCancelled, view.presentation != .banner else { return }
+            view.bannerAlert = nil
+            view.bannerIsOpen = false
+            self.updateHitRect()
+        }
+    }
+
+    private func cancelBanner() {
+        bannerTask?.cancel()
+        bannerTask = nil
+        view?.bannerAlert = nil
+        view?.bannerIsOpen = false
     }
 
     /// Keeps the notch open while a pane — the browser, the configure form —

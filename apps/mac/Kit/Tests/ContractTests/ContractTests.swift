@@ -45,6 +45,8 @@ struct ContractTests {
             "metric-series", "metric-series-empty", "metric-series-no-currency",
             "metric-series-list", "metric-error", "metric-batch", "widget-layout",
             "latest-json",
+            "notification-feed", "notification-feed-empty", "notification-feed-truncated",
+            "notification-settings",
         ]
 
         let uncovered = Set(files).subtracting(decoded).subtracting(notDecodedHere)
@@ -177,5 +179,135 @@ struct ContractTests {
         // Catches the half a decoder test alone misses: the app sending the
         // Worker a shape it will reject.
         #expect(original == again)
+    }
+
+    @Test("the notification feed decodes, newest first by occurredAt")
+    func notificationFeed() throws {
+        let page = try JSONDecoder().decode(
+            AlertFeedPage.self, from: Self.load("notification-feed"))
+
+        #expect(page.items.count == 3)
+        #expect(page.unread == 2)
+        // Page one of two: `hasMore` is what tells the pane there is history
+        // behind it, and `oldestSeq` is the cursor to ask with.
+        #expect(page.hasMore)
+        #expect(page.oldestSeq == 410)
+        #expect(!page.truncated)
+        #expect(page.connections.count == 1)
+
+        let first = try #require(page.items.first)
+        #expect(first.severity == .success)
+        #expect(first.amount == 9_900)
+        #expect(first.currency == "USD")
+        #expect(first.occurred != nil)
+        // The link is what a click opens, so it has to survive the decode as a
+        // parseable https URL rather than just a string.
+        #expect(first.link?.host == "dashboard.stripe.com")
+
+        // A threshold row carries no money and nowhere to go.
+        let threshold = try #require(page.items.first { $0.typeId == "metric_threshold_crossed" })
+        #expect(threshold.amount == nil)
+        #expect(threshold.currency == nil)
+        #expect(threshold.link == nil)
+
+        // Raised inside quiet hours: filed, never raised.
+        let quiet = try #require(page.items.first { $0.read })
+        #expect(!quiet.alert)
+        // Its connection is gone, which the row is built to survive.
+        #expect(quiet.integrationId == nil)
+        #expect(quiet.provider == "stripe")
+    }
+
+    @Test("an empty page still carries its sidebar, and a null cursor")
+    func notificationFeedEmpty() throws {
+        let page = try JSONDecoder().decode(
+            AlertFeedPage.self, from: Self.load("notification-feed-empty"))
+
+        #expect(page.items.isEmpty)
+        // The case that breaks a sidebar decoder: nothing to show, but a
+        // connection that still has to be listed.
+        #expect(page.connections.count == 1)
+        #expect(!page.hasMore)
+        // Null rather than zero. Treating it as zero re-requests the whole
+        // archive on every poll, forever.
+        #expect(page.oldestSeq == nil)
+        #expect(page.pollAfterSeconds == 3600)
+    }
+
+    @Test("a truncated page sets both flags independently")
+    func notificationFeedTruncated() throws {
+        let page = try JSONDecoder().decode(
+            AlertFeedPage.self, from: Self.load("notification-feed-truncated"))
+
+        // Two different facts: there is more archive to walk, *and* the live
+        // gap was too wide to banner row by row. Collapsing them into one flag
+        // makes a long scroll go silent and a quiet catch-up look like the end
+        // of the list.
+        #expect(page.hasMore)
+        #expect(page.truncated)
+        #expect(page.unread == 183)
+    }
+
+    @Test("notification settings decode, and round-trip")
+    func notificationSettings() throws {
+        let data = try Self.load("notification-settings")
+        let settings = try JSONDecoder().decode(AlertSettings.self, from: data)
+
+        #expect(settings.revision == 3)
+        #expect(settings.enabled)
+        // Minutes from midnight, across midnight: 22:00 to 08:00.
+        #expect(settings.quietFromMinute == 1_320)
+        #expect(settings.quietToMinute == 480)
+        #expect(settings.subscriptions.count == 2)
+
+        // A disabled threshold must keep the bound the user typed — turning it
+        // back on cannot lose the number.
+        let threshold = try #require(settings.subscriptions.first { !$0.enabled })
+        #expect(threshold.threshold?.metric == "mrr")
+        #expect(threshold.threshold?.comparator == "below")
+        #expect(threshold.threshold?.value == 1_000_000)
+        #expect(threshold.params["account"] == "acct_1Nx")
+
+        // The app PUTs this shape back, so the encode half matters as much as
+        // the decode half — the same reason `MetricResult` is round-tripped.
+        let again = try JSONDecoder().decode(
+            AlertSettings.self, from: try JSONEncoder().encode(settings))
+        #expect(again == settings)
+    }
+
+    @Test("an unknown severity falls back instead of failing the feed")
+    func unknownSeverityFallsBack() throws {
+        // The same bargain as `unknownEnumsFallBack` above, for the feed: a
+        // severity the server invents must not blank every notification at once.
+        let json = """
+            {"id":"ntf_1","seq":1,"integrationId":null,"provider":"stripe",
+             "connectionLabel":"Acme","typeId":"a_type_from_the_future",
+             "severity":"apocalyptic","title":"Something","body":null,
+             "amount":null,"currency":null,"url":null,
+             "occurredAt":"2026-10-05T12:00:00.000Z",
+             "createdAt":"2026-10-05T12:00:00.000Z","read":false,"alert":true}
+            """
+        let alert = try JSONDecoder().decode(NotchAlert.self, from: Data(json.utf8))
+        #expect(alert.severity == .info)
+        // And an unfamiliar type id stays a plain string rather than throwing.
+        #expect(alert.typeId == "a_type_from_the_future")
+    }
+
+    @Test("a link the app cannot vouch for is not offered to the browser")
+    func rejectsNonHttpsLink() throws {
+        // The server host-checks against the provider's allowlist; this is the
+        // other half, on the side that actually calls `NSWorkspace.open`.
+        for hostile in ["file:///etc/passwd", "javascript:alert(1)", "not a url at all"] {
+            let json = """
+                {"id":"ntf_1","seq":1,"integrationId":null,"provider":"stripe",
+                 "connectionLabel":"Acme","typeId":"payment_received",
+                 "severity":"info","title":"x","body":null,"amount":null,
+                 "currency":null,"url":"\(hostile)",
+                 "occurredAt":"2026-10-05T12:00:00.000Z",
+                 "createdAt":"2026-10-05T12:00:00.000Z","read":false,"alert":true}
+                """
+            let alert = try JSONDecoder().decode(NotchAlert.self, from: Data(json.utf8))
+            #expect(alert.link == nil, "offered \(hostile) to the browser")
+        }
     }
 }

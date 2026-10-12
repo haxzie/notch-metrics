@@ -178,6 +178,36 @@ export const MetricId = z.enum([
 ]);
 export type MetricId = z.infer<typeof MetricId>;
 
+/**
+ * Every notification any connector can raise.
+ *
+ * One shared vocabulary rather than per-connector ids, for the same reason
+ * `MetricId` is one: a Stripe payment and a Polar payment then render with one
+ * row component and one copy string, and swapping providers does not orphan a
+ * subscription the user already turned on.
+ *
+ * A connector declares which of these it raises in its manifest, so a new
+ * provider's notifications ship with a Worker deploy and no Mac release.
+ */
+export const NotificationTypeId = z.enum([
+  // Revenue. The whole reason anybody wants this.
+  "payment_received",
+  "payment_failed",
+  "refund_issued",
+  "subscription_started",
+  "subscription_cancelled",
+  "trial_ending",
+  // Developer
+  "issue_opened",
+  "pull_request_opened",
+  // Any scalar metric, against a bound only the user knows.
+  "metric_threshold_crossed",
+  // Ours, not a provider's: the working -> auth_failed edge. The highest-value
+  // notification in the product and the only one that costs no provider call.
+  "connection_broken",
+]);
+export type NotificationTypeId = z.infer<typeof NotificationTypeId>;
+
 export const IntegrationId = z.string().min(1).max(64);
 export type IntegrationId = z.infer<typeof IntegrationId>;
 

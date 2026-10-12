@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "integrationId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "provider": {
+      "type": "string"
+    },
+    "connectionLabel": {
+      "type": "string"
+    },
+    "typeId": {
+      "type": "string",
+      "enum": [
+        "payment_received",
+        "payment_failed",
+        "refund_issued",
+        "subscription_started",
+        "subscription_cancelled",
+        "trial_ending",
+        "issue_opened",
+        "pull_request_opened",
+        "metric_threshold_crossed",
+        "connection_broken"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "success",
+        "warning"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "amount": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "currency": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "read": {
+      "default": false,
+      "type": "boolean"
+    },
+    "alert": {
+      "default": true,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "seq",
+    "integrationId",
+    "provider",
+    "connectionLabel",
+    "typeId",
+    "severity",
+    "title",
+    "body",
+    "amount",
+    "currency",
+    "url",
+    "occurredAt",
+    "createdAt",
+    "read",
+    "alert"
+  ],
+  "additionalProperties": false
+}

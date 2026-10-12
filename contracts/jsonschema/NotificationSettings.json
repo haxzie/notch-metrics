@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "revision": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "quietFromMinute": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1439
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "quietToMinute": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1439
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "subscriptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "integrationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "typeId": {
+            "type": "string",
+            "enum": [
+              "payment_received",
+              "payment_failed",
+              "refund_issued",
+              "subscription_started",
+              "subscription_cancelled",
+              "trial_ending",
+              "issue_opened",
+              "pull_request_opened",
+              "metric_threshold_crossed",
+              "connection_broken"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "params": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "threshold": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "metric": {
+                    "type": "string",
+                    "enum": [
+                      "mrr",
+                      "arr",
+                      "revenue",
+                      "one_time_sales",
+                      "refunds",
+                      "active_subscribers",
+                      "new_subscribers",
+                      "churned_subscribers",
+                      "trials",
+                      "recent_payments",
+                      "orders",
+                      "average_order_value",
+                      "customers",
+                      "new_customers",
+                      "visitors",
+                      "pageviews",
+                      "sessions",
+                      "active_users",
+                      "new_users",
+                      "events",
+                      "bounce_rate",
+                      "conversion_rate",
+                      "clicks",
+                      "impressions",
+                      "ctr",
+                      "average_position",
+                      "subscribers",
+                      "views",
+                      "watch_time",
+                      "average_view_duration",
+                      "likes",
+                      "comments",
+                      "ad_revenue",
+                      "rpm",
+                      "stars",
+                      "forks",
+                      "open_issues",
+                      "open_pull_requests",
+                      "tokens",
+                      "input_tokens",
+                      "output_tokens",
+                      "api_requests",
+                      "api_spend",
+                      "followers",
+                      "contacts",
+                      "new_contacts",
+                      "open_deals",
+                      "won_deals",
+                      "pipeline_value",
+                      "open_conversations"
+                    ]
+                  },
+                  "comparator": {
+                    "type": "string",
+                    "enum": [
+                      "above",
+                      "below",
+                      "pct_change_up",
+                      "pct_change_down"
+                    ]
+                  },
+                  "value": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "metric",
+                  "comparator",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minIntervalSeconds": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "integrationId",
+          "typeId",
+          "enabled",
+          "params",
+          "threshold",
+          "minIntervalSeconds"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "revision",
+    "enabled",
+    "quietFromMinute",
+    "quietToMinute",
+    "subscriptions"
+  ],
+  "additionalProperties": false
+}

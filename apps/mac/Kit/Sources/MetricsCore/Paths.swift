@@ -35,6 +35,14 @@ public enum AppPaths {
     public static var settings: URL { support.appendingPathComponent("settings.json") }
     public static var layout: URL { support.appendingPathComponent("layout.json") }
     public static var session: URL { support.appendingPathComponent("session.json") }
+    /// The notification inbox: rows, read state and the sync cursor.
+    ///
+    /// Support rather than caches, and deliberately not under `metricCache`.
+    /// That directory is last-known-good data `evict(olderThan:)` may delete
+    /// and `clear()` wipes — losing the cursor only costs a refetch, but losing
+    /// read state means every notification the user has already triaged comes
+    /// back unread, which is a bug they will report.
+    public static var alerts: URL { support.appendingPathComponent("alerts.json") }
     public static var pendingAuth: URL { support.appendingPathComponent("pending-auth.json") }
 
     /// Where the MCP server writes custom metrics and the app watches.

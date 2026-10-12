@@ -1,5 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 import { recentPaymentsDescriptor } from "../../list.ts";
+import { paymentReceivedNotification } from "../../notifications.ts";
 
 export const manifest: ProviderManifest = {
   id: "paddle",
@@ -91,6 +92,11 @@ export const manifest: ProviderManifest = {
     },
     recentPaymentsDescriptor(
       "The latest paid or completed transactions by billing date, with the customer's name or email and the first product on the transaction. Totals include tax.",
+    ),
+  ],
+  notifications: [
+    paymentReceivedNotification(
+      "A completed transaction. Paddle's own retries are collapsed into the success.",
     ),
   ],
   allowedHosts: ["api.paddle.com", "sandbox-api.paddle.com"],

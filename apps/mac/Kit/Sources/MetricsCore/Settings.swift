@@ -28,7 +28,65 @@ public struct AppSettings: Codable, Sendable, Equatable {
     public var approvedPluginIDs: Set<String> = []
     public var checkForUpdatesAutomatically: Bool = true
 
+    // MARK: Notifications
+
+    /// How long a notification banner stays out of the notch. Zero turns
+    /// banners off and leaves the bell's badge as the only surface.
+    public var alertBannerSeconds: Int = 4
+    /// Whether to show the in-notch banner at all. Separate from the seconds so
+    /// turning banners off and on again remembers the duration.
+    public var alertBannersEnabled: Bool = true
+
+    /// What a notification sounds like when it drops.
+    ///
+    /// Silent by default, deliberately. The banner already arrives unprompted
+    /// and is visible on its own; adding audio to every existing install on an
+    /// update is the kind of change that gets reported as a bug rather than
+    /// noticed as a feature. The picker previews each one, so turning it on is
+    /// a single informed choice.
+    public var alertSound: AlertSound = .none
+
     public init() {}
+
+    /// Decoded field by field, every one optional, each falling back to the
+    /// default above.
+    ///
+    /// **Not** the synthesised initialiser, and this is load-bearing rather
+    /// than style. Swift's synthesised `init(from:)` ignores property defaults
+    /// and throws `keyNotFound` for any key the file does not have — so the
+    /// moment a release adds a preference, every *existing* user's
+    /// `settings.json` fails to decode, `SettingsStore.load` returns nil, and
+    /// the app silently resets launch-at-login, their display choice, their
+    /// hover timings and their approved plugins along with it.
+    ///
+    /// That is a one-line change away at all times, so it is written out in
+    /// full here and pinned by `AppSettingsTests.oldFileKeepsItsValues`.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = AppSettings()
+
+        func value<T: Decodable>(_ key: CodingKeys, _ default: T) -> T {
+            (try? c.decodeIfPresent(T.self, forKey: key)) .flatMap { $0 } ?? `default`
+        }
+
+        schemaVersion = value(.schemaVersion, fallback.schemaVersion)
+        displayPolicy = value(.displayPolicy, fallback.displayPolicy)
+        showInFullscreen = value(.showInFullscreen, fallback.showInFullscreen)
+        showMenuBarIcon = value(.showMenuBarIcon, fallback.showMenuBarIcon)
+        launchAtLogin = value(.launchAtLogin, fallback.launchAtLogin)
+        hoverDwellMilliseconds = value(.hoverDwellMilliseconds, fallback.hoverDwellMilliseconds)
+        collapseDelayMilliseconds = value(
+            .collapseDelayMilliseconds, fallback.collapseDelayMilliseconds)
+        // Genuinely optional rather than defaulted: nil means "follow the
+        // system", which is not the same as either true or false.
+        reduceMotionOverride = try? c.decodeIfPresent(Bool.self, forKey: .reduceMotionOverride)
+        approvedPluginIDs = value(.approvedPluginIDs, fallback.approvedPluginIDs)
+        checkForUpdatesAutomatically = value(
+            .checkForUpdatesAutomatically, fallback.checkForUpdatesAutomatically)
+        alertBannerSeconds = value(.alertBannerSeconds, fallback.alertBannerSeconds)
+        alertBannersEnabled = value(.alertBannersEnabled, fallback.alertBannersEnabled)
+        alertSound = value(.alertSound, fallback.alertSound)
+    }
 }
 
 /// Debounced, atomic persistence for `AppSettings`.

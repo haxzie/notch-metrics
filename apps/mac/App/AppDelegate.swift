@@ -17,6 +17,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         env.notch.onOpenSettings = { [weak self] in self?.openSettings() }
+        // The notification centre, supplied from here for the same reason the
+        // widget browser is: it needs the user's connections.
+        env.notch.alertCentrePanel = { AnyView(AlertCentrePane().environment(self.env)) }
+        env.notch.onBannerTapped = { [weak self] alert in
+            guard let self else { return }
+            // A link opens the browser; a banner with none opens the centre on
+            // the connection it came from. Either way it is read.
+            Task { await self.env.markAlertsRead(ids: [alert.id]) }
+            if let link = alert.link {
+                NSWorkspace.shared.open(link)
+            } else {
+                // In-process rather than through `notchmetrics://`: the URL
+                // scheme exists for *other* processes, and round-tripping
+                // through Launch Services would re-activate us for no reason.
+                self.env.notch.beginAlerts(
+                    focus: AlertFocus(integrationId: alert.integrationId, alertID: alert.id))
+            }
+        }
+        env.onOpenSettings = { [weak self] in self?.openSettings() }
         // Lands on Widgets rather than on the exact widget: the builder makes
         // new widgets and there is no screen yet for editing one that exists.
         // In the notch, not a window. A second window thrown on screen over
@@ -69,6 +88,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1))
                 env.notch.beginBrowsing()
+            }
+        }
+
+        // Same deferral, same reason: the notification centre is otherwise
+        // reachable only by pressing the bell, which a screenshot cannot do.
+        // `1` opens it on All; anything else is treated as an integration id.
+        // `NOTCH_DEBUG_PANE` already picks which pane opens; this is what makes
+        // the window appear without a click, for screenshots.
+        if ProcessInfo.processInfo.environment["NOTCH_DEBUG_SETTINGS"] == "1" {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                openSettings()
+            }
+        }
+
+        if let value = ProcessInfo.processInfo.environment["NOTCH_DEBUG_ALERTS"] {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                env.notch.beginAlerts(
+                    focus: value == "1" ? nil : AlertFocus(integrationId: value))
+            }
+        }
+
+        // Drives one banner, held rather than retracted so it can be looked at
+        // — the retract is what makes this impossible to screenshot otherwise.
+        if let value = ProcessInfo.processInfo.environment["NOTCH_DEBUG_BANNER"] {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                // `circle` stops at the dropped dot; anything else opens the
+                // card. Held rather than retracted, so both halves can be
+                // looked at — the retract is what makes this impossible to
+                // screenshot otherwise.
+                // Through the sound too, so the demo is what a real arrival
+                // looks and sounds like rather than a silent rehearsal of it.
+                AlertSoundPlayer.play(env.settings.alertSound)
+                env.notch.showBanner(
+                    AlertSample.banner, seconds: 600, holdClosed: value == "circle")
             }
         }
 

@@ -1,5 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 import { recentPaymentsDescriptor } from "../../list.ts";
+import { paymentReceivedNotification } from "../../notifications.ts";
 
 export const manifest: ProviderManifest = {
   id: "shopify",
@@ -112,6 +113,11 @@ export const manifest: ProviderManifest = {
   // allowlist is re-checked on every redirect hop, so a store that has been
   // renamed and 30x-es to its new domain fails here rather than replaying the
   // Admin token at whatever answered.
+  notifications: [
+    paymentReceivedNotification(
+      "A paid order. An order placed but unpaid is not announced until it is paid.",
+    ),
+  ],
   allowedHosts: ["*.myshopify.com"],
   status: "beta",
   minAppVersion: "0.1.0",

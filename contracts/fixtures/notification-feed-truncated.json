@@ -1,0 +1,37 @@
+{
+  "seq": 1300,
+  "unread": 183,
+  "items": [
+    {
+      "id": "ntf_7c21ab",
+      "seq": 412,
+      "integrationId": "int_4f2a9c",
+      "provider": "stripe",
+      "connectionLabel": "Acme Inc",
+      "typeId": "payment_received",
+      "severity": "success",
+      "title": "Payment received",
+      "body": "Ada Lovelace · Pro · yearly",
+      "amount": 9900,
+      "currency": "USD",
+      "url": "https://dashboard.stripe.com/payments/ch_1",
+      "occurredAt": "2026-10-05T11:42:00.000Z",
+      "createdAt": "2026-10-05T11:44:30.000Z",
+      "read": false,
+      "alert": true
+    }
+  ],
+  "connections": [
+    {
+      "integrationId": "int_4f2a9c",
+      "provider": "stripe",
+      "label": "Acme Inc",
+      "unread": 183,
+      "total": 200
+    }
+  ],
+  "hasMore": true,
+  "oldestSeq": 412,
+  "truncated": true,
+  "pollAfterSeconds": 300
+}

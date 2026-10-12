@@ -13,6 +13,7 @@ import { loadUser } from "../lib/identity.ts";
 import { notify } from "../lib/slack.ts";
 import { logError } from "../lib/redact.ts";
 import { oauthClient } from "../lib/oauth-client.ts";
+import { seedSubscriptions } from "../lib/notifications.ts";
 
 /**
  * The public half of the connect flow — what the browser talks to.
@@ -244,6 +245,10 @@ async function finishConnection(
     refreshOffsetSeconds: Math.floor(Math.random() * 300),
     tokenExpiresAt: expiryDate(credentials),
   });
+
+  // See the note at the other insert site: the toggles come from the manifest
+  // the moment the connection exists.
+  await seedSubscriptions(db, row.userId, integrationId, row.connectorId);
 
   // Single-use, and the pending tokens go with it: burning the link here
   // means a replayed submission cannot create a second integration, and no

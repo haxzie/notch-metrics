@@ -37,6 +37,50 @@
           "methodology": "Active subscriptions at the end of the window, each normalised to a monthly amount and reduced by any percentage coupon."
         }
       ],
+      "notifications": [
+        {
+          "id": "payment_received",
+          "kind": "event",
+          "label": "New payment",
+          "shortLabel": "New payment",
+          "severity": "success",
+          "methodology": "A charge that succeeded, seen in the recent payments list. A charge that fails and is later retried successfully arrives once, when it succeeds.",
+          "source": {
+            "from": "metric_items",
+            "metric": "recent_payments"
+          },
+          "defaultEnabled": false,
+          "userConfigurable": true,
+          "minIntervalSeconds": 60,
+          "maxBurst": 5
+        },
+        {
+          "id": "metric_threshold_crossed",
+          "kind": "threshold",
+          "label": "MRR crosses a figure",
+          "shortLabel": "MRR threshold",
+          "severity": "info",
+          "methodology": "Checked against the same monthly recurring revenue figure the tile shows, so it can be announced on a reading up to fifteen minutes old.",
+          "source": {
+            "from": "metric_value",
+            "metric": "mrr"
+          },
+          "threshold": {
+            "metric": "mrr",
+            "comparators": [
+              "above",
+              "below",
+              "pct_change_down"
+            ],
+            "unit": "currency",
+            "suggestedValue": 1000000
+          },
+          "defaultEnabled": false,
+          "userConfigurable": true,
+          "minIntervalSeconds": 3600,
+          "maxBurst": 1
+        }
+      ],
       "allowedHosts": [
         "api.stripe.com"
       ],

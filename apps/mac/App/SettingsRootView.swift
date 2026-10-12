@@ -3,7 +3,7 @@ import NotchUI
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
-    case general, connections, apps, account, updates, about
+    case general, connections, apps, notifications, account, updates, about
 
     /// `notchmetrics://settings/integrations` is in the wild — in the website,
     /// in the connect flow's return URL — and kept working when the pane was
@@ -19,6 +19,8 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         "widgets": .apps,
         "customMetrics": .apps,
         "custom-metrics": .apps,
+        // The notch and a banner both deep-link here.
+        "alerts": .notifications,
     ]
 
     var id: String { rawValue }
@@ -28,6 +30,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .connections: "Connections"
         case .apps: "Apps"
+        case .notifications: "Notifications"
         case .account: "Account"
         case .updates: "Updates"
         case .about: "About"
@@ -39,6 +42,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .connections: "link"
         case .apps: "square.grid.2x2"
+        case .notifications: "bell"
         case .account: "person.crop.circle"
         case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
@@ -48,7 +52,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     /// Grouped the way System Settings groups things: the thing you came to
     /// change, then your data, then the app itself.
     static let sections: [(String?, [SettingsPane])] = [
-        ("Data", [.connections, .apps]),
+        ("Data", [.connections, .apps, .notifications]),
         ("App", [.account, .general, .updates, .about]),
     ]
 }
@@ -95,6 +99,7 @@ struct SettingsRootView: View {
         case .general: GeneralPane()
         case .connections: ConnectionsPane()
         case .apps: AppsPane()
+        case .notifications: NotificationsPane()
         case .account: AccountPane()
         case .updates: UpdatesPane()
         case .about: AboutPane()

@@ -7,6 +7,19 @@ import { sweep as sweepRateLimits } from "./lib/rate-limit.ts";
 import { getAdapter } from "@notch/integrations";
 import { logError } from "./lib/redact.ts";
 import { sweepTokenRefresh } from "./lib/token-refresh.ts";
+import {
+  dueIntegrationIds,
+  enabledSubscriptions,
+  evaluate,
+  evaluateEvents,
+  isEventSourced,
+  metricFor,
+  paramsFor,
+  requiredMetrics,
+  sweepNotifications,
+} from "./lib/notifications.ts";
+import { adapterContext } from "./lib/adapter.ts";
+import { openFreshCredentials } from "./lib/token-refresh.ts";
 
 /**
  * Runs every five minutes. Warms caches so the notch opens instantly, and
@@ -19,6 +32,7 @@ export async function scheduled(env: Env): Promise<void> {
   await sweepTokenRefresh(db, env).catch((e) => logError("cron.tokenRefresh", e));
   await refreshMetrics(db, env).catch((e) => logError("cron.refresh", e));
   await expireGrace(db).catch((e) => logError("cron.grace", e));
+  await sweepNotifications(db).catch((e) => logError("cron.sweepNotifications", e));
   await sweepCache(db).catch((e) => logError("cron.sweepCache", e));
   await sweepRateLimits(db).catch((e) => logError("cron.sweepRateLimits", e));
 }
@@ -30,18 +44,35 @@ export async function scheduled(env: Env): Promise<void> {
 const MAX_PER_TICK = 40;
 const TICK_SECONDS = 300;
 
+/**
+ * Split out of `MAX_PER_TICK` so notification-only integrations cannot crowd
+ * widget warming out of a tick.
+ *
+ * Note that the cap is global rather than per-user, and notifications add
+ * demand to it: past this many due integrations the tick falls behind and
+ * notification latency degrades. `refreshMetrics` logs when that happens,
+ * because the alternative is an invisible regression.
+ */
+const NOTIFY_BUDGET = 20;
+
+/**
+ * Metrics warmed per integration per tick.
+ *
+ * Four rather than three: a subscription's metric goes first in the ordering,
+ * so turning one notification on must not silently stop warming a widget that
+ * was already being warmed.
+ */
+const METRICS_PER_INTEGRATION = 4;
+
 async function refreshMetrics(db: Database, env: Env): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
 
-  // Only integrations a *visible widget* actually points at. Nobody's notch
-  // shows a number they removed, and polling for it spends somebody's Stripe
-  // rate limit on nothing.
-  const referenced = await db
-    .selectDistinct({ integrationId: widget.integrationId })
-    .from(widget)
-    .where(and(eq(widget.visible, true), isNotNull(widget.integrationId)));
-
-  const ids = referenced.map((r) => r.integrationId).filter((v): v is string => v !== null);
+  // Integrations a *visible widget* points at, union those an *enabled
+  // subscription* points at. Nobody's notch shows a number they removed, and
+  // polling for it spends somebody's Stripe rate limit on nothing — but a
+  // notification with no tile behind it still has to be evaluated, or enabling
+  // the toggle does nothing, forever, with nothing on screen to say so.
+  const ids = await dueIntegrationIds(db, MAX_PER_TICK, NOTIFY_BUDGET);
   if (ids.length === 0) return;
 
   const due = await db
@@ -78,9 +109,43 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
       const widgetScoped = (metric: string) =>
         (descriptors.find((d) => d.id === metric)?.params ?? []).some((f) => f.required);
 
-      const metrics = (row.enabledMetrics ?? []).filter((m) => !widgetScoped(m));
-      for (const metric of metrics.slice(0, 3)) {
-        await queryMetric(
+      const subs = await enabledSubscriptions(db, row.id);
+
+      // Event-sourced notifications first, and in their own catch: they are the
+      // only part of this loop that opens credentials for a reason other than a
+      // metric, so a provider with a broken event endpoint must not cost the
+      // widgets their refresh.
+      if (subs.some((sub) => isEventSourced(row.provider, sub))) {
+        await evaluateEvents({
+          db,
+          ctx: adapterContext({
+            provider: row.provider,
+            timeZone: owner.timezone,
+            preferredCurrency: owner.preferredCurrency,
+            signal: AbortSignal.timeout(20_000),
+          }),
+          credentials: (await openFreshCredentials(env, db, row)).credentials,
+          row,
+          owner,
+          subs,
+        }).catch((e) => logError(`cron.notify.events.${row.id}`, e));
+      }
+
+      // A subscription's own metrics first, so the per-integration cap can
+      // never starve a notification of the input it needs. A cold widget just
+      // opens a beat slower; a starved notification fails silently.
+      const required = requiredMetrics(row.provider, subs);
+      const metrics = [
+        ...required,
+        ...(row.enabledMetrics ?? []).filter((m) => !required.includes(m)),
+      ].filter(
+        // A subscription carries its own params, so unlike a widget-scoped
+        // metric it *is* warmable from here.
+        (m) => !widgetScoped(m) || required.includes(m),
+      );
+
+      for (const metric of metrics.slice(0, METRICS_PER_INTEGRATION)) {
+        const result = await queryMetric(
           {
             db,
             env,
@@ -94,9 +159,20 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
             metric: metric as never,
             range: "30d",
             series: true,
-            params: {},
+            params: paramsFor(row.provider, metric, subs),
           },
         );
+
+        // Evaluated on the series we just fetched: no second provider call, no
+        // cache read, no integration read. Its own catch inside the per-row
+        // try, for the same reason the loop is awaited-with-per-item-catch — a
+        // bad descriptor must not abort the rest of the tick.
+        const relevant = subs.filter((s) => metricFor(row.provider, s) === metric);
+        if (relevant.length > 0) {
+          await evaluate({ db, row, owner, subs: relevant, metric, result }).catch((e) =>
+            logError(`cron.notify.${row.id}`, e),
+          );
+        }
       }
     } catch (error) {
       logError(`cron.refresh.${row.id}`, error);

@@ -355,6 +355,423 @@
               "additionalProperties": false
             }
           },
+          "notifications": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "payment_received",
+                    "payment_failed",
+                    "refund_issued",
+                    "subscription_started",
+                    "subscription_cancelled",
+                    "trial_ending",
+                    "issue_opened",
+                    "pull_request_opened",
+                    "metric_threshold_crossed",
+                    "connection_broken"
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "event",
+                    "threshold"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "shortLabel": {
+                  "type": "string",
+                  "maxLength": 24
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "success",
+                    "warning"
+                  ]
+                },
+                "methodology": {
+                  "type": "string"
+                },
+                "source": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "const": "metric_items"
+                        },
+                        "metric": {
+                          "type": "string",
+                          "enum": [
+                            "mrr",
+                            "arr",
+                            "revenue",
+                            "one_time_sales",
+                            "refunds",
+                            "active_subscribers",
+                            "new_subscribers",
+                            "churned_subscribers",
+                            "trials",
+                            "recent_payments",
+                            "orders",
+                            "average_order_value",
+                            "customers",
+                            "new_customers",
+                            "visitors",
+                            "pageviews",
+                            "sessions",
+                            "active_users",
+                            "new_users",
+                            "events",
+                            "bounce_rate",
+                            "conversion_rate",
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "average_position",
+                            "subscribers",
+                            "views",
+                            "watch_time",
+                            "average_view_duration",
+                            "likes",
+                            "comments",
+                            "ad_revenue",
+                            "rpm",
+                            "stars",
+                            "forks",
+                            "open_issues",
+                            "open_pull_requests",
+                            "tokens",
+                            "input_tokens",
+                            "output_tokens",
+                            "api_requests",
+                            "api_spend",
+                            "followers",
+                            "contacts",
+                            "new_contacts",
+                            "open_deals",
+                            "won_deals",
+                            "pipeline_value",
+                            "open_conversations"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "metric"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "const": "metric_value"
+                        },
+                        "metric": {
+                          "type": "string",
+                          "enum": [
+                            "mrr",
+                            "arr",
+                            "revenue",
+                            "one_time_sales",
+                            "refunds",
+                            "active_subscribers",
+                            "new_subscribers",
+                            "churned_subscribers",
+                            "trials",
+                            "recent_payments",
+                            "orders",
+                            "average_order_value",
+                            "customers",
+                            "new_customers",
+                            "visitors",
+                            "pageviews",
+                            "sessions",
+                            "active_users",
+                            "new_users",
+                            "events",
+                            "bounce_rate",
+                            "conversion_rate",
+                            "clicks",
+                            "impressions",
+                            "ctr",
+                            "average_position",
+                            "subscribers",
+                            "views",
+                            "watch_time",
+                            "average_view_duration",
+                            "likes",
+                            "comments",
+                            "ad_revenue",
+                            "rpm",
+                            "stars",
+                            "forks",
+                            "open_issues",
+                            "open_pull_requests",
+                            "tokens",
+                            "input_tokens",
+                            "output_tokens",
+                            "api_requests",
+                            "api_spend",
+                            "followers",
+                            "contacts",
+                            "new_contacts",
+                            "open_deals",
+                            "won_deals",
+                            "pipeline_value",
+                            "open_conversations"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "metric"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "const": "adapter_events"
+                        },
+                        "stream": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "from",
+                        "stream"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "const": "internal"
+                        }
+                      },
+                      "required": [
+                        "from"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "threshold": {
+                  "type": "object",
+                  "properties": {
+                    "metric": {
+                      "type": "string",
+                      "enum": [
+                        "mrr",
+                        "arr",
+                        "revenue",
+                        "one_time_sales",
+                        "refunds",
+                        "active_subscribers",
+                        "new_subscribers",
+                        "churned_subscribers",
+                        "trials",
+                        "recent_payments",
+                        "orders",
+                        "average_order_value",
+                        "customers",
+                        "new_customers",
+                        "visitors",
+                        "pageviews",
+                        "sessions",
+                        "active_users",
+                        "new_users",
+                        "events",
+                        "bounce_rate",
+                        "conversion_rate",
+                        "clicks",
+                        "impressions",
+                        "ctr",
+                        "average_position",
+                        "subscribers",
+                        "views",
+                        "watch_time",
+                        "average_view_duration",
+                        "likes",
+                        "comments",
+                        "ad_revenue",
+                        "rpm",
+                        "stars",
+                        "forks",
+                        "open_issues",
+                        "open_pull_requests",
+                        "tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "api_requests",
+                        "api_spend",
+                        "followers",
+                        "contacts",
+                        "new_contacts",
+                        "open_deals",
+                        "won_deals",
+                        "pipeline_value",
+                        "open_conversations"
+                      ]
+                    },
+                    "comparators": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "above",
+                          "below",
+                          "pct_change_up",
+                          "pct_change_down"
+                        ]
+                      }
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "currency",
+                        "count",
+                        "ratio",
+                        "duration",
+                        "bytes"
+                      ]
+                    },
+                    "suggestedValue": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "metric",
+                    "comparators",
+                    "unit",
+                    "suggestedValue"
+                  ],
+                  "additionalProperties": false
+                },
+                "params": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "string",
+                          "secret",
+                          "select",
+                          "url",
+                          "boolean"
+                        ]
+                      },
+                      "required": {
+                        "default": true,
+                        "type": "boolean"
+                      },
+                      "placeholder": {
+                        "type": "string"
+                      },
+                      "help": {
+                        "type": "string"
+                      },
+                      "pattern": {
+                        "type": "string"
+                      },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "default": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "label",
+                      "type",
+                      "required"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "defaultEnabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "userConfigurable": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "minIntervalSeconds": {
+                  "default": 3600,
+                  "type": "integer",
+                  "minimum": 60,
+                  "maximum": 9007199254740991
+                },
+                "maxBurst": {
+                  "default": 5,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "label",
+                "shortLabel",
+                "severity",
+                "methodology",
+                "source",
+                "defaultEnabled",
+                "userConfigurable",
+                "minIntervalSeconds",
+                "maxBurst"
+              ],
+              "additionalProperties": false
+            }
+          },
           "allowedHosts": {
             "minItems": 1,
             "type": "array",

@@ -157,6 +157,38 @@ public struct Integration: Codable, Sendable, Identifiable, Hashable {
     public let lastErrorAt: String?
     public let lastErrorCode: String?
     public let createdAt: String
+
+    /// Explicit, because the memberwise one is internal to this module and the
+    /// app target builds these for demo mode and for tests.
+    public init(
+        id: String,
+        provider: String,
+        label: String,
+        status: String,
+        credentialHint: String,
+        accountLabel: String?,
+        accountCurrency: String?,
+        enabledMetrics: [String],
+        availableMetrics: [String],
+        lastSyncedAt: String?,
+        lastErrorAt: String?,
+        lastErrorCode: String?,
+        createdAt: String
+    ) {
+        self.id = id
+        self.provider = provider
+        self.label = label
+        self.status = status
+        self.credentialHint = credentialHint
+        self.accountLabel = accountLabel
+        self.accountCurrency = accountCurrency
+        self.enabledMetrics = enabledMetrics
+        self.availableMetrics = availableMetrics
+        self.lastSyncedAt = lastSyncedAt
+        self.lastErrorAt = lastErrorAt
+        self.lastErrorCode = lastErrorCode
+        self.createdAt = createdAt
+    }
 }
 
 public struct BillingState: Codable, Sendable, Hashable {
@@ -243,6 +275,13 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
     public let oauth: ConnectorOAuth?
     public let fields: [AuthField]
     public let metrics: [MetricDescriptor]
+    /// What this connector can notify about.
+    ///
+    /// Optional on the wire, like `keywords` and for the same reason: a
+    /// connector that notifies about nothing omits the key, and an older server
+    /// that has never heard of the field must not fail the decode of the whole
+    /// catalogue and blank every widget.
+    public let notifications: [AlertDefinition]?
     public let status: String
     public let minAppVersion: String
     /// Accounts the signed-in user has already connected for this connector.

@@ -37,6 +37,9 @@ public enum NotchTheme {
     public static let tertiaryText = Color.white.opacity(0.38)
     public static let positive = Color(red: 0.26, green: 0.84, blue: 0.52)
     public static let negative = Color(red: 1.0, green: 0.38, blue: 0.38)
+    /// "This needs you", as distinct from `negative`, which is a figure that
+    /// moved the wrong way. A broken connection is not a bad number.
+    public static let warning = Color(red: 1.0, green: 0.72, blue: 0.23)
 
     /// Edit mode.
     ///
@@ -158,6 +161,36 @@ public enum NotchMotion {
         reduceMotion
             ? .easeOut(duration: 0.08)
             : .spring(response: 0.26, dampingFraction: 0.9)
+    }
+
+    /// A notification falling out of the notch.
+    ///
+    /// Looser and bouncier than `expansion`: this one is meant to read as
+    /// something dropping under gravity and settling, and it arrives
+    /// unprompted — so it has to be legible as motion rather than as the panel
+    /// simply being a different size than it was a frame ago.
+    public static func bannerDrop(reduceMotion: Bool) -> Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .spring(response: 0.42, dampingFraction: 0.58)
+    }
+
+    /// The circle opening into the card.
+    ///
+    /// Tighter than the drop and barely under-damped: the shape is already on
+    /// screen and settled, so a second bounce here reads as indecision.
+    public static func bannerOpen(reduceMotion: Bool) -> Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.1)
+            : .spring(response: 0.3, dampingFraction: 0.76)
+    }
+
+    /// Going back up. Quick and fully damped, like `collapse` — a notification
+    /// still wobbling after it has been dismissed reads as lag.
+    public static func bannerRetract(reduceMotion: Bool) -> Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.08)
+            : .spring(response: 0.26, dampingFraction: 0.95)
     }
 
     /// The content inside. Scaled from the top edge so it appears to be

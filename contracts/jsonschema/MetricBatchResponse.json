@@ -326,6 +326,32 @@
           }
         ]
       }
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "unread": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "pollAfterSeconds": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "seq",
+        "unread",
+        "pollAfterSeconds"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

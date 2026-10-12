@@ -1,0 +1,73 @@
+{
+  "seq": 412,
+  "unread": 2,
+  "items": [
+    {
+      "id": "ntf_7c21ab",
+      "seq": 412,
+      "integrationId": "int_4f2a9c",
+      "provider": "stripe",
+      "connectionLabel": "Acme Inc",
+      "typeId": "payment_received",
+      "severity": "success",
+      "title": "Payment received",
+      "body": "Ada Lovelace · Pro · yearly",
+      "amount": 9900,
+      "currency": "USD",
+      "url": "https://dashboard.stripe.com/payments/ch_1",
+      "occurredAt": "2026-10-05T11:42:00.000Z",
+      "createdAt": "2026-10-05T11:44:30.000Z",
+      "read": false,
+      "alert": true
+    },
+    {
+      "id": "ntf_7c21ac",
+      "seq": 411,
+      "integrationId": "int_4f2a9c",
+      "provider": "stripe",
+      "connectionLabel": "Acme Inc",
+      "typeId": "metric_threshold_crossed",
+      "severity": "info",
+      "title": "MRR crossed $10,000",
+      "body": null,
+      "amount": null,
+      "currency": null,
+      "url": null,
+      "occurredAt": "2026-10-05T09:00:00.000Z",
+      "createdAt": "2026-10-05T09:02:10.000Z",
+      "read": false,
+      "alert": true
+    },
+    {
+      "id": "ntf_7c21ad",
+      "seq": 410,
+      "integrationId": null,
+      "provider": "stripe",
+      "connectionLabel": "Acme Inc",
+      "typeId": "connection_broken",
+      "severity": "warning",
+      "title": "Stripe needs reconnecting",
+      "body": "That key was revoked.",
+      "amount": null,
+      "currency": null,
+      "url": null,
+      "occurredAt": "2026-10-04T03:15:00.000Z",
+      "createdAt": "2026-10-04T03:15:40.000Z",
+      "read": true,
+      "alert": false
+    }
+  ],
+  "connections": [
+    {
+      "integrationId": "int_4f2a9c",
+      "provider": "stripe",
+      "label": "Acme Inc",
+      "unread": 2,
+      "total": 3
+    }
+  ],
+  "hasMore": true,
+  "oldestSeq": 410,
+  "truncated": false,
+  "pollAfterSeconds": 300
+}

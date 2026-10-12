@@ -1,5 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 import { recentPaymentsDescriptor } from "../../list.ts";
+import { paymentReceivedNotification } from "../../notifications.ts";
 
 export const manifest: ProviderManifest = {
   id: "dodopayments",
@@ -86,6 +87,9 @@ export const manifest: ProviderManifest = {
     recentPaymentsDescriptor(
       "The latest succeeded payments, newest first, with the customer's name or email. The headline is their total in your currency.",
     ),
+  ],
+  notifications: [
+    paymentReceivedNotification("A payment that succeeded, including subscription renewals."),
   ],
   allowedHosts: ["live.dodopayments.com", "test.dodopayments.com"],
   status: "stable",

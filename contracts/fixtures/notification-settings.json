@@ -1,0 +1,32 @@
+{
+  "revision": 3,
+  "enabled": true,
+  "quietFromMinute": 1320,
+  "quietToMinute": 480,
+  "subscriptions": [
+    {
+      "id": "nsub_01",
+      "integrationId": "int_4f2a9c",
+      "typeId": "payment_received",
+      "enabled": true,
+      "params": {},
+      "threshold": null,
+      "minIntervalSeconds": 60
+    },
+    {
+      "id": "nsub_02",
+      "integrationId": "int_4f2a9c",
+      "typeId": "metric_threshold_crossed",
+      "enabled": false,
+      "params": {
+        "account": "acct_1Nx"
+      },
+      "threshold": {
+        "metric": "mrr",
+        "comparator": "below",
+        "value": 1000000
+      },
+      "minIntervalSeconds": 3600
+    }
+  ]
+}

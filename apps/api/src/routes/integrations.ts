@@ -4,6 +4,7 @@ import { connectionName, getAdapter } from "@notch/integrations";
 import { IntegrationCreate, IntegrationUpdate } from "@notch/schemas";
 import { integration as integrationTable } from "@notch/db";
 import { authenticate, rateLimited, sessionOnly, type AppContext } from "../middleware.ts";
+import { seedSubscriptions } from "../lib/notifications.ts";
 import { fingerprint, sealCredentials } from "../lib/crypto.ts";
 import { openFreshCredentials } from "../lib/token-refresh.ts";
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
@@ -166,6 +167,11 @@ integrations.post("/", sessionOnly, rateLimited({ limit: 20, windowSeconds: 3600
     // account on the same tick and fan out into one burst at the provider.
     refreshOffsetSeconds: Math.floor(Math.random() * 300),
   });
+
+  // The connection's notification toggles, from its manifest's defaults. Seeded
+  // here as well as on first read of /settings, so a brand-new connection can
+  // notify before anybody has opened the settings pane.
+  await seedSubscriptions(db, userId, rowId, body.data.provider);
 
   const row = await owned(db, userId, rowId);
   if (row) {

@@ -18,7 +18,24 @@ public enum NotchPresentation: Equatable, Sendable {
     /// adding it later is a view, not a refactor of the whole presentation
     /// machinery.
     case hinting
+    /// A notification, slid out of the notch and retracted a few seconds later.
+    ///
+    /// Deliberately *not* `.hinting`, whose stated purpose is an always-on
+    /// pill: this has the opposite lifecycle — timer-driven in and out — and
+    /// the two would have to coexist if that pill is ever built.
+    ///
+    /// It is also the app's first presentation change that no pointer asked
+    /// for, which is why `isShowingSomething` below exists.
+    case banner
     case expanded
+
+    /// Whether the expanded body is on screen.
+    ///
+    /// Split from "should the hover monitor watch for the pointer leaving".
+    /// Those were one boolean serving two opposite purposes, and a banner needs
+    /// them to disagree: it is visible, so a hover must not re-expand over it,
+    /// but nobody is pointing at it, so the exit watch must stay asleep.
+    public var isOpen: Bool { self == .expanded }
 }
 
 /// What the panel hosts.
@@ -65,20 +82,30 @@ public struct NotchContentView: View {
         // this is the fallback for changes that arrive from SwiftUI's side —
         // the resize handle, a widget being removed.
         .animation(
-            presentation == .expanded
+            presentation == .expanded || presentation == .banner
                 ? NotchMotion.expansion(reduceMotion: reduceMotion)
                 : NotchMotion.collapse(reduceMotion: reduceMotion),
             value: presentation)
     }
 
     private var panel: some View {
+        // A banner leaves the notch shape alone entirely: the card that falls
+        // out draws its own surface, and the panel behind it stays the size and
+        // shape of the hardware notch. A shape stretched to the bounding box
+        // would be a large dark rectangle sitting under the menu bar.
         let shape = NotchShape(
             topCornerRadius: presentation == .expanded ? 28 : 0,
             bottomCornerRadius: presentation == .expanded ? 26 : notchBottomRadius
         )
 
-        let width = presentation == .expanded ? expandedSize.width : collapsedSize.width
-        let height = presentation == .expanded ? expandedSize.height : collapsedSize.height
+        let body: CGSize
+        switch presentation {
+        case .expanded: body = expandedSize
+        case .banner: body = bannerSize
+        case .collapsed, .hinting: body = collapsedSize
+        }
+        let width = body.width
+        let height = body.height
 
         return ZStack(alignment: .top) {
             // Frosted glass, then a dark tint over it. The material alone goes
@@ -92,7 +119,63 @@ public struct NotchContentView: View {
                 .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
                 // Collapsed, the shape is drawn at exactly the notch's size and
                 // fully transparent, so the hardware notch looks untouched.
+                // Collapsed, the shape is drawn at exactly the notch's size and
+                // fully transparent, so the hardware notch looks untouched. A
+                // banner is the one non-expanded state that is meant to be
+                // seen.
+                // Collapsed, the shape is drawn at exactly the notch's size and
+                // fully transparent, so the hardware notch looks untouched.
+                // During a banner it stays out of the way for the same reason.
                 .opacity(presentation == .expanded ? 1 : (geometry.hasNotch ? 0 : 0.95))
+                .frame(
+                    width: presentation == .banner ? collapsedSize.width : nil,
+                    height: presentation == .banner ? collapsedSize.height : nil
+                )
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            // Collapsed, with something waiting: a dot on the trailing inside
+            // edge of the notch. The only thing that makes the feature
+            // discoverable without hovering, and it is a view reading an
+            // observable property — no timer, no poll.
+            if presentation == .collapsed, view.unreadAlertCount > 0, view.isSignedIn {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    Circle()
+                        .fill(NotchTheme.editHighlight)
+                        .frame(width: 4, height: 4)
+                        .padding(.trailing, geometry.hasNotch ? 6 : 4)
+                }
+                .frame(width: width, height: height)
+                .transition(.opacity)
+            }
+
+            if presentation == .banner, let alert = view.bannerAlert {
+                VStack(spacing: 0) {
+                    // The notch's own band, kept clear so the card falls out
+                    // from under it rather than over it.
+                    Color.clear.frame(height: collapsedSize.height)
+
+                    NotchDropBanner(
+                        alert: alert,
+                        isOpen: view.bannerIsOpen,
+                        onTap: view.onBannerTapped
+                    )
+                    .padding(.top, NotchBannerMetrics.gap)
+                    // Starts tucked exactly behind the notch — far enough up
+                    // that its bottom edge sits on the notch's — and springs
+                    // down from there.
+                    .transition(
+                        .offset(y: -(NotchBannerMetrics.gap + NotchBannerMetrics.circle))
+                    )
+
+                    Spacer(minLength: 0)
+                }
+                // Clipped at the top only. The container is wider and taller
+                // than the card on purpose, so the shadow still has room below
+                // and to the sides while the circle is hidden on the way out.
+                .frame(width: bannerSize.width, height: bannerSize.height, alignment: .top)
+                .clipped()
+            }
 
             if presentation == .expanded {
                 expandedContent
@@ -124,18 +207,51 @@ public struct NotchContentView: View {
             header
             content
             // The handle sets how many rows are on screen, which is not a
-            // thing either pane has.
-            if configuring == nil, !view.isBrowsing, view.isSignedIn { grabber }
+            // thing any pane has. Keyed on `bodyKind` like everything else:
+            // this was a third copy of the same if-ladder, and it drifted —
+            // the grabber drew over the notification centre while
+            // `expandedSize` left no room for it.
+            if bodyKind == .grid { grabber }
         }
-        .animation(.snappy(duration: 0.28), value: view.configuringID)
-        .animation(.snappy(duration: 0.28), value: view.isBrowsing)
-        .animation(.snappy(duration: 0.28), value: view.isSignedIn)
+        // One value, so the frame change and the body swap cannot animate on
+        // different clocks.
+        .animation(.snappy(duration: 0.28), value: bodyKind)
     }
 
     /// The widget being configured, resolved against the live layout.
     private var configuring: NotchWidget? {
         guard let id = view.configuringID else { return nil }
         return model.layout.widgets.first { $0.id == id }
+    }
+
+    /// Which body the expanded notch is showing.
+    ///
+    /// One value, because `content` and `expandedSize` used to be two parallel
+    /// if-ladders over the same question — and they already disagreed about
+    /// what sits below the body. A fifth case in two ladders is how they drift.
+    /// Named `BodyKind`, not `Body`: `Body` is `View`'s own associated type, and
+    /// shadowing it makes the whole view silently stop conforming — with the
+    /// error reported against `body`, nowhere near the cause.
+    private enum BodyKind: Equatable {
+        case signedOut
+        case browser
+        case alerts
+        case configure(NotchWidget)
+        case grid
+    }
+
+    private var bodyKind: BodyKind {
+        if !view.isSignedIn { return .signedOut }
+        if view.isBrowsing { return .browser }
+        if view.isShowingAlerts { return .alerts }
+        if let widget = configuring { return .configure(widget) }
+        return .grid
+    }
+
+    /// Full-width bodies: a sidebar and a list do not fit in the width a row of
+    /// tiles needs.
+    private var bodyWantsFullWidth: Bool {
+        bodyKind == .browser || bodyKind == .alerts
     }
 
     @ViewBuilder
@@ -153,6 +269,8 @@ public struct NotchContentView: View {
                 .transition(.opacity)
         } else if view.isBrowsing {
             browser
+        } else if view.isShowingAlerts {
+            alertCentre
         } else if let widget = configuring {
             WidgetConfigurePane(
                 widget: widget,
@@ -186,6 +304,25 @@ public struct NotchContentView: View {
         } else {
             grid.transition(.opacity)
         }
+    }
+
+    /// The notification centre.
+    ///
+    /// The list itself comes from the app target — it needs the connections —
+    /// and all this owns is the height, the insets and the way in and out,
+    /// which is exactly the split the browser and the configure pane use.
+    private var alertCentre: some View {
+        view.alertCentrePanel()
+            .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+            .padding(.top, NotchWidgetCanvas.contentTop)
+            .padding(.bottom, Self.configureBottomInset)
+            // The same height as the browser, deliberately: the same
+            // two-column frame at the same size reads as the same room.
+            .frame(height: Self.alertsBodyHeight)
+            .transition(
+                .asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .opacity))
     }
 
     /// Every widget that can be added, in the notch rather than in a window.
@@ -258,7 +395,10 @@ public struct NotchContentView: View {
 
             // Both are about numbers there are none of yet. Settings stays:
             // it is the way to the account pane and to quitting.
-            if view.isSignedIn { refreshButton }
+            if view.isSignedIn {
+                refreshButton
+                alertsButton
+            }
             headerButton("gearshape", help: "Settings", action: onOpenSettings)
 
             Spacer(minLength: 0)
@@ -276,6 +416,9 @@ public struct NotchContentView: View {
                 EmptyView()
             } else if view.isBrowsing {
                 backFromBrowsingButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            } else if view.isShowingAlerts {
+                backFromAlertsButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
             } else if configuring != nil {
                 cancelConfiguringButton
@@ -550,6 +693,67 @@ public struct NotchContentView: View {
         .disabled(view.isRefreshing)
     }
 
+    /// The way into the notification centre, with the unread count on it.
+    ///
+    /// The badge is a view reading an `@Observable` property, so it costs no
+    /// timer and no poll of its own.
+    private var alertsButton: some View {
+        headerButton(
+            "bell",
+            help: view.unreadAlertCount > 0
+                ? "\(view.unreadAlertCount) unread" : "Notifications",
+            active: view.isShowingAlerts,
+            action: { view.onOpenAlerts() }
+        )
+        .overlay(alignment: .topTrailing) {
+            if view.unreadAlertCount > 0 {
+                // A dot under ten, a count above it: two digits fit, three do
+                // not, and "9+" reads as a number nobody can act on.
+                Group {
+                    if view.unreadAlertCount < 10 {
+                        Circle().fill(NotchTheme.editHighlight).frame(width: 7, height: 7)
+                    } else {
+                        Text(view.unreadAlertCount > 99 ? "99" : "\(view.unreadAlertCount)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 3)
+                            .frame(minWidth: 13, minHeight: 11)
+                            .background(Capsule().fill(NotchTheme.editHighlight))
+                    }
+                }
+                .overlay(
+                    Circle().stroke(.black.opacity(0.45), lineWidth: 1).opacity(
+                        view.unreadAlertCount < 10 ? 1 : 0))
+                .offset(x: 2, y: -1)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: view.unreadAlertCount)
+    }
+
+    /// The way back out, mirroring the browser's.
+    private var backFromAlertsButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.26)) {
+                view.isShowingAlerts = false
+                view.onEndAlerts()
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Back")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(NotchTheme.secondaryText)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(Capsule().fill(.white.opacity(0.07)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func headerButton(
         _ symbol: String, help: String, active: Bool = false, action: @escaping () -> Void
     ) -> some View {
@@ -685,6 +889,28 @@ public struct NotchContentView: View {
             : CGSize(width: 120, height: 6)
     }
 
+    /// The transient banner's footprint.
+    ///
+    /// Wide enough for a connector mark, two lines of text and a timestamp, and
+    /// no wider: it sits over the menu bar, and one that spanned the screen
+    /// would cover the clock and the user's own menu extras.
+    ///
+    /// On a Mac with no hardware notch there is nothing to slide out of, so the
+    /// banner is a little taller to stand on its own rather than appearing to
+    /// grow from a 6pt pill.
+    private var bannerSize: CGSize {
+        // The card's bounding box, plus slack so the drop shadow is not clipped
+        // away by the same `.clipped()` that hides the circle on its way out.
+        CGSize(
+            width: max(collapsedSize.width, NotchBannerMetrics.cardWidth) + Self.bannerShadowSlack * 2,
+            height: collapsedSize.height + NotchBannerMetrics.gap + NotchBannerMetrics.cardHeight
+                + Self.bannerShadowSlack
+        )
+    }
+
+    /// Room around the card for its shadow, inside the clipped container.
+    static let bannerShadowSlack: CGFloat = 36
+
     /// Sized to its content, not to the window.
     ///
     /// The *panel* is always NotchPanel.maxSize — that is what keeps expansion
@@ -704,17 +930,21 @@ public struct NotchContentView: View {
         // control that is not on screen, which is space the form could not
         // use and padding the eye could not see.
         let content: CGFloat
-        if !view.isSignedIn {
+        switch bodyKind {
+        case .signedOut:
             content =
                 NotchWidgetCanvas.contentTop + Self.signedOutBodyHeight
                 + Self.configureBottomInset
-        } else if view.isBrowsing {
+        case .browser:
             content =
                 NotchWidgetCanvas.contentTop + Self.browseBodyHeight + Self.configureBottomInset
-        } else if configuring != nil {
+        case .alerts:
+            content =
+                NotchWidgetCanvas.contentTop + Self.alertsBodyHeight + Self.configureBottomInset
+        case .configure:
             content =
                 NotchWidgetCanvas.contentTop + configureBodyHeight + Self.configureBottomInset
-        } else {
+        case .grid:
             content =
                 NotchWidgetCanvas.contentTop
                 + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
@@ -729,12 +959,15 @@ public struct NotchContentView: View {
             // The browser takes all of it. A sidebar, a search field and a
             // grid of cards in the width a row of tiles needs leaves two
             // columns of widgets to choose from.
-            width: view.isBrowsing
+            width: bodyWantsFullWidth
                 ? widest
                 : min(widest, max(560, geometry.notchRect.width + 480)),
             height: min(NotchPanel.maxSize.height, headerHeight + content)
         )
     }
+
+    /// The notification centre's body, deliberately equal to the browser's.
+    static let alertsBodyHeight: CGFloat = 440
 
     static let grabberHeight: CGFloat = 19
 

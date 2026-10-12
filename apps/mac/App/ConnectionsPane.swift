@@ -18,6 +18,18 @@ struct ConnectionsPane: View {
     @State private var confirmingRemoval: Integration?
     /// The connection whose browser flow is open, so its row can say so.
     @State private var reconnecting: String?
+    /// Which connections have their notification list open.
+    ///
+    /// A set rather than a single id: these are compared against each other —
+    /// "what does Stripe tell me that GitHub doesn't" — and an accordion that
+    /// closes the last one makes that two passes instead of one.
+    ///
+    /// `NOTCH_DEBUG_CONNECTION_ALERTS=1` opens every one at launch. The list is
+    /// otherwise only reachable by clicking a bell, which a screenshot cannot
+    /// do — and the expanded state is the half worth looking at.
+    @State private var showingNotifications: Set<String> =
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONNECTION_ALERTS"] == "1"
+        ? ["int_stripe", "int_github", "int_polar"] : []
 
     var body: some View {
         Form {
@@ -56,8 +68,26 @@ struct ConnectionsPane: View {
                             },
                             onRemove: { confirmingRemoval = connection },
                             isReconnecting: reconnecting == connection.id,
-                            onReconnect: { Task { await reconnect(connection) } }
+                            onReconnect: { Task { await reconnect(connection) } },
+                            notificationCount: enabledNotifications(for: connection.id),
+                            hasNotifications: !env.alertDefinitions(
+                                forIntegration: connection.id
+                            ).isEmpty,
+                            isShowingNotifications: showingNotifications.contains(connection.id),
+                            onToggleNotifications: {
+                                withAnimation(.snappy(duration: 0.2)) {
+                                    if showingNotifications.contains(connection.id) {
+                                        showingNotifications.remove(connection.id)
+                                    } else {
+                                        showingNotifications.insert(connection.id)
+                                    }
+                                }
+                            }
                         )
+
+                        if showingNotifications.contains(connection.id) {
+                            ConnectionNotifications(integrationId: connection.id)
+                        }
                     }
                 }
             } header: {
@@ -77,6 +107,9 @@ struct ConnectionsPane: View {
         .formStyle(.grouped)
         // See AppsPane: reloads when the account picture changes.
         .task(id: env.catalogueRevision) { await model.load(env: env) }
+        // The toggles are server state, so this pane needs them loaded even
+        // when nobody has opened the Notifications pane this launch.
+        .task { await env.loadAlertSettings() }
         .sheet(item: $renaming) { connection in
             RenameSheet(
                 name: $draftName,
@@ -173,6 +206,10 @@ private struct ConnectionRow: View {
     let onRemove: () -> Void
     var isReconnecting: Bool = false
     var onReconnect: () -> Void = {}
+    var notificationCount: Int = 0
+    var hasNotifications: Bool = false
+    var isShowingNotifications: Bool = false
+    var onToggleNotifications: () -> Void = {}
 
     private var isBroken: Bool { connection.status == "auth_failed" }
 
@@ -207,6 +244,28 @@ private struct ConnectionRow: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(isReconnecting)
+                .fixedSize()
+            }
+
+            // Only for connectors that can actually notify. A bell on a row
+            // that opens an empty list is a worse answer than no bell.
+            if hasNotifications {
+                Button(action: onToggleNotifications) {
+                    HStack(spacing: 4) {
+                        Image(systemName: notificationCount > 0 ? "bell.fill" : "bell.slash")
+                        if notificationCount > 0 {
+                            Text("\(notificationCount)")
+                        }
+                        Image(systemName: isShowingNotifications ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .foregroundStyle(notificationCount > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .help(
+                    notificationCount > 0
+                        ? "\(notificationCount) notifications on" : "No notifications from this")
                 .fixedSize()
             }
 
@@ -291,6 +350,12 @@ final class ConnectionsModel {
     private(set) var state: State = .loading
 
     func load(env: AppEnvironment) async {
+        // Demo mode never reaches the network, and a pane that can only say
+        // "sign in" is a pane whose layout cannot be reviewed or screenshotted.
+        if AppEnvironment.isDemo {
+            state = .loaded(AlertSample.connectionsForDemo)
+            return
+        }
         do {
             state = .loaded(try await env.api.connections())
         } catch {
@@ -324,5 +389,90 @@ final class ConnectionsModel {
         case .unauthorized: return "Sign in to manage your connections."
         default: return "Could not reach Notch Metrics."
         }
+    }
+}
+
+
+extension ConnectionsPane {
+    /// How many of a connection's notification types are on, for its row.
+    ///
+    /// Falls back to the manifest's default where the server has no row yet —
+    /// which is the state between connecting and the first settings fetch, and
+    /// showing zero there would misreport a connection that is about to notify.
+    fileprivate func enabledNotifications(for integrationId: String) -> Int {
+        env.alertDefinitions(forIntegration: integrationId).count { definition in
+            env.alertSubscription(for: integrationId, typeId: definition.id)?.enabled
+                ?? definition.defaultEnabled
+        }
+    }
+}
+
+/// One connection's notification types.
+///
+/// Here rather than in the Notifications pane because this is where somebody
+/// manages a connection: what Stripe is allowed to tell you is a fact about
+/// your Stripe connection, not an app-wide preference. The Notifications pane
+/// keeps the things that *are* app-wide — whether banners show at all, how long
+/// they stay, the sound, quiet hours.
+private struct ConnectionNotifications: View {
+    @Environment(AppEnvironment.self) private var env
+    let integrationId: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if definitions.isEmpty {
+                Text("This app doesn't send notifications yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(definitions) { definition in
+                row(definition)
+            }
+        }
+        .padding(.leading, 41)
+        .padding(.vertical, 4)
+    }
+
+    private func row(_ definition: AlertDefinition) -> some View {
+        let subscription = env.alertSubscription(for: integrationId, typeId: definition.id)
+        return VStack(alignment: .leading, spacing: 3) {
+            Toggle(
+                definition.label,
+                isOn: Binding(
+                    get: { subscription?.enabled ?? definition.defaultEnabled },
+                    set: { value in
+                        Task {
+                            await env.setAlertEnabled(
+                                value, for: integrationId, typeId: definition.id)
+                        }
+                    })
+            )
+            // Locked rather than hidden, so the user can still see what they
+            // will be told — a revoked key is not a preference.
+            .disabled(!definition.userConfigurable)
+
+            Text(definition.methodology)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !definition.userConfigurable {
+                Label("Always on", systemImage: "lock")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if definition.isThreshold, subscription?.threshold == nil {
+                // A threshold with no bound never fires, and nothing else on
+                // the row would say so.
+                Text("Needs a figure before it can notify you.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private var definitions: [AlertDefinition] {
+        env.alertDefinitions(forIntegration: integrationId)
     }
 }

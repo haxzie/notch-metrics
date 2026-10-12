@@ -138,6 +138,44 @@ public final class NotchViewModel {
     /// pane, the controller may be holding the notch open for it.
     public var onEndBrowsing: @MainActor () -> Void = {}
 
+    /// True while the notch is showing the notification centre.
+    ///
+    /// Mutually exclusive with `isBrowsing` and `configuringID`; the controller
+    /// enforces that, and `NotchContentView.bodyKind` is ordered as a backstop.
+    public var isShowingAlerts = false
+
+    /// The notification centre's sidebar and list.
+    ///
+    /// From the app target, for exactly the reason `browserPanel` is: it needs
+    /// the user's connections.
+    public var alertCentrePanel: @MainActor () -> AnyView = { AnyView(EmptyView()) }
+
+    /// Which connection the pane should open on, when the way in named one —
+    /// a banner click, a deep link. Cleared by the pane once honoured.
+    public var alertsFocus: AlertFocus?
+
+    /// Drives the bell's badge and the dot on the collapsed notch. Forwarded
+    /// immediately rather than on the next refresh, like `isSignedIn`.
+    public var unreadAlertCount = 0
+
+    /// The notification currently out of the notch, if any.
+    public var bannerAlert: NotchAlert?
+
+    /// How far through the drop the banner is.
+    ///
+    /// Two steps rather than one, because the shape is doing two different
+    /// things: a circle falls clear of the notch first, and only then opens
+    /// into a card. Driven by the controller's timer, not by the view — the
+    /// view just renders whichever step it is on.
+    public var bannerIsOpen = false
+
+    /// The banner was clicked: open its link, or the centre if it has none.
+    public var onBannerTapped: @MainActor () -> Void = {}
+
+    public var onEndAlerts: @MainActor () -> Void = {}
+    /// The bell was pressed.
+    public var onOpenAlerts: @MainActor () -> Void = {}
+
     public var onOpenSettings: @MainActor () -> Void = {}
     /// Fetch every tile again, now.
     public var onRefresh: @MainActor () -> Void = {}

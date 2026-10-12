@@ -64,6 +64,12 @@ public actor APIClient {
             path: path, method: "DELETE", query: [], body: Optional<Never>.none, as: type)
     }
 
+    public func put<Body: Encodable & Sendable, T: Decodable & Sendable>(
+        _ path: String, body: Body, as type: T.Type
+    ) async throws(APIError) -> T {
+        try await send(path: path, method: "PUT", query: [], body: body, as: type)
+    }
+
     public func patch<Body: Encodable & Sendable, T: Decodable & Sendable>(
         _ path: String, body: Body, as type: T.Type
     ) async throws(APIError) -> T {
@@ -276,6 +282,70 @@ extension APIClient {
 
 public struct OKResponse: Decodable, Sendable {
     public let ok: Bool
+}
+
+extension APIClient {
+    /// One page of notifications.
+    ///
+    /// `since` walks forward from a cursor and `before` backward from one.
+    /// They are different questions, and the server rejects both at once.
+    public func alerts(
+        since: Int? = nil,
+        before: Int? = nil,
+        integrationId: String? = nil,
+        limit: Int = 50
+    ) async throws(APIError) -> AlertFeedPage {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let since { query.append(URLQueryItem(name: "since", value: String(since))) }
+        if let before { query.append(URLQueryItem(name: "before", value: String(before))) }
+        if let integrationId {
+            query.append(URLQueryItem(name: "integrationId", value: integrationId))
+        }
+        return try await get("v1/notifications", query: query, as: AlertFeedPage.self)
+    }
+
+    /// The cheap poll: one row on the server, a few hundred bytes on the wire.
+    public func alertCursor() async throws(APIError) -> AlertCursor {
+        try await get("v1/notifications/cursor", as: AlertCursor.self)
+    }
+
+    @discardableResult
+    public func markAlertsRead(upToSeq: Int) async throws(APIError) -> AlertUnreadResponse {
+        try await post(
+            "v1/notifications/read", body: MarkReadRequest(upToSeq: upToSeq, ids: nil),
+            as: AlertUnreadResponse.self)
+    }
+
+    @discardableResult
+    public func markAlertsRead(ids: [String]) async throws(APIError) -> AlertUnreadResponse {
+        try await post(
+            "v1/notifications/read", body: MarkReadRequest(upToSeq: nil, ids: ids),
+            as: AlertUnreadResponse.self)
+    }
+
+    public func alertSettings() async throws(APIError) -> AlertSettings {
+        try await get("v1/notifications/settings", as: AlertSettings.self)
+    }
+
+    /// Writes the toggles back.
+    ///
+    /// The server is authoritative here — the opposite of the widget layout —
+    /// so a 409 means somebody else won and this copy is stale. The caller
+    /// should take the returned state rather than retrying its own.
+    public func updateAlertSettings(_ settings: AlertSettings) async throws(APIError)
+        -> AlertSettings
+    {
+        try await put("v1/notifications/settings", body: settings, as: AlertSettings.self)
+    }
+}
+
+struct MarkReadRequest: Encodable, Sendable {
+    let upToSeq: Int?
+    let ids: [String]?
+}
+
+public struct AlertUnreadResponse: Decodable, Sendable {
+    public let unread: Int
 }
 
 public struct EmptyBody: Encodable, Sendable {

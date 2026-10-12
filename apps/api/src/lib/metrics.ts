@@ -17,6 +17,7 @@ import { openFreshCredentials } from "./token-refresh.ts";
 import { percentChange } from "@notch/integrations";
 import { logError } from "./redact.ts";
 import { notifyBroken } from "./slack.ts";
+import { emitConnectionBroken } from "./notifications.ts";
 
 /**
  * How long a computed envelope stays fresh.
@@ -348,7 +349,12 @@ async function recordFailure(
     })
     .where(eq(integrationTable.id, row.id));
 
-  if (mapped.code === "auth_failed") await notifyBroken(env, db, row.status, row);
+  if (mapped.code === "auth_failed") {
+    // The user's notification first, then ours. The Slack ping is gated on a
+    // webhook secret being configured; the user's is not.
+    await emitConnectionBroken(db, row.status, row);
+    await notifyBroken(env, db, row.status, row);
+  }
 }
 
 /** Opportunistic, through `waitUntil` — a Worker has no timer of its own. */

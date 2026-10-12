@@ -33,6 +33,11 @@ const SCHEMAS: Record<string, z.ZodType> = {
   PluginManifest: S.PluginManifest,
   PluginRunResult: S.PluginRunResult,
   LatestJson: S.LatestJson,
+  Notification: S.Notification,
+  NotificationFeed: S.NotificationFeed,
+  NotificationCursor: S.NotificationCursor,
+  NotificationDescriptor: S.NotificationDescriptor,
+  NotificationSettings: S.NotificationSettings,
 };
 
 const AT = "2026-10-05T12:00:00.000Z";
@@ -92,9 +97,64 @@ const manifest: S.ProviderManifest = {
         "Active subscriptions at the end of the window, each normalised to a monthly amount and reduced by any percentage coupon.",
     },
   ],
+  notifications: [
+    {
+      id: "payment_received",
+      kind: "event",
+      label: "New payment",
+      shortLabel: "New payment",
+      severity: "success",
+      methodology:
+        "A charge that succeeded, seen in the recent payments list. A charge that fails and is later retried successfully arrives once, when it succeeds.",
+      source: { from: "metric_items", metric: "recent_payments" },
+      defaultEnabled: false,
+      userConfigurable: true,
+      minIntervalSeconds: 60,
+      maxBurst: 5,
+    },
+    {
+      id: "metric_threshold_crossed",
+      kind: "threshold",
+      label: "MRR crosses a figure",
+      shortLabel: "MRR threshold",
+      severity: "info",
+      methodology:
+        "Checked against the same monthly recurring revenue figure the tile shows, so it can be announced on a reading up to fifteen minutes old.",
+      source: { from: "metric_value", metric: "mrr" },
+      threshold: {
+        metric: "mrr",
+        comparators: ["above", "below", "pct_change_down"],
+        unit: "currency",
+        suggestedValue: 1_000_000,
+      },
+      defaultEnabled: false,
+      userConfigurable: true,
+      minIntervalSeconds: 3600,
+      maxBurst: 1,
+    },
+  ],
   allowedHosts: ["api.stripe.com"],
   status: "stable",
   minAppVersion: "0.1.0",
+};
+
+const notification: S.Notification = {
+  id: "ntf_7c21ab",
+  seq: 412,
+  integrationId: "int_4f2a9c",
+  provider: "stripe",
+  connectionLabel: "Acme Inc",
+  typeId: "payment_received",
+  severity: "success",
+  title: "Payment received",
+  body: "Ada Lovelace \u00b7 Pro \u00b7 yearly",
+  amount: 9_900,
+  currency: "USD",
+  url: "https://dashboard.stripe.com/payments/ch_1",
+  occurredAt: "2026-10-05T11:42:00.000Z",
+  createdAt: "2026-10-05T11:44:30.000Z",
+  read: false,
+  alert: true,
 };
 
 /**
@@ -250,6 +310,132 @@ const FIXTURES: Record<string, unknown> = {
     notes: "https://github.com/haxzie/notch-metrics/releases/tag/mac-v0.2.0",
     mandatory: false,
   },
+  "notification-feed": {
+    seq: 412,
+    unread: 2,
+    items: [
+      notification,
+      {
+        // A threshold row: no amount, no currency, no provider link to open.
+        ...notification,
+        id: "ntf_7c21ac",
+        seq: 411,
+        typeId: "metric_threshold_crossed",
+        severity: "info",
+        title: "MRR crossed $10,000",
+        body: null,
+        amount: null,
+        currency: null,
+        url: null,
+        occurredAt: "2026-10-05T09:00:00.000Z",
+        createdAt: "2026-10-05T09:02:10.000Z",
+      },
+      {
+        // Already triaged, and raised inside quiet hours so it was never
+        // allowed to interrupt anybody.
+        ...notification,
+        id: "ntf_7c21ad",
+        seq: 410,
+        integrationId: null,
+        typeId: "connection_broken",
+        severity: "warning",
+        title: "Stripe needs reconnecting",
+        body: "That key was revoked.",
+        amount: null,
+        currency: null,
+        url: null,
+        occurredAt: "2026-10-04T03:15:00.000Z",
+        createdAt: "2026-10-04T03:15:40.000Z",
+        read: true,
+        alert: false,
+      },
+    ],
+    connections: [
+      {
+        integrationId: "int_4f2a9c",
+        provider: "stripe",
+        label: "Acme Inc",
+        unread: 2,
+        total: 3,
+      },
+    ],
+    hasMore: true,
+    oldestSeq: 410,
+    truncated: false,
+    pollAfterSeconds: 300,
+  },
+  // Empty `items` but a *non-empty* `connections`: a connection with nothing to
+  // report still has to appear in the sidebar. This is the case that breaks a
+  // sidebar decoder, and the reason it gets its own fixture.
+  "notification-feed-empty": {
+    seq: 0,
+    unread: 0,
+    items: [],
+    connections: [
+      {
+        integrationId: "int_b71e02",
+        provider: "github",
+        label: "haxzie/notch-metrics",
+        unread: 0,
+        total: 0,
+      },
+    ],
+    // An empty page's `oldestSeq` is null, not 0. A client that derives it as 0
+    // re-requests the whole archive on every poll, forever.
+    hasMore: false,
+    oldestSeq: null,
+    truncated: false,
+    pollAfterSeconds: 3600,
+  },
+  "notification-feed-truncated": {
+    seq: 1_300,
+    unread: 183,
+    items: [notification],
+    connections: [
+      {
+        integrationId: "int_4f2a9c",
+        provider: "stripe",
+        label: "Acme Inc",
+        unread: 183,
+        total: 200,
+      },
+    ],
+    // Both set, independently: there is more archive to walk *and* the live gap
+    // was too wide to banner row by row. Collapsing them into one flag makes a
+    // long scroll go silent and a quiet catch-up look like the end of the list.
+    hasMore: true,
+    oldestSeq: 412,
+    truncated: true,
+    pollAfterSeconds: 300,
+  },
+  "notification-settings": {
+    revision: 3,
+    enabled: true,
+    quietFromMinute: 1_320,
+    quietToMinute: 480,
+    subscriptions: [
+      {
+        id: "nsub_01",
+        integrationId: "int_4f2a9c",
+        typeId: "payment_received",
+        enabled: true,
+        params: {},
+        threshold: null,
+        minIntervalSeconds: 60,
+      },
+      {
+        // Disabled, but still carrying the bound the user typed — turning a
+        // threshold back on must not lose the number.
+        id: "nsub_02",
+        integrationId: "int_4f2a9c",
+        typeId: "metric_threshold_crossed",
+        enabled: false,
+        params: { account: "acct_1Nx" },
+        threshold: { metric: "mrr", comparator: "below", value: 1_000_000 },
+        minIntervalSeconds: 3600,
+      },
+    ],
+  },
   "plugin-manifest": {
     schemaVersion: 1,
     id: "github-stars",
@@ -291,6 +477,10 @@ const FIXTURE_SCHEMA: Record<keyof typeof FIXTURES & string, z.ZodType> = {
   "widget-layout": S.WidgetLayout,
   "latest-json": S.LatestJson,
   "plugin-manifest": S.PluginManifest,
+  "notification-feed": S.NotificationFeed,
+  "notification-feed-empty": S.NotificationFeed,
+  "notification-feed-truncated": S.NotificationFeed,
+  "notification-settings": S.NotificationSettings,
 };
 
 function writeSorted(dir: string, name: string, value: unknown) {

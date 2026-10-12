@@ -9,6 +9,8 @@ import type {
   ProviderAdapter,
   RawSeries,
   VerifyResult,
+  EventPage,
+  RawEvent,
 } from "../../types.ts";
 import { ProviderError } from "../../types.ts";
 import { manifest } from "./manifest.ts";
@@ -116,6 +118,7 @@ interface Charge {
   description?: string | null;
   receipt_email?: string | null;
   billing_details?: { name?: string | null; email?: string | null } | null;
+  failure_message?: string | null;
 }
 
 interface BalanceTransaction {
@@ -153,6 +156,69 @@ export const stripe: ProviderAdapter<StripeCredentials> = {
       accountLabel: account.business_profile?.name ?? account.id,
       currency: account.default_currency?.toUpperCase() ?? null,
       availableMetrics: available,
+    };
+  },
+
+  /**
+   * Failed and refunded charges — the two things people actually want told,
+   * and neither is a metric.
+   *
+   * One stream for both: `/charges` carries every outcome, so polling it once
+   * serves both notification types rather than once each.
+   */
+  async fetchEvents(ctx, creds, request): Promise<EventPage> {
+    if (request.stream !== "charges") return { events: [], cursor: null };
+
+    const body = await get<StripeList<Charge>>(ctx, creds, "/charges", {
+      limit: Math.min(request.limit, 100),
+      // Stripe's own window, so the page is not walked back further than the
+      // caller will accept anyway.
+      "created[gte]": Math.floor(request.since.getTime() / 1000),
+    });
+
+    const events: RawEvent[] = [];
+    for (const charge of body.data) {
+      const at = new Date(charge.created * 1000);
+      const who =
+        charge.billing_details?.name ||
+        charge.billing_details?.email ||
+        charge.receipt_email ||
+        "Customer";
+
+      if (charge.status === "failed") {
+        events.push({
+          id: charge.id,
+          type: "payment_failed",
+          t: at,
+          title: "Payment failed",
+          // The provider's own reason, which is the whole value of being told.
+          body: [who, charge.failure_message].filter(Boolean).join(" · ") || null,
+          amount: charge.amount,
+          currency: charge.currency.toUpperCase(),
+          url: `https://dashboard.stripe.com/payments/${charge.id}`,
+        });
+      } else if (charge.refunded || (charge.amount_refunded ?? 0) > 0) {
+        events.push({
+          id: `${charge.id}:refund`,
+          type: "refund_issued",
+          t: at,
+          title: "Refund issued",
+          body: who,
+          // The amount refunded, not the amount charged — a partial refund
+          // reported as the full charge overstates it.
+          amount: charge.amount_refunded ?? charge.amount,
+          currency: charge.currency.toUpperCase(),
+          url: `https://dashboard.stripe.com/payments/${charge.id}`,
+        });
+      }
+    }
+
+    // Stripe paginates by object id, and `has_more` tells us whether walking
+    // on is worth it. The caller polls again rather than walking here, so a
+    // busy account cannot turn one tick into an unbounded page walk.
+    return {
+      events,
+      cursor: body.has_more ? (body.data[body.data.length - 1]?.id ?? null) : null,
     };
   },
 

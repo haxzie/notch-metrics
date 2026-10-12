@@ -18,7 +18,8 @@ private func app(
     ConnectorEntry(
         id: id, name: name, category: "revenue", tagline: "", docsUrl: "https://example.com",
         accentColor: "#111111", keywords: keywords, authMode: "api_key", oauth: nil, fields: [],
-        metrics: metrics, status: "stable", minAppVersion: "0.1.0", connections: [])
+        metrics: metrics, notifications: nil, status: "stable", minAppVersion: "0.1.0",
+        connections: [])
 }
 
 private let catalogue = [

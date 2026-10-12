@@ -161,6 +161,67 @@ export interface ProviderAdapter<C extends Record<string, unknown> = Record<stri
   verify(ctx: AdapterContext, credentials: C): Promise<VerifyResult>;
 
   fetchMetric(ctx: AdapterContext, credentials: C, request: MetricRequest): Promise<RawSeries>;
+
+  /**
+   * Events a notification can be raised from, for the things no metric answers.
+   *
+   * Optional, so no existing adapter changes and `registry.ts` still compiles
+   * as a total record. Most notifications need none: `payment_received` reads
+   * the `recent_payments` list the cron already fetches, and a threshold reads
+   * a number it already has. This exists for the ones with nothing behind them
+   * — a failed payment, a cancelled subscription, an opened issue.
+   *
+   * No new context: `ctx.http` already carries the allowlist, the timeout, the
+   * byte cap and the manual redirect handling, which is exactly what an event
+   * poll needs. A bare `fetch` here is as reviewable a bug as it is in
+   * `fetchMetric`.
+   */
+  fetchEvents?(ctx: AdapterContext, credentials: C, request: EventRequest): Promise<EventPage>;
+}
+
+export interface EventRequest {
+  /** The descriptor's `source.stream`. Several notification types usually
+   *  share one stream — one poll, three rules. */
+  stream: string;
+  /** Opaque and adapter-owned; never parsed by the caller. Null on the first
+   *  run, which primes and delivers nothing. */
+  cursor: string | null;
+  /** A hard floor on the backfill. An adapter must not look further back than
+   *  this, whatever its cursor says — enabling a toggle is not a request for
+   *  the past. */
+  since: Date;
+  /** The caller discards any overflow and polls again sooner. */
+  limit: number;
+  /** Keys the descriptor declared, supplied by the subscription. */
+  params: Record<string, string>;
+}
+
+export interface RawEvent {
+  /**
+   * The provider's own id for the thing that happened.
+   *
+   * This becomes the dedupe key, so an id synthesised from a timestamp or an
+   * array index is a bug: it re-delivers the same event on the next poll.
+   */
+  id: string;
+  /** A `NotificationTypeId`. One stream may yield several types. */
+  type: string;
+  t: Date;
+  /** One line, already in the user's words. No provider jargon, no markup. */
+  title: string;
+  body: string | null;
+  /** Minor units of `currency`, like every other amount here. */
+  amount: number | null;
+  currency: string | null;
+  /** Deep link into the provider's dashboard. Checked against the manifest's
+   *  `allowedHosts` before it is stored, because the Mac opens it. */
+  url: string | null;
+}
+
+export interface EventPage {
+  events: RawEvent[];
+  /** Handed back on the next call, unexamined. */
+  cursor: string | null;
 }
 
 /** Thrown by a connector that is declared but not implemented yet. */

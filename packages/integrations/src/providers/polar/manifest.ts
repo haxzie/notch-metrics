@@ -1,5 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 import { recentPaymentsDescriptor } from "../../list.ts";
+import { paymentReceivedNotification } from "../../notifications.ts";
 
 export const manifest: ProviderManifest = {
   id: "polar",
@@ -96,6 +97,9 @@ export const manifest: ProviderManifest = {
     recentPaymentsDescriptor(
       "The latest paid orders, newest first, with the customer's name or email and the product. Amounts are what the customer paid, after discounts and including tax.",
     ),
+  ],
+  notifications: [
+    paymentReceivedNotification("An order that completed. Refunds are not announced here."),
   ],
   allowedHosts: ["api.polar.sh", "sandbox-api.polar.sh"],
   status: "stable",

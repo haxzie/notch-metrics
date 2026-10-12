@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { Granularity } from "./money.ts";
-import { ConnectorCategory, MetricId, ProviderId } from "./ids.ts";
+import { ConnectorCategory, MetricId, NotificationTypeId, ProviderId } from "./ids.ts";
 import { MetricUnit } from "./metric.ts";
+import { NotificationComparator, NotificationKind, NotificationSeverity } from "./notification.ts";
 
 /**
  * A credentials field, rendered dynamically by the Mac settings UI.
@@ -70,6 +71,104 @@ export const MetricDescriptor = z.object({
 export type MetricDescriptor = z.infer<typeof MetricDescriptor>;
 
 /**
+ * Where the evaluator gets its input.
+ *
+ * A discriminated union rather than a flag, because each arm is a different
+ * amount of work and a different honesty claim — and because an app meeting an
+ * unknown `from` can grey the toggle out instead of rendering a switch that
+ * silently never fires. Same argument as `AuthField.type` over `masked: true`.
+ *
+ * `metric_items` and `metric_value` cost nothing: the cron already warms those
+ * series, so the evaluator reads a number it was going to fetch anyway.
+ * `adapter_events` needs the provider to implement `fetchEvents`.
+ */
+export const NotificationSource = z.discriminatedUnion("from", [
+  /** Rows of a list metric. `MetricListItem.id` is provider-stable, which is
+   *  what makes it a real dedupe key rather than a guess. */
+  z.object({ from: z.literal("metric_items"), metric: MetricId }),
+  /** The scalar `MetricSeries.value`, against a bound the user supplies. */
+  z.object({ from: z.literal("metric_value"), metric: MetricId }),
+  /** One `fetchEvents` stream. Several descriptors usually share one stream —
+   *  one poll, three notification types. */
+  z.object({ from: z.literal("adapter_events"), stream: z.string() }),
+  /** Raised by the Worker itself, with no provider call at all. */
+  z.object({ from: z.literal("internal") }),
+]);
+export type NotificationSource = z.infer<typeof NotificationSource>;
+
+export const NotificationThresholdSpec = z.object({
+  metric: MetricId,
+  comparators: z.array(NotificationComparator).nonempty(),
+  unit: MetricUnit,
+  /** Pre-filled in the editor, so the user edits a number rather than invents
+   *  one. Minor units when the metric is currency, percent for a `pct_` one. */
+  suggestedValue: z.number().nullable(),
+});
+export type NotificationThresholdSpec = z.infer<typeof NotificationThresholdSpec>;
+
+/**
+ * A notification a connector can raise, declared rather than coded.
+ *
+ * The same contract `MetricDescriptor` is: every field drives something the
+ * user sees, the Mac renders the toggle list and the severity from these fields
+ * and hardcodes no provider, and a new provider's notifications therefore ship
+ * with a Worker deploy and no app release. Getting one wrong produces a toggle
+ * that lies rather than a build that fails.
+ */
+export const NotificationDescriptor = z.object({
+  id: NotificationTypeId,
+  kind: NotificationKind,
+  label: z.string(),
+  /** The notification row's leading line. Not a truncation of `label`. */
+  shortLabel: z.string().max(24),
+  severity: NotificationSeverity,
+  /**
+   * What exactly makes this fire, in one sentence, rendered under the toggle.
+   *
+   * Required, not optional — same argument as `MetricDescriptor.methodology`.
+   * "A failed payment" is somebody's definition: first attempt or final retry,
+   * and whether a $0 invoice counts.
+   */
+  methodology: z.string(),
+  source: NotificationSource,
+  /** `kind: "threshold"` only. */
+  threshold: NotificationThresholdSpec.optional(),
+  /**
+   * Fields the *subscription* supplies. Same `AuthField` shape as
+   * `MetricDescriptor.params`, so an app that renders one renders these with
+   * no new code — and unlike a widget-scoped metric, a subscription carrying
+   * its own params *can* be warmed from the cron.
+   */
+  params: z.array(AuthField).optional(),
+  /**
+   * Whether connecting the provider switches this on.
+   *
+   * Decided per descriptor rather than globally, because both global answers
+   * are wrong: opt-out means a Stripe account taking 400 charges a day gets a
+   * notch that will not shut up on day one, and opt-in means nobody ever finds
+   * the feature. "Connection broken" ships on; "new payment" ships off.
+   */
+  defaultEnabled: z.boolean().default(false),
+  /**
+   * False for the things the product must always be able to say — a revoked
+   * key is not a preference. The Mac renders a locked row rather than hiding
+   * it, so the user can still see what they will be told.
+   */
+  userConfigurable: z.boolean().default(true),
+  /**
+   * Re-arm floor, honoured by the evaluator and seeded onto the subscription.
+   *
+   * A number resting on a threshold must not fire every tick, and a user
+   * cannot be expected to think of that.
+   */
+  minIntervalSeconds: z.number().int().min(60).default(3600),
+  /** Above this in one evaluation the batch collapses to "7 new payments",
+   *  rather than seven rows nobody reads. */
+  maxBurst: z.number().int().min(1).default(5),
+});
+export type NotificationDescriptor = z.infer<typeof NotificationDescriptor>;
+
+/**
  * What the connect page needs to know about an OAuth connector before the
  * user has authorised anything.
  */
@@ -121,6 +220,22 @@ export const ProviderManifest = z.object({
    */
   fields: z.array(AuthField),
   metrics: z.array(MetricDescriptor).nonempty(),
+  /**
+   * What this connector can notify about.
+   *
+   * Optional rather than defaulted, which is the same choice `keywords`,
+   * `MetricDescriptor.params` and `MetricSeries.items` already make: a
+   * provider that notifies about nothing omits the key, and an older app that
+   * has never heard of it ignores the field rather than failing to decode the
+   * whole catalogue. A default would also force all nineteen existing manifest
+   * literals to carry an empty array, since `z.infer` makes a defaulted field
+   * required on the *output* type.
+   *
+   * Adding this field rehashes `REGISTRY_VERSION`, which is the catalogue ETag,
+   * so every client refetches the catalogue once on deploy — the mechanism
+   * working rather than a bug.
+   */
+  notifications: z.array(NotificationDescriptor).optional(),
   /** The outbound allowlist enforced by `AdapterContext.http`. */
   allowedHosts: z.array(z.string()).nonempty(),
   status: z.enum(["stable", "beta", "coming_soon"]),

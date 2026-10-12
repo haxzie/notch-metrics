@@ -18,6 +18,10 @@ const BY_NAME: Record<string, z.ZodType> = {
   "widget-layout": S.WidgetLayout,
   "latest-json": S.LatestJson,
   "plugin-manifest": S.PluginManifest,
+  "notification-feed": S.NotificationFeed,
+  "notification-feed-empty": S.NotificationFeed,
+  "notification-feed-truncated": S.NotificationFeed,
+  "notification-settings": S.NotificationSettings,
 };
 
 describe("committed contract fixtures", () => {
@@ -50,6 +54,14 @@ describe("wire enums", () => {
     // survives a new code. The *server* side must stay strict, or a typo in a
     // route handler ships as a valid-looking payload.
     expect(S.MetricErrorCode.safeParse("teapot").success).toBe(false);
+  });
+
+  it("rejects an unknown notification type and severity", () => {
+    // Same asymmetry as above: the Mac falls back, the server does not. A
+    // provider inventing a type id must fail here rather than ship a row no
+    // installed app has copy for.
+    expect(S.NotificationTypeId.safeParse("a_type_from_the_future").success).toBe(false);
+    expect(S.NotificationSeverity.safeParse("apocalyptic").success).toBe(false);
   });
 });
 

@@ -22,6 +22,28 @@ final class AppEnvironment {
     private(set) var settings = AppSettings()
     private(set) var states: [String: TileState] = [:]
 
+    // MARK: - Notifications
+
+    let alerts: AlertInbox
+    let gate = ActivityGate()
+    private(set) var alertFeed: (any AlertFeed)?
+    private(set) var alertSnapshot = AlertSnapshot()
+    private(set) var alertSettings: AlertSettings?
+    private(set) var alertsLoading = false
+    private(set) var alertsProblem: String?
+    private var alertPump: Task<Void, Never>?
+    /// Definitions by provider, from the catalogue. Rendered at runtime, so a
+    /// new provider's notifications need no app release.
+    private(set) var alertDefinitions: [String: [AlertDefinition]] = [:]
+    /// The provider of each connection, so a pane holding an integration id can
+    /// find that connection's definitions.
+    private var providerByIntegration: [String: String] = [:]
+
+    /// Opens the Settings window. Injected by the delegate, which owns the
+    /// window — the same convention as `notch.onOpenSettings`.
+    var onOpenSettings: @MainActor () -> Void = {}
+    func openSettings() { onOpenSettings() }
+
     /// Bumped whenever the server's idea of the user's connections may have
     /// changed — a sign-in, a connect flow coming back.
     ///
@@ -180,6 +202,7 @@ final class AppEnvironment {
         self.auth = AuthStore(secrets: secrets)
         self.api = APIClient(baseURL: Self.apiURL, tokens: auth)
         self.cache = MetricsCache()
+        self.alerts = AlertInbox()
         self.settingsStore = SettingsStore()
         self.plugins = PluginRegistry()
 
@@ -238,12 +261,22 @@ final class AppEnvironment {
         // would replace the very screenshot it exists to produce. Only the
         // notch's copy of the flag: everything else that reads `isSignedIn`
         // decides whether to hit the network, which demo mode must not.
-        if Self.isDemo { notch.isSignedIn = true }
+        if Self.isDemo {
+            notch.isSignedIn = true
+            startAlerts()
+        }
 
         // Signing in is the moment every catalogue-backed view is wrong: it
         // was rendered against an anonymous catalogue with no accounts in it.
         guard isSignedIn else {
             startRefreshing()
+            stopAlerts()
+            // The next account's notifications are not this one's, and a badge
+            // surviving a sign-out is a privacy bug rather than a stale cache.
+            Task {
+                await alerts.clear()
+                notch.unreadAlertCount = 0
+            }
             return
         }
         catalogueChanged()
@@ -257,6 +290,8 @@ final class AppEnvironment {
         Task {
             await adoptConnections()
             startRefreshing()
+            // After the connections, so the first feed page can name them.
+            startAlerts()
         }
     }
 
@@ -350,10 +385,20 @@ final class AppEnvironment {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
-                // Five minutes. The notch is a glance, not a dashboard, and
-                // every poll costs the user's provider rate limit.
-                try? await Task.sleep(for: .seconds(300))
+                guard let self else { return }
+                // Five minutes on AC. The notch is a glance, not a dashboard,
+                // and every poll costs the user's provider rate limit — which
+                // is also why this now *stops* rather than running at a fixed
+                // interval with the lid shut. On an eight-hour sleep that used
+                // to be ~96 wake-ups and 96 hits on somebody's Stripe limit.
+                switch EnergyPolicy.metricCadence(self.gate.conditions) {
+                case .suspended:
+                    // Idle rather than spin. A conditions change pokes.
+                    try? await Task.sleep(for: .seconds(30))
+                case .every(let interval):
+                    await self.refresh()
+                    try? await Task.sleep(for: interval)
+                }
             }
         }
     }
@@ -871,5 +916,264 @@ final class AppEnvironment {
             // before the request leaves.
             return (widget.id, TileState.loading)
         })
+    }
+}
+
+// MARK: - Notifications
+
+extension AppEnvironment {
+    /// Starts the notification feed and the energy gate that paces it.
+    ///
+    /// The gate also paces the metrics refresh, which is why it is started here
+    /// rather than inside the feed: the notification work is what forced the
+    /// abstraction to exist, and the existing loop gets it for free.
+    func startAlerts() {
+        // Demo mode shows the sample feed and starts no network work, so a
+        // screenshot of the pane is the same every run.
+        if Self.isDemo {
+            alertSnapshot = AlertSnapshot(
+                alerts: AlertSample.feed, connections: AlertSample.connections,
+                unread: AlertSample.feed.filter { !$0.read }.count,
+                cursor: 412, hasMore: true)
+            notch.unreadAlertCount = alertSnapshot.unread
+            alertDefinitions = AlertSample.definitions
+            providerByIntegration = [
+                "int_stripe": "stripe", "int_github": "github", "int_polar": "polar",
+            ]
+            alertSettings = AlertSample.settings
+            return
+        }
+        guard isSignedIn else { return }
+
+        gate.onChange = { [weak self] conditions in
+            guard let self else { return }
+            let cadence = EnergyPolicy.alertCadence(conditions)
+            Task { await self.alertFeed?.setCadence(cadence) }
+        }
+        gate.start()
+
+        let feed = PollingAlertFeed(api: api)
+        alertFeed = feed
+
+        alertPump?.cancel()
+        alertPump = Task { [weak self] in
+            guard let self else { return }
+            await feed.setCadence(EnergyPolicy.alertCadence(self.gate.conditions))
+            await feed.start(from: await self.alerts.cursor)
+            for await event in feed.events {
+                await self.handle(event)
+            }
+        }
+
+        Task { await self.loadAlertSettings() }
+    }
+
+    func stopAlerts() {
+        alertPump?.cancel()
+        alertPump = nil
+        gate.stop()
+        let feed = alertFeed
+        alertFeed = nil
+        Task { await feed?.stop() }
+    }
+
+    private func handle(_ event: AlertFeedEvent) async {
+        switch event {
+        case .page(let page):
+            let outcome = await alerts.merge(page)
+            apply(outcome.snapshot)
+
+            // One banner per arrival, or one summary for a burst. The decision
+            // is the inbox's, because it is a pure function worth testing.
+            if outcome.collapsed {
+                presentSummaryBanner(count: page.unread)
+            } else {
+                for alert in outcome.arrived { present(alert) }
+            }
+
+        case .cadence(let floor):
+            // The server's floor, re-applied through the policy so the power
+            // state still gets to ask for something slower.
+            let wanted = EnergyPolicy.alertCadence(gate.conditions, serverFloor: floor)
+            await alertFeed?.setCadence(wanted)
+
+        case .degraded(let message):
+            alertsProblem = message
+
+        case .unauthorized:
+            // `AuthStore` owns the escalation; this just stops asking.
+            stopAlerts()
+        }
+    }
+
+    private func apply(_ snapshot: AlertSnapshot) {
+        alertSnapshot = snapshot
+        alertsProblem = nil
+        // Straight through to the notch, so the bell's badge and the collapsed
+        // dot are current now rather than on the next refresh.
+        notch.unreadAlertCount = snapshot.unread
+    }
+
+    /// Drops one notification out of the notch.
+    private func present(_ alert: NotchAlert) {
+        guard settings.alertBannersEnabled, settings.alertBannerSeconds > 0 else { return }
+        // Sound first, so it lands with the start of the drop rather than a
+        // frame after it.
+        AlertSoundPlayer.play(settings.alertSound)
+        notch.showBanner(alert, seconds: Double(settings.alertBannerSeconds))
+    }
+
+    private func presentSummaryBanner(count: Int) {
+        guard settings.alertBannersEnabled, settings.alertBannerSeconds > 0, count > 0 else {
+            return
+        }
+        // Once for the whole batch, which is the entire point of collapsing it.
+        AlertSoundPlayer.play(settings.alertSound)
+        // A synthetic row, so the burst path reuses the same banner view rather
+        // than needing a second one.
+        let summary = NotchAlert(
+            id: "summary", seq: 0, integrationId: nil, provider: "unknown",
+            connectionLabel: "", typeId: "summary", severity: .info,
+            title: "\(count) notifications while you were away",
+            body: "Open the notch to catch up.", amount: nil, currency: nil, url: nil,
+            occurredAt: ISO8601.string(from: Date()),
+            createdAt: ISO8601.string(from: Date()), read: false, alert: true)
+        notch.showBanner(summary, seconds: Double(settings.alertBannerSeconds))
+    }
+
+    /// The pane's pull-to-refresh and its first load.
+    func refreshAlerts() async {
+        guard !alertsLoading else { return }
+        alertsLoading = true
+        defer { alertsLoading = false }
+        await alertFeed?.pokeNow()
+    }
+
+    /// "Load earlier" — a history page, which never banners.
+    func loadEarlierAlerts() async {
+        guard let oldest = alertSnapshot.alerts.map(\.seq).min(), alertSnapshot.hasMore else {
+            return
+        }
+        do {
+            let page = try await api.alerts(before: oldest)
+            apply(await alerts.append(page))
+        } catch {
+            alertsProblem = describeAlertError(error)
+        }
+    }
+
+    func markAlertsRead(ids: [String]) async {
+        await alerts.markRead(ids)
+        apply(await alerts.snapshot())
+        // Server-side read state, so a second Mac agrees. Failing is not worth
+        // surfacing: the local state is already right and the next feed page
+        // reconciles it.
+        _ = try? await api.markAlertsRead(ids: ids)
+    }
+
+    func markAlertsRead(in scope: AlertScope) async {
+        await alerts.markAllRead(in: scope)
+        let snapshot = await alerts.snapshot()
+        apply(snapshot)
+        if case .all = scope {
+            _ = try? await api.markAlertsRead(upToSeq: snapshot.cursor)
+        } else {
+            let ids = alertSnapshot.alerts.filter { !$0.read }.map(\.id)
+            if !ids.isEmpty { _ = try? await api.markAlertsRead(ids: ids) }
+        }
+    }
+
+    // MARK: Settings
+
+    func loadAlertSettings() async {
+        do {
+            alertSettings = try await api.alertSettings()
+        } catch {
+            alertsProblem = describeAlertError(error)
+        }
+    }
+
+    func alertSubscription(for integrationId: String, typeId: String) -> AlertSubscription? {
+        alertSettings?.subscriptions.first {
+            $0.integrationId == integrationId && $0.typeId == typeId
+        }
+    }
+
+    func alertDefinitions(forIntegration integrationId: String) -> [AlertDefinition] {
+        guard let provider = providerByIntegration[integrationId] else { return [] }
+        return alertDefinitions[provider] ?? []
+    }
+
+    /// Flips one toggle, optimistically.
+    ///
+    /// The local copy moves first so the switch is instant, and a failed write
+    /// rolls it back — the server is authoritative here, unlike the layout.
+    func setAlertEnabled(_ enabled: Bool, for integrationId: String, typeId: String) async {
+        guard var settings = alertSettings else { return }
+        guard
+            let index = settings.subscriptions.firstIndex(where: {
+                $0.integrationId == integrationId && $0.typeId == typeId
+            })
+        else { return }
+
+        let previous = settings.subscriptions[index].enabled
+        settings.subscriptions[index].enabled = enabled
+        alertSettings = settings
+
+        do {
+            alertSettings = try await api.updateAlertSettings(settings)
+        } catch {
+            settings.subscriptions[index].enabled = previous
+            alertSettings = settings
+            alertsProblem = "Couldn't save that. Try again."
+        }
+    }
+
+    /// "Stop telling me this" from a row or a banner.
+    func muteAlertType(_ alert: NotchAlert) async {
+        guard let integrationId = alert.integrationId else { return }
+        await setAlertEnabled(false, for: integrationId, typeId: alert.typeId)
+    }
+
+    func updateAlertSettings(_ next: AlertSettings) async {
+        let previous = alertSettings
+        alertSettings = next
+        do {
+            alertSettings = try await api.updateAlertSettings(next)
+        } catch {
+            alertSettings = previous
+            alertsProblem = "Couldn't save that. Try again."
+        }
+    }
+
+    /// Records which provider each connection belongs to, and what each
+    /// provider can notify about.
+    ///
+    /// Called from the catalogue load, so the toggles render from the server
+    /// rather than from anything compiled into the app.
+    func adoptAlertCatalogue(_ entries: [ConnectorEntry]) {
+        var definitions: [String: [AlertDefinition]] = [:]
+        var byIntegration: [String: String] = [:]
+        for entry in entries {
+            if let notifications = entry.notifications, !notifications.isEmpty {
+                definitions[entry.id] = notifications
+            }
+            for connection in entry.connections {
+                byIntegration[connection.id] = entry.id
+            }
+        }
+        alertDefinitions = definitions
+        providerByIntegration = byIntegration
+    }
+
+    private func describeAlertError(_ error: any Error) -> String {
+        guard let api = error as? APIError else { return "Couldn't load notifications." }
+        switch api {
+        case .offline: return "You're offline."
+        case .unauthorized: return "Sign in to see notifications."
+        case .subscriptionRequired: return "Notifications need an active plan."
+        case .rateLimited: return "Too many requests. Try again shortly."
+        default: return "Couldn't load notifications."
+        }
     }
 }
