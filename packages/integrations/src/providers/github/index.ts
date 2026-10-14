@@ -149,7 +149,7 @@ export const manifest: ProviderManifest = {
       // is never served a cached answer rather than four requests a minute.
       freshnessSeconds: 60,
       methodology:
-        "The ten most recent GitHub Actions runs, newest first. Public repositories only — " +
+        "The ten most recent GitHub Actions runs, newest first. Public repositories only, because " +
         "this connection is not allowed to read private ones.",
       params: [REPOSITORY_PARAM, BRANCH_PARAM],
     },

@@ -94,7 +94,7 @@ export const manifest: ProviderManifest = {
       supportsSeries: true,
       supportsCompare: true,
       methodology:
-        "Billed cost per day from OpenAI's cost report, every line item included — tokens, tools and storage. Rounded to the cent per day, so it tracks the invoice rather than the fractional amounts the API returns.",
+        "Billed cost per day from OpenAI's cost report, every line item included: tokens, tools and storage. Rounded to the cent per day, so it tracks the invoice rather than the fractional amounts the API returns.",
     },
   ],
   allowedHosts: ["api.openai.com"],
