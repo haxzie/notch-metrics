@@ -234,8 +234,8 @@ const FIXTURES: Record<string, unknown> = {
         {
           id: "101",
           t: "2026-10-05T11:42:00.000Z",
-          label: "Tell people when something happened, in the notch",
-          detail: "CI",
+          label: "CI",
+          detail: "Tell people when something happened, in the notch",
           amount: null,
           currency: null,
           status: "success",
@@ -244,8 +244,8 @@ const FIXTURES: Record<string, unknown> = {
         {
           id: "102",
           t: "2026-10-05T11:06:00.000Z",
-          label: "Build the Mac app on the toolchain CI actually has",
-          detail: "CI · main",
+          label: "Deploy the API",
+          detail: "Build the Mac app on the toolchain CI actually has",
           amount: null,
           currency: null,
           status: "failure",
@@ -254,8 +254,8 @@ const FIXTURES: Record<string, unknown> = {
         {
           id: "103",
           t: "2026-10-05T10:01:00.000Z",
-          label: "Cut 0.2.1",
-          detail: "Release",
+          label: "Version and publish",
+          detail: "Cut 0.2.1",
           amount: null,
           currency: null,
           status: "in_progress",
@@ -264,8 +264,8 @@ const FIXTURES: Record<string, unknown> = {
         {
           id: "104",
           t: "2026-10-05T09:02:00.000Z",
-          label: "Search the Integrations list",
-          detail: "CI",
+          label: "CI",
+          detail: "Search the Integrations list",
           amount: null,
           currency: null,
           status: "cancelled",

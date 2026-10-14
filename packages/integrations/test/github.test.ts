@@ -214,13 +214,16 @@ describe("github", () => {
     expect(series.value).toBe(5);
   });
 
-  it("titles a row with the commit, and falls back to the workflow", async () => {
+  it("titles a row with the workflow, because one push starts several", async () => {
+    // Labelled by the commit, the first two rows here are the same sentence
+    // at nearly the same age — which reads as a tile that failed to load.
     const ctx = stubContext({ "/actions/runs": runs });
     const series = await github.fetchMetric(ctx, creds, { ...request, metric: "ci_runs" });
-    expect(series.items?.[0]?.label).toBe("Tell people when something happened, in the notch");
-    // `display_title` is null on that one — a run with no commit subject still
-    // needs something to read.
-    expect(series.items?.[4]?.label).toBe("CI");
+    expect(series.items?.map((i) => i.label)).toEqual(["CI", "CI", "Release", "CI", "CI"]);
+    // The commit is still there for a tile wide enough to show it.
+    expect(series.items?.[0]?.detail).toBe(
+      "Tell people when something happened, in the notch · main",
+    );
   });
 
   it("dates a row by when the run last moved, not when it was queued", async () => {
@@ -251,7 +254,7 @@ describe("github", () => {
     expect(ctx.calls[0]).not.toContain("branch=");
     // Without a branch filter the rows have to say which branch they are on.
     const series = await github.fetchMetric(ctx, creds, { ...request, metric: "ci_runs" });
-    expect(series.items?.[3]?.detail).toBe("CI · haxzie/search");
+    expect(series.items?.[3]?.detail).toBe("Search the Integrations list · haxzie/search");
   });
 
   it("refuses a branch that would add query parameters of its own", async () => {

@@ -904,23 +904,23 @@ final class AppEnvironment {
                 items: [
                     MetricListItem(
                         id: "101", t: ISO8601.string(from: Date().addingTimeInterval(-240)),
-                        label: "Tell people when something happened", detail: "CI",
+                        label: "CI", detail: "Tell people when something happened",
                         status: "success", state: .succeeded),
                     MetricListItem(
-                        id: "102", t: ISO8601.string(from: Date().addingTimeInterval(-1_500)),
-                        label: "Build on the toolchain CI has", detail: "CI",
+                        id: "102", t: ISO8601.string(from: Date().addingTimeInterval(-260)),
+                        label: "Deploy the API", detail: "Tell people when something happened",
                         status: "failure", state: .failed),
                     MetricListItem(
-                        id: "103", t: ISO8601.string(from: Date().addingTimeInterval(-2_100)),
-                        label: "Cut 0.2.1", detail: "Release",
+                        id: "103", t: ISO8601.string(from: Date().addingTimeInterval(-280)),
+                        label: "Deploy the website", detail: "Tell people when something happened",
                         status: "in_progress", state: .running),
                     MetricListItem(
                         id: "104", t: ISO8601.string(from: Date().addingTimeInterval(-9_000)),
-                        label: "Search the Integrations list", detail: "CI",
+                        label: "Version and publish", detail: "Cut 0.2.1",
                         status: "cancelled", state: .neutral),
                     MetricListItem(
                         id: "105", t: ISO8601.string(from: Date().addingTimeInterval(-20_000)),
-                        label: "Step the notch aside", detail: "CI",
+                        label: "CI", detail: "Step the notch aside",
                         status: "success", state: .succeeded),
                 ]),
             "demo-stars": series(

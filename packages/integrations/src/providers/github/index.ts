@@ -306,16 +306,12 @@ async function searchCount(
   return body.total_count;
 }
 
-/**
- * One GitHub Actions run, as much of it as a row needs.
- *
- * `display_title` is the commit's subject — or the title of the pull request
- * the run is for — which is what somebody scanning a list is actually looking
- * for. `name` is the workflow's, and several workflows run on one commit.
- */
+/** One GitHub Actions run, as much of it as a row needs. */
 interface WorkflowRun {
   id: number;
+  /** The workflow's name — "CI", "Deploy the API". */
   name: string | null;
+  /** The commit's subject, or the title of the PR the run is for. */
   display_title: string | null;
   head_branch: string | null;
   event: string | null;
@@ -605,11 +601,18 @@ export const github: ProviderAdapter<GitHubCredentials> = {
             // going for an hour should not read as an hour old the moment it
             // finishes.
             t: new Date(run.updated_at || run.created_at),
-            label: run.display_title?.trim() || run.name?.trim() || `Run ${run.id}`,
-            // The workflow, and the branch when the tile is not already
-            // pinned to one — otherwise every row would repeat it.
+            // The *workflow*, not the commit subject.
+            //
+            // One push starts every workflow that watches the branch, and all
+            // of them carry the same `display_title` — so a list labelled by
+            // the commit is five rows of the same sentence, at the same age,
+            // which reads as the tile having failed to load rather than as
+            // four jobs. The workflow names are what differ, and they are
+            // short enough for a narrow tile; the commit goes to `detail`,
+            // which a wide tile shows.
+            label: run.name?.trim() || run.display_title?.trim() || `Run ${run.id}`,
             detail:
-              [run.name?.trim(), branch ? null : run.head_branch?.trim()]
+              [run.display_title?.trim(), branch ? null : run.head_branch?.trim()]
                 .filter(Boolean)
                 .join(" · ") || null,
             amount: null,

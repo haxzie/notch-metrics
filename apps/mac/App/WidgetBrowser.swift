@@ -388,21 +388,7 @@ enum WidgetSample {
                 t: "2026-01-\(String(format: "%02d", index % 28 + 1))T00:00:00Z",
                 v: base * (0.55 + next() * 0.75))
         }
-        // A list previews as rows, because a figure says nothing about what
-        // the widget will look like once it is on the grid.
-        let rows: [MetricListItem]? =
-            metric.id == "recent_payments"
-            ? [
-                MetricListItem(
-                    id: "1", t: "2026-01-28T11:40:00Z", label: "Ada Lovelace", detail: "Pro",
-                    amount: 9_900, currency: "USD", status: "succeeded"),
-                MetricListItem(
-                    id: "2", t: "2026-01-28T09:12:00Z", label: "grace@example.com",
-                    detail: "Starter", amount: 1_900, currency: "USD", status: "succeeded"),
-                MetricListItem(
-                    id: "3", t: "2026-01-27T22:05:00Z", label: "Linus T.", detail: "Team",
-                    amount: 29_900, currency: "USD", status: "succeeded"),
-            ] : nil
+        let rows = sampleRows(for: metric.id)
         return MetricSeries(
             integrationId: nil,
             metric: metric.id,
@@ -415,6 +401,47 @@ enum WidgetSample {
             granularity: TimeRange.month.defaultGranularity,
             range: .month,
             items: rows)
+    }
+
+    /// A list previews as rows, because a figure says nothing about what the
+    /// widget will look like once it is on the grid.
+    ///
+    /// Keyed by metric id, which is a hardcoded list in the one place that can
+    /// afford one: this is a *preview*, and a list metric missing from here
+    /// shows a plausible number instead of nothing. Every other part of the
+    /// browser reads the catalogue, so a new connector still needs no release
+    /// — only its preview does.
+    private static func sampleRows(for metric: String) -> [MetricListItem]? {
+        switch metric {
+        case "recent_payments":
+            return [
+                MetricListItem(
+                    id: "1", t: "2026-01-28T11:40:00Z", label: "Ada Lovelace", detail: "Pro",
+                    amount: 9_900, currency: "USD", status: "succeeded"),
+                MetricListItem(
+                    id: "2", t: "2026-01-28T09:12:00Z", label: "grace@example.com",
+                    detail: "Starter", amount: 1_900, currency: "USD", status: "succeeded"),
+                MetricListItem(
+                    id: "3", t: "2026-01-27T22:05:00Z", label: "Linus T.", detail: "Team",
+                    amount: 29_900, currency: "USD", status: "succeeded"),
+            ]
+        case "ci_runs":
+            // One of each outcome, so the card shows what the icons mean
+            // before anybody has connected anything.
+            return [
+                MetricListItem(
+                    id: "1", t: "2026-01-28T11:40:00Z", label: "CI",
+                    detail: "Fix the notch's resize handle", status: "success", state: .succeeded),
+                MetricListItem(
+                    id: "2", t: "2026-01-28T11:38:00Z", label: "Deploy the API",
+                    detail: "Fix the notch's resize handle", status: "failure", state: .failed),
+                MetricListItem(
+                    id: "3", t: "2026-01-28T10:31:00Z", label: "Version and publish",
+                    detail: "Cut 0.2.1", status: "in_progress", state: .running),
+            ]
+        default:
+            return nil
+        }
     }
 }
 
