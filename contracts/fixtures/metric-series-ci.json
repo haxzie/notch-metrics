@@ -1,0 +1,67 @@
+{
+  "ok": true,
+  "series": {
+    "integrationId": "int_4f2a9c",
+    "metric": "ci_runs",
+    "unit": "count",
+    "currency": null,
+    "value": 4,
+    "previousValue": null,
+    "delta": null,
+    "points": [
+      {
+        "t": "2026-10-05T12:00:00.000Z",
+        "v": 4
+      }
+    ],
+    "granularity": "day",
+    "range": "30d",
+    "from": "2026-09-05T00:00:00.000Z",
+    "to": "2026-10-05T12:00:00.000Z",
+    "format": null,
+    "generatedAt": "2026-10-05T12:00:00.000Z",
+    "stale": false,
+    "items": [
+      {
+        "id": "101",
+        "t": "2026-10-05T11:42:00.000Z",
+        "label": "Tell people when something happened, in the notch",
+        "detail": "CI",
+        "amount": null,
+        "currency": null,
+        "status": "success",
+        "state": "succeeded"
+      },
+      {
+        "id": "102",
+        "t": "2026-10-05T11:06:00.000Z",
+        "label": "Build the Mac app on the toolchain CI actually has",
+        "detail": "CI · main",
+        "amount": null,
+        "currency": null,
+        "status": "failure",
+        "state": "failed"
+      },
+      {
+        "id": "103",
+        "t": "2026-10-05T10:01:00.000Z",
+        "label": "Cut 0.2.1",
+        "detail": "Release",
+        "amount": null,
+        "currency": null,
+        "status": "in_progress",
+        "state": "running"
+      },
+      {
+        "id": "104",
+        "t": "2026-10-05T09:02:00.000Z",
+        "label": "Search the Integrations list",
+        "detail": "CI",
+        "amount": null,
+        "currency": null,
+        "status": "cancelled",
+        "state": "neutral"
+      }
+    ]
+  }
+}

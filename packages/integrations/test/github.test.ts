@@ -29,6 +29,71 @@ const repo = {
   private: false,
 };
 
+/**
+ * One of each outcome a tile has to draw, plus one GitHub has not invented
+ * yet — `stale` stands in for whatever it adds next.
+ */
+const runs = {
+  total_count: 5,
+  workflow_runs: [
+    {
+      id: 101,
+      name: "CI",
+      display_title: "Tell people when something happened, in the notch",
+      head_branch: "main",
+      event: "push",
+      status: "completed",
+      conclusion: "success",
+      created_at: "2026-10-05T11:00:00Z",
+      updated_at: "2026-10-05T11:04:00Z",
+    },
+    {
+      id: 102,
+      name: "CI",
+      display_title: "Build the Mac app on the toolchain CI actually has",
+      head_branch: "main",
+      event: "push",
+      status: "completed",
+      conclusion: "failure",
+      created_at: "2026-10-05T10:00:00Z",
+      updated_at: "2026-10-05T10:06:00Z",
+    },
+    {
+      id: 103,
+      name: "Release",
+      display_title: "Cut 0.2.1",
+      head_branch: "main",
+      event: "workflow_dispatch",
+      status: "in_progress",
+      conclusion: null,
+      created_at: "2026-10-05T09:00:00Z",
+      updated_at: "2026-10-05T09:01:00Z",
+    },
+    {
+      id: 104,
+      name: "CI",
+      display_title: "Search the Integrations list",
+      head_branch: "haxzie/search",
+      event: "pull_request",
+      status: "completed",
+      conclusion: "cancelled",
+      created_at: "2026-10-05T08:00:00Z",
+      updated_at: "2026-10-05T08:02:00Z",
+    },
+    {
+      id: 105,
+      name: "CI",
+      display_title: null,
+      head_branch: "main",
+      event: "push",
+      status: "completed",
+      conclusion: "stale",
+      created_at: "2026-10-05T07:00:00Z",
+      updated_at: "2026-10-05T07:03:00Z",
+    },
+  ],
+};
+
 describe("github", () => {
   it("names the connection after the account, not a repository", async () => {
     // One connection per GitHub account now, so the label has to be stable
@@ -128,6 +193,97 @@ describe("github", () => {
     expect(issues.value).toBe(15);
     expect(prs.value).toBe(8);
     expect(ctx.calls.every((url) => url.includes("per_page=1"))).toBe(true);
+  });
+
+  it("lists CI runs newest first, with a state a tile can draw", async () => {
+    const ctx = stubContext({ "/actions/runs": runs });
+    const series = await github.fetchMetric(ctx, creds, { ...request, metric: "ci_runs" });
+
+    expect(series.items?.map((item) => item.state)).toEqual([
+      "succeeded",
+      "failed",
+      "running",
+      // Cancelled, and a conclusion that does not exist yet. Both grey rather
+      // than either of them reading as a failure.
+      "neutral",
+      "neutral",
+    ]);
+    // The provider's own word is kept beside it: the tooltip says `cancelled`,
+    // not "neutral".
+    expect(series.items?.[3]?.status).toBe("cancelled");
+    expect(series.value).toBe(5);
+  });
+
+  it("titles a row with the commit, and falls back to the workflow", async () => {
+    const ctx = stubContext({ "/actions/runs": runs });
+    const series = await github.fetchMetric(ctx, creds, { ...request, metric: "ci_runs" });
+    expect(series.items?.[0]?.label).toBe("Tell people when something happened, in the notch");
+    // `display_title` is null on that one — a run with no commit subject still
+    // needs something to read.
+    expect(series.items?.[4]?.label).toBe("CI");
+  });
+
+  it("dates a row by when the run last moved, not when it was queued", async () => {
+    // A run that has been going an hour must not read as an hour old the
+    // moment it goes green.
+    const ctx = stubContext({ "/actions/runs": runs });
+    const series = await github.fetchMetric(ctx, creds, { ...request, metric: "ci_runs" });
+    expect(series.items?.[0]?.t.toISOString()).toBe("2026-10-05T11:04:00.000Z");
+  });
+
+  it("asks GitHub for one branch when the widget names one", async () => {
+    const ctx = stubContext({ "/actions/runs": runs });
+    await github.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "ci_runs",
+      params: { repository: "haxzie/notch-metrics", branch: "feature/thing" },
+    });
+    expect(ctx.calls[0]).toContain("branch=feature%2Fthing");
+  });
+
+  it("lists every branch when the widget names none", async () => {
+    const ctx = stubContext({ "/actions/runs": runs });
+    await github.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "ci_runs",
+      params: { repository: "haxzie/notch-metrics" },
+    });
+    expect(ctx.calls[0]).not.toContain("branch=");
+    // Without a branch filter the rows have to say which branch they are on.
+    const series = await github.fetchMetric(ctx, creds, { ...request, metric: "ci_runs" });
+    expect(series.items?.[3]?.detail).toBe("CI · haxzie/search");
+  });
+
+  it("refuses a branch that would add query parameters of its own", async () => {
+    const ctx = stubContext({ "/actions/runs": runs });
+    const error = await github
+      .fetchMetric(ctx, creds, {
+        ...request,
+        metric: "ci_runs",
+        params: { repository: "haxzie/notch-metrics", branch: "main&per_page=100" },
+      })
+      .catch((e: unknown) => e);
+    expect((error as ProviderError).code).toBe("unsupported");
+    expect(ctx.calls).toHaveLength(0);
+  });
+
+  it("says so rather than showing an empty tile when there are no runs", async () => {
+    const ctx = stubContext({ "/actions/runs": { total_count: 0, workflow_runs: [] } });
+    const series = await github.fetchMetric(ctx, creds, {
+      ...request,
+      metric: "ci_runs",
+      params: { repository: "haxzie/notch-metrics", branch: "main" },
+    });
+    expect(series.items).toEqual([]);
+    expect(series.note).toContain("main");
+  });
+
+  it("holds a CI feed for a minute, not for the daily bucket's fifteen", async () => {
+    // The whole point of the widget is being current. The server reads this.
+    const ci = github.manifest.metrics.find((m) => m.id === "ci_runs");
+    expect(ci?.freshnessSeconds).toBe(60);
+    expect(ci?.params?.map((p) => p.key)).toEqual(["repository", "branch"]);
+    expect(ci?.params?.find((p) => p.key === "branch")?.required).toBe(false);
   });
 
   it("treats a spent quota as rate limiting, not as a bad token", async () => {

@@ -29,6 +29,26 @@ const REPOSITORY_PARAM = {
   pattern: "^[\\w.-]+/[\\w.-]+$",
 } as const;
 
+/**
+ * Which branch's runs a CI tile lists.
+ *
+ * Optional, and empty means every branch: a repository with one active branch
+ * reads the same either way, and demanding a branch name before the tile can
+ * show anything would make the common case the fiddly one.
+ */
+const BRANCH_PARAM = {
+  key: "branch",
+  label: "Branch",
+  type: "string",
+  required: false,
+  placeholder: "main",
+  help: "Leave empty for every branch.",
+  // A ref can hold almost anything a path can, so this only rules out what
+  // would change the request rather than the branch: a slash is legal in a
+  // branch name and `feature/x` must stay askable.
+  pattern: "^[^\\s?&#]+$",
+} as const;
+
 export const manifest: ProviderManifest = {
   id: "github",
   name: "GitHub",
@@ -99,6 +119,31 @@ export const manifest: ProviderManifest = {
       supportsCompare: false,
       methodology: "Pull requests currently open.",
       params: [REPOSITORY_PARAM],
+    },
+    {
+      id: "ci_runs",
+      label: "CI runs",
+      shortLabel: "CI",
+      // The rows are the widget. `value` is the count behind them, which is
+      // what a tile too short for rows falls back to and what a threshold
+      // notification would read.
+      unit: "count",
+      granularities: ["day"],
+      // A feed of what just happened, like a payments list: the same ten runs
+      // whatever the range says, so neither a chart nor a comparison applies.
+      supportsSeries: false,
+      supportsCompare: false,
+      keywords: ["ci", "build", "actions", "workflow", "pipeline", "checks"],
+      // A minute, against the fifteen a daily bucket would otherwise hold it
+      // for. This is the one metric here that is read to decide whether to go
+      // and look at something, so being a quarter of an hour behind defeats
+      // it. The notch polls every five minutes, so this mostly means the poll
+      // is never served a cached answer rather than four requests a minute.
+      freshnessSeconds: 60,
+      methodology:
+        "The ten most recent GitHub Actions runs, newest first. Public repositories only — " +
+        "this connection is not allowed to read private ones.",
+      params: [REPOSITORY_PARAM, BRANCH_PARAM],
     },
     {
       id: "followers",
@@ -259,6 +304,86 @@ async function searchCount(
   // thrown away and a default page of 30 issue bodies is not free.
   const body = await get<SearchResult>(ctx, creds, `/search/issues?q=${query}&per_page=1`);
   return body.total_count;
+}
+
+/**
+ * One GitHub Actions run, as much of it as a row needs.
+ *
+ * `display_title` is the commit's subject — or the title of the pull request
+ * the run is for — which is what somebody scanning a list is actually looking
+ * for. `name` is the workflow's, and several workflows run on one commit.
+ */
+interface WorkflowRun {
+  id: number;
+  name: string | null;
+  display_title: string | null;
+  head_branch: string | null;
+  event: string | null;
+  /** `queued`, `in_progress`, `completed`, and others GitHub may add. */
+  status: string | null;
+  /** Null until `status` is `completed`. */
+  conclusion: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface WorkflowRuns {
+  workflow_runs: WorkflowRun[];
+}
+
+/** Ten rows, the same as a payments feed and for the same reason. */
+const CI_RUNS_LIMIT = 10;
+
+/**
+ * GitHub's nine conclusions and six statuses, collapsed to the four states a
+ * tile can draw.
+ *
+ * Done here rather than in the app: these are GitHub's words, GitHub adds to
+ * them, and an installed app matching on them would need a release every time
+ * it did. `action_required` is a failure on purpose — it is a run that has
+ * stopped and is waiting for a human, which is the same thing to anyone
+ * glancing at a notch.
+ */
+function runState(run: WorkflowRun): {
+  state: "succeeded" | "failed" | "running" | "neutral";
+  status: string;
+} {
+  const status = (run.conclusion ?? run.status ?? "unknown").toLowerCase();
+  switch (status) {
+    case "success":
+      return { state: "succeeded", status };
+    case "failure":
+    case "timed_out":
+    case "startup_failure":
+    case "action_required":
+      return { state: "failed", status };
+    case "queued":
+    case "in_progress":
+    case "requested":
+    case "waiting":
+    case "pending":
+      return { state: "running", status };
+    // `cancelled`, `skipped`, `neutral`, `stale` — and anything GitHub adds
+    // later, which is grey rather than wrong.
+    default:
+      return { state: "neutral", status };
+  }
+}
+
+/**
+ * The branch filter for a CI tile, or nothing.
+ *
+ * Validated here as well as by the manifest's `pattern`, because this reaches
+ * a query string: a value carrying its own `&` would otherwise append
+ * parameters to GitHub's request rather than name a branch.
+ */
+function branchFor(request: MetricRequest): string | null {
+  const branch = (request.params.branch ?? "").trim();
+  if (!branch) return null;
+  if (/[\s?&#]/.test(branch)) {
+    throw new ProviderError("unsupported", `"${branch}" is not a branch name.`);
+  }
+  return branch;
 }
 
 /** Every metric here is a count with no history, so they share one shape. */
@@ -436,6 +561,7 @@ export const github: ProviderAdapter<GitHubCredentials> = {
         "forks",
         "open_issues",
         "open_pull_requests",
+        "ci_runs",
         "followers",
       ] as MetricId[],
     };
@@ -462,6 +588,53 @@ export const github: ProviderAdapter<GitHubCredentials> = {
         return snapshot(ctx, await searchCount(ctx, creds, repository, "is:issue"));
       case "open_pull_requests":
         return snapshot(ctx, await searchCount(ctx, creds, repository, "is:pr"));
+      case "ci_runs": {
+        const branch = branchFor(request);
+        const body = await get<WorkflowRuns>(
+          ctx,
+          creds,
+          `${repoPath(repository)}/actions/runs?per_page=${CI_RUNS_LIMIT}` +
+            (branch ? `&branch=${encodeURIComponent(branch)}` : ""),
+        );
+        const runs = body.workflow_runs ?? [];
+        const items = runs.slice(0, CI_RUNS_LIMIT).map((run) => {
+          const { state, status } = runState(run);
+          return {
+            id: String(run.id),
+            // When it last moved, not when it was queued: a run that has been
+            // going for an hour should not read as an hour old the moment it
+            // finishes.
+            t: new Date(run.updated_at || run.created_at),
+            label: run.display_title?.trim() || run.name?.trim() || `Run ${run.id}`,
+            // The workflow, and the branch when the tile is not already
+            // pinned to one — otherwise every row would repeat it.
+            detail:
+              [run.name?.trim(), branch ? null : run.head_branch?.trim()]
+                .filter(Boolean)
+                .join(" · ") || null,
+            amount: null,
+            currency: null,
+            status,
+            state,
+          };
+        });
+
+        return {
+          unit: "count",
+          currency: null,
+          points: [{ t: ctx.now(), v: items.length }],
+          value: items.length,
+          previousValue: null,
+          asOf: ctx.now(),
+          items,
+          note:
+            items.length === 0
+              ? branch
+                ? `No Actions runs on ${branch}.`
+                : "No Actions runs on this repository."
+              : undefined,
+        };
+      }
       default:
         throw new ProviderError("unsupported", `GitHub does not provide ${request.metric}.`);
     }

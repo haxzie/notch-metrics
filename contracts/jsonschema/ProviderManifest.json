@@ -204,6 +204,7 @@
               "forks",
               "open_issues",
               "open_pull_requests",
+              "ci_runs",
               "tokens",
               "input_tokens",
               "output_tokens",
@@ -332,6 +333,11 @@
           },
           "methodology": {
             "type": "string"
+          },
+          "freshnessSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 86400
           }
         },
         "required": [
@@ -442,6 +448,7 @@
                       "forks",
                       "open_issues",
                       "open_pull_requests",
+                      "ci_runs",
                       "tokens",
                       "input_tokens",
                       "output_tokens",
@@ -511,6 +518,7 @@
                       "forks",
                       "open_issues",
                       "open_pull_requests",
+                      "ci_runs",
                       "tokens",
                       "input_tokens",
                       "output_tokens",
@@ -608,6 +616,7 @@
                   "forks",
                   "open_issues",
                   "open_pull_requests",
+                  "ci_runs",
                   "tokens",
                   "input_tokens",
                   "output_tokens",

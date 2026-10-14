@@ -250,6 +250,12 @@ public struct WidgetTile: View {
 
     private func row(_ item: MetricListItem, stale: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
+            // Leading, and only when the row has an outcome. A payments feed
+            // has none, and a column of identical dots down the left of one
+            // would be decoration that costs the label its width.
+            if let state = item.state {
+                StateDot(state: state, size: listFontSize)
+            }
             Text(item.label)
                 .font(.system(size: listFontSize, weight: .medium))
                 .foregroundStyle(stale ? NotchTheme.secondaryText : NotchTheme.primaryText)
@@ -284,6 +290,10 @@ public struct WidgetTile: View {
             }
         }
         .help([item.label, item.detail, item.status].compactMap { $0 }.joined(separator: " · "))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            [item.state?.spokenOutcome, item.label, item.detail]
+                .compactMap { $0 }.joined(separator: ", "))
     }
 
     /// Rows per tile height: two on a one-row tile, then three more per row.
@@ -375,5 +385,66 @@ public struct WidgetTile: View {
         guard widget.size.rows > 1 || widget.size.cols > 1 else { return 0 }
         if widget.size.rows == 1 { return 12 }
         return min(CGFloat(widget.size.rows) * 24 - 6, 60)
+    }
+}
+
+/// A list row's outcome, as a glyph.
+///
+/// Symbol *and* colour, not colour alone: a green dot and a red dot are the
+/// same dot to a good number of people, and this is a control whose whole job
+/// is to be read at a glance from the corner of an eye.
+///
+/// Sized from the row's own font so it lines up with the label on a tiny tile
+/// as well as a tall one, and rendered as a `Label`-less image because the
+/// text beside it is the label.
+struct StateDot: View {
+    let state: MetricListItemState
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: state.symbolName)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(state.tint)
+            .frame(width: size + 2)
+            // Spins while something is actually running, and only then: a
+            // notch is in the corner of the eye all day, and a thing that
+            // moves for no reason is the one thing nobody can ignore.
+            .symbolEffect(.pulse, isActive: state == .running)
+            .accessibilityHidden(true)
+    }
+}
+
+extension MetricListItemState {
+    var symbolName: String {
+        switch self {
+        case .succeeded: "checkmark.circle.fill"
+        case .failed: "xmark.circle.fill"
+        case .running: "circle.dotted"
+        case .neutral: "minus.circle.fill"
+        // A state this build has never heard of is drawn as an empty circle
+        // rather than guessed at. Nothing claimed is better than green for a
+        // run that failed in a way we do not know about yet.
+        case .unknown: "circle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .succeeded: NotchTheme.positive
+        case .failed: NotchTheme.negative
+        case .running: NotchTheme.warning
+        case .neutral, .unknown: NotchTheme.tertiaryText
+        }
+    }
+
+    /// What VoiceOver reads before the row's label.
+    var spokenOutcome: String? {
+        switch self {
+        case .succeeded: "Passed"
+        case .failed: "Failed"
+        case .running: "Running"
+        case .neutral: "Skipped"
+        case .unknown: nil
+        }
     }
 }

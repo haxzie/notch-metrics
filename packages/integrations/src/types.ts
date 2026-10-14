@@ -61,6 +61,11 @@ export interface RawListItem {
   amount: number | null;
   currency: string | null;
   status: string | null;
+  /**
+   * `status` collapsed to something a tile can draw, where the row has an
+   * outcome worth drawing. See `MetricListItem` in `@notch/schemas`.
+   */
+  state?: "succeeded" | "failed" | "running" | "neutral";
 }
 
 export interface RawSeries {

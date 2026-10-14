@@ -212,6 +212,68 @@ const FIXTURES: Record<string, unknown> = {
       ],
     },
   },
+  /**
+   * A list whose rows carry an *outcome* rather than an amount.
+   *
+   * One of each state, because the tile draws a different glyph for each and
+   * a fixture with only the happy one proves nothing about the other three.
+   */
+  "metric-series-ci": {
+    ok: true,
+    series: {
+      ...series,
+      metric: "ci_runs",
+      unit: "count",
+      currency: null,
+      value: 4,
+      previousValue: null,
+      delta: null,
+      format: null,
+      points: [{ t: AT, v: 4 }],
+      items: [
+        {
+          id: "101",
+          t: "2026-10-05T11:42:00.000Z",
+          label: "Tell people when something happened, in the notch",
+          detail: "CI",
+          amount: null,
+          currency: null,
+          status: "success",
+          state: "succeeded",
+        },
+        {
+          id: "102",
+          t: "2026-10-05T11:06:00.000Z",
+          label: "Build the Mac app on the toolchain CI actually has",
+          detail: "CI · main",
+          amount: null,
+          currency: null,
+          status: "failure",
+          state: "failed",
+        },
+        {
+          id: "103",
+          t: "2026-10-05T10:01:00.000Z",
+          label: "Cut 0.2.1",
+          detail: "Release",
+          amount: null,
+          currency: null,
+          status: "in_progress",
+          state: "running",
+        },
+        {
+          id: "104",
+          t: "2026-10-05T09:02:00.000Z",
+          label: "Search the Integrations list",
+          detail: "CI",
+          amount: null,
+          currency: null,
+          status: "cancelled",
+          state: "neutral",
+        },
+      ],
+    },
+  },
   "metric-error": {
     ok: false,
     integrationId: "int_4f2a9c",
@@ -470,6 +532,7 @@ const FIXTURE_SCHEMA: Record<keyof typeof FIXTURES & string, z.ZodType> = {
   "metric-series-empty": S.MetricResult,
   "metric-series-no-currency": S.MetricResult,
   "metric-series-list": S.MetricResult,
+  "metric-series-ci": S.MetricResult,
   "metric-error": S.MetricResult,
   "metric-batch": S.MetricBatchResponse,
   "provider-manifest-list": S.ProviderManifestList,

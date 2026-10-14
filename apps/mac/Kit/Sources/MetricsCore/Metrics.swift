@@ -117,6 +117,26 @@ public struct MetricDelta: Codable, Sendable, Hashable {
 }
 
 /// One row of a list widget. Mirrors `MetricListItem` in `packages/schemas`.
+/// What a list row's outcome was, where it has one.
+///
+/// The adapter's collapsing of the provider's own vocabulary — GitHub alone
+/// has nine words for how a workflow run ended. Matching on those here would
+/// mean an app release every time one was added; this is four cases that can
+/// be drawn, and `unknown` for a fifth nobody has thought of yet.
+public enum MetricListItemState: String, Codable, Sendable, Hashable {
+    case succeeded
+    case failed
+    case running
+    case neutral
+    /// Anything the server starts sending that this build predates.
+    case unknown
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = MetricListItemState(rawValue: raw) ?? .unknown
+    }
+}
+
 public struct MetricListItem: Codable, Sendable, Hashable, Identifiable {
     public let id: String
     /// ISO-8601 instant the row happened at.
@@ -127,10 +147,13 @@ public struct MetricListItem: Codable, Sendable, Hashable, Identifiable {
     public let amount: Double?
     public let currency: String?
     public let status: String?
+    /// `status` collapsed to something the tile can draw. Nil for a row with
+    /// no outcome — a payment is not pass or fail, it just happened.
+    public let state: MetricListItemState?
 
     public init(
         id: String, t: String, label: String, detail: String? = nil, amount: Double? = nil,
-        currency: String? = nil, status: String? = nil
+        currency: String? = nil, status: String? = nil, state: MetricListItemState? = nil
     ) {
         self.id = id
         self.t = t
@@ -139,6 +162,7 @@ public struct MetricListItem: Codable, Sendable, Hashable, Identifiable {
         self.amount = amount
         self.currency = currency
         self.status = status
+        self.state = state
     }
 
     public var date: Date? { ISO8601.parse(t) }

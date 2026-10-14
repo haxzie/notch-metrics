@@ -815,6 +815,12 @@ final class AppEnvironment {
                     id: "demo-ga-new", kind: .providerMetric, appId: "google-analytics",
                     metric: "new_subscribers", title: "New users", size: .wide,
                     col: 0, row: 0, position: 4, chart: .none),
+                // The other list shape: rows with an outcome rather than an
+                // amount, which is the only tile with icons down its left.
+                NotchWidget(
+                    id: "demo-ci", kind: .providerMetric, appId: "github",
+                    metric: "ci_runs", title: "CI", size: .square,
+                    col: 0, row: 1, position: 5, chart: .none),
                 NotchWidget(
                     id: "demo-stars", kind: .customMetric, appId: "github",
                     customMetricId: "github-stars", title: "Stars", size: .small,
@@ -891,6 +897,32 @@ final class AppEnvironment {
             "demo-ga-new": series(
                 "new_subscribers", 2_117, unit: .count, currency: nil,
                 trend: [2_400, 2_310, 2_290, 2_180, 2_140, 2_117]),
+            "demo-ci": MetricSeries(
+                integrationId: "int_demo", metric: "ci_runs", unit: .count, currency: nil,
+                value: 5, points: [], granularity: .day, range: .month,
+                generatedAt: ISO8601.string(from: Date()),
+                items: [
+                    MetricListItem(
+                        id: "101", t: ISO8601.string(from: Date().addingTimeInterval(-240)),
+                        label: "Tell people when something happened", detail: "CI",
+                        status: "success", state: .succeeded),
+                    MetricListItem(
+                        id: "102", t: ISO8601.string(from: Date().addingTimeInterval(-1_500)),
+                        label: "Build on the toolchain CI has", detail: "CI",
+                        status: "failure", state: .failed),
+                    MetricListItem(
+                        id: "103", t: ISO8601.string(from: Date().addingTimeInterval(-2_100)),
+                        label: "Cut 0.2.1", detail: "Release",
+                        status: "in_progress", state: .running),
+                    MetricListItem(
+                        id: "104", t: ISO8601.string(from: Date().addingTimeInterval(-9_000)),
+                        label: "Search the Integrations list", detail: "CI",
+                        status: "cancelled", state: .neutral),
+                    MetricListItem(
+                        id: "105", t: ISO8601.string(from: Date().addingTimeInterval(-20_000)),
+                        label: "Step the notch aside", detail: "CI",
+                        status: "success", state: .succeeded),
+                ]),
             "demo-stars": series(
                 "stars", 6_786, unit: .count, currency: nil,
                 trend: [6_310, 6_420, 6_560, 6_700, 6_786]),

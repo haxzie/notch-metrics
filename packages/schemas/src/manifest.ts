@@ -67,6 +67,20 @@ export const MetricDescriptor = z.object({
    * number users will argue about. Saying which one we mean costs a sentence.
    */
   methodology: z.string(),
+  /**
+   * How long a computed figure stays fresh, when the granularity's own
+   * answer is wrong for this metric.
+   *
+   * The cache is keyed by bucket — a daily bucket holds for fifteen minutes,
+   * because there is no reason to re-walk Stripe's subscription list that
+   * often for a monthly figure. A CI feed is the opposite: the bucket says
+   * nothing about it, and fifteen minutes is long enough for a tile to
+   * report a build that has since gone red.
+   *
+   * Server-side only. The floor is what stops a widget from turning the
+   * notch's five-minute poll into a provider request every time.
+   */
+  freshnessSeconds: z.number().int().min(60).max(86_400).optional(),
 });
 export type MetricDescriptor = z.infer<typeof MetricDescriptor>;
 

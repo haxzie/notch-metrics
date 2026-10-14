@@ -161,6 +161,7 @@ export const MetricId = z.enum([
   "forks",
   "open_issues",
   "open_pull_requests",
+  "ci_runs",
   // AI
   "tokens",
   "input_tokens",

@@ -1,5 +1,5 @@
 import { and, eq, lt, sql } from "drizzle-orm";
-import { getAdapter } from "@notch/integrations";
+import { getAdapter, manifests } from "@notch/integrations";
 import {
   DEFAULT_GRANULARITY,
   RANGE_DURATION_MS,
@@ -38,6 +38,26 @@ const TTL_SECONDS: Record<Granularity, number> = {
  * better dashboard than a spinner for as long as a provider is down.
  */
 const STALE_FACTOR = 4;
+
+/**
+ * How long this metric's envelope stays fresh.
+ *
+ * The bucket decides by default, and a metric may overrule it. The bucket is
+ * a good proxy for how fast a *number* moves and a poor one for a feed: a CI
+ * list arrives in a daily bucket like everything else, and holding it for the
+ * daily fifteen minutes means a tile reporting a build that has since gone
+ * red. Read from the manifest rather than a table here, so the connector that
+ * knows how fast its data moves is the thing that says so.
+ */
+function freshnessFor(provider: string, metric: string, granularity: Granularity): number {
+  // `getAdapter` throws for a provider that is no longer in the registry, and
+  // a row can name one. That case already has an answer further down — an
+  // error result, not a 500 — so it must not be turned into one here.
+  const descriptor = manifests()
+    .find((m) => m.id === provider)
+    ?.metrics.find((m) => m.id === metric);
+  return descriptor?.freshnessSeconds ?? TTL_SECONDS[granularity];
+}
 
 export function cacheKey(q: MetricQuery, granularity: Granularity): string {
   const base = `${q.integrationId}:${q.metric}:${granularity}:${q.range}`;
@@ -172,11 +192,13 @@ export async function queryMetric(
     };
   }
 
+  const ttlSeconds = freshnessFor(row.provider, query.metric, granularity);
+
   const staleFallback = (): MetricResult | null => {
     if (!cached) return null;
     const payload = JSON.parse(cached.payload) as MetricResult;
     if (!payload.ok) return null;
-    if (cached.expiresAt + TTL_SECONDS[granularity] * STALE_FACTOR < now) return null;
+    if (cached.expiresAt + ttlSeconds * STALE_FACTOR < now) return null;
     return { ok: true, series: { ...payload.series, stale: true } };
   };
 
@@ -266,7 +288,7 @@ export async function queryMetric(
     };
 
     const result: MetricResult = { ok: true, series };
-    const expiresAt = now + TTL_SECONDS[granularity];
+    const expiresAt = now + ttlSeconds;
 
     await db
       .insert(metricCache)

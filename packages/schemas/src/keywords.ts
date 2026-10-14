@@ -63,4 +63,5 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   forks: ["github", "repo", "clones"],
   open_issues: ["github", "bugs", "tickets", "repo"],
   open_pull_requests: ["github", "prs", "reviews", "repo"],
+  ci_runs: ["ci", "build", "builds", "actions", "workflow", "pipeline", "checks", "green", "red"],
 };

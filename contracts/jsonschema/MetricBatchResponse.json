@@ -223,6 +223,15 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "succeeded",
+                            "failed",
+                            "running",
+                            "neutral"
+                          ]
                         }
                       },
                       "required": [

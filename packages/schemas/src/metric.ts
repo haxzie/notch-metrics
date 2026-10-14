@@ -43,6 +43,19 @@ export const MetricListItem = z.object({
   currency: CurrencyCode.nullable(),
   /** The provider's own word for the row's state, e.g. `refunded`. */
   status: z.string().nullable(),
+  /**
+   * `status` collapsed to something a tile can draw.
+   *
+   * A row's own word for its state is the provider's vocabulary — GitHub
+   * alone has nine conclusions — and a client matching on those strings is a
+   * client that has to be updated every time one is added. The adapter does
+   * the collapsing, once, where it already knows what the words mean.
+   *
+   * Optional: a list of payments has no outcome worth an icon, and an app
+   * that has never heard of this ignores the field rather than failing to
+   * decode the row.
+   */
+  state: z.enum(["succeeded", "failed", "running", "neutral"]).optional(),
 });
 export type MetricListItem = z.infer<typeof MetricListItem>;
 

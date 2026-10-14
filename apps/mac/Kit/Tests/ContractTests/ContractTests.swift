@@ -43,7 +43,8 @@ struct ContractTests {
         let notDecodedHere: Set<String> = ["provider-manifest-list", "integration", "plugin-manifest"]
         let decoded: Set<String> = [
             "metric-series", "metric-series-empty", "metric-series-no-currency",
-            "metric-series-list", "metric-error", "metric-batch", "widget-layout",
+            "metric-series-list", "metric-series-ci", "metric-error", "metric-batch",
+            "widget-layout",
             "latest-json",
             "notification-feed", "notification-feed-empty", "notification-feed-truncated",
             "notification-settings",
@@ -102,6 +103,48 @@ struct ContractTests {
         #expect(items.first?.date != nil)
         #expect(items.last?.amount == nil)
         #expect(items.last?.currency == nil)
+    }
+
+    @Test("a CI list decodes one row per outcome the tile can draw")
+    func ciSeries() throws {
+        let result = try JSONDecoder().decode(
+            MetricResult.self, from: Self.load("metric-series-ci"))
+        let series = try #require(result.series)
+        let items = try #require(series.items)
+        #expect(items.map(\.state) == [.succeeded, .failed, .running, .neutral])
+        // The provider's own word survives beside the state it was collapsed
+        // to: the tooltip says what GitHub said.
+        #expect(items.last?.status == "cancelled")
+        // A row with an outcome and no money. Reading `amount` as 0 here would
+        // put a currency figure on a build.
+        #expect(items.allSatisfy { $0.amount == nil })
+    }
+
+    @Test("a state this build predates decodes as unknown, not as a failure")
+    func unknownState() throws {
+        // Inline rather than a committed fixture: a fixture carrying this
+        // would not be a valid `MetricResult`, and the one thing the fixtures
+        // have to be is the wire shape. What is being proved is the enum's
+        // fallback — the reason an old app survives a server that learns a new
+        // word — and a row's worth of JSON proves it exactly.
+        let row = Data(
+            """
+            {"id":"1","t":"2026-10-05T11:42:00.000Z","label":"Cut 0.2.1","detail":null,
+             "amount":null,"currency":null,"status":"something_github_added",
+             "state":"nebulous"}
+            """.utf8)
+        let item = try JSONDecoder().decode(MetricListItem.self, from: row)
+        #expect(item.state == .unknown)
+        #expect(item.status == "something_github_added")
+    }
+
+    @Test("a payments row has no state, rather than a guessed one")
+    func paymentsHaveNoState() throws {
+        let result = try JSONDecoder().decode(
+            MetricResult.self, from: Self.load("metric-series-list"))
+        let series = try #require(result.series)
+        let items = try #require(series.items)
+        #expect(items.allSatisfy { $0.state == nil })
     }
 
     @Test("a number series has no rows, rather than an empty list")
