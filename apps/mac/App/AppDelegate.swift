@@ -62,6 +62,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.share.show(request)
         }
 
+        // The browser is about to come forward over the notch, so the notch
+        // stands down first — the same thing a connect or a sign-in does.
+        env.notch.onOpenWidget = { [weak self] url in
+            self?.env.notch.suspendForExternalFlow()
+            NSWorkspace.shared.open(url)
+        }
+
         env.notch.onAddWidget = { [weak self] in
             self?.env.notch.beginBrowsing()
         }

@@ -6,6 +6,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "In-app subscription revenue, subscribers and trials from RevenueCat.",
   docsUrl: "https://www.revenuecat.com/docs/projects/authentication",
+  dashboardUrl: "https://app.revenuecat.com",
   iconPath: "/connectors/revenuecat.svg",
   accentColor: "#F2545B",
   keywords: ["in-app purchases", "iap", "app store", "play store", "subscriptions", "mobile"],

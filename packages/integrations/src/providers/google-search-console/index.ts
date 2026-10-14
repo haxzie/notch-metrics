@@ -19,6 +19,7 @@ export const manifest: ProviderManifest = {
   category: "marketing",
   tagline: "Clicks, impressions and ranking from Search Console.",
   docsUrl: "https://search.google.com/search-console",
+  dashboardUrl: "https://search.google.com/search-console",
   iconPath: "/connectors/google-search-console.svg",
   accentColor: "#4285F4",
   keywords: ["gsc", "seo", "search", "google", "rankings", "queries"],

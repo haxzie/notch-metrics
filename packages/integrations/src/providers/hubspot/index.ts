@@ -9,6 +9,7 @@ export const manifest: ProviderManifest = {
   category: "crm",
   tagline: "Contacts, deals and pipeline from HubSpot.",
   docsUrl: "https://developers.hubspot.com/docs/api/oauth-quickstart-guide",
+  dashboardUrl: "https://app.hubspot.com",
   iconPath: "/connectors/hubspot.svg",
   accentColor: "#FF7A59",
   keywords: ["crm", "sales", "deals", "contacts", "pipeline"],

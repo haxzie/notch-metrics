@@ -351,8 +351,10 @@ public struct NotchContentView: View {
             model: model, states: states, appOverrides: appOverrides,
             connectionNames: view.connectionNames,
             timeWindowedMetrics: view.timeWindowedMetrics,
+            widgetLinks: view.widgetLinks,
             onConfigureWidget: onConfigureWidget,
-            onShareWidget: onShareWidget)
+            onShareWidget: onShareWidget,
+            onOpenWidget: view.onOpenWidget)
             // The well, not the tiles, is what has to clear the panel edge —
             // so the tiles are inset by the margin the well wants *plus* the
             // distance the well extends past them.
@@ -1046,11 +1048,15 @@ public struct NotchWidgetCanvas: View {
     public var connectionNames: [String: String] = [:]
     /// Metrics that carry their time window in the title. See `NotchViewModel`.
     public var timeWindowedMetrics: Set<String> = []
+    /// Where each tile goes when it is clicked. See `WidgetLink`.
+    public var widgetLinks = WidgetLink.Catalogue()
     /// Opens the app on a widget's configuration.
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
     /// Opens the share editor on a widget, with everything it is currently
     /// drawing. See `ShareRequest`.
     public var onShareWidget: (ShareRequest) -> Void = { _ in }
+    /// Opens a tile's destination in the browser.
+    public var onOpenWidget: (URL) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1087,16 +1093,20 @@ public struct NotchWidgetCanvas: View {
         appOverrides: [String: MetricApp] = [:],
         connectionNames: [String: String] = [:],
         timeWindowedMetrics: Set<String> = [],
+        widgetLinks: WidgetLink.Catalogue = .init(),
         onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
-        onShareWidget: @escaping (ShareRequest) -> Void = { _ in }
+        onShareWidget: @escaping (ShareRequest) -> Void = { _ in },
+        onOpenWidget: @escaping (URL) -> Void = { _ in }
     ) {
         self.model = model
         self.states = states
         self.appOverrides = appOverrides
         self.connectionNames = connectionNames
         self.timeWindowedMetrics = timeWindowedMetrics
+        self.widgetLinks = widgetLinks
         self.onConfigureWidget = onConfigureWidget
         self.onShareWidget = onShareWidget
+        self.onOpenWidget = onOpenWidget
     }
 
     public var body: some View {
@@ -1237,6 +1247,11 @@ public struct NotchWidgetCanvas: View {
                             }
                         }
                     }
+                    // The pointer says so before the click does. Only
+                    // outside edit mode, where a click moves the tile rather
+                    // than following it anywhere.
+                    .linkCursor(
+                        !model.isEditing && WidgetLink.resolve(widget, in: widgetLinks) != nil)
                     .offset(x: x, y: y)
                     .scaleEffect(isDragging ? 1.04 : 1)
                     .shadow(color: .black.opacity(isDragging ? 0.4 : 0), radius: 12, y: 4)
@@ -1259,7 +1274,17 @@ public struct NotchWidgetCanvas: View {
                         selectedID = widget.id
                     }
                     .onTapGesture {
-                        guard model.isEditing else { return }
+                        // Editing, a click selects; otherwise it opens the
+                        // number where it lives. A tile is a glance at
+                        // something that exists somewhere else, and "where"
+                        // was previously a trip through the provider's app by
+                        // hand.
+                        guard model.isEditing else {
+                            if let url = WidgetLink.resolve(widget, in: widgetLinks) {
+                                onOpenWidget(url)
+                            }
+                            return
+                        }
                         // Exactly one selection at a time: tapping a
                         // different tile moves it rather than adding to it,
                         // and tapping the selected one clears it.

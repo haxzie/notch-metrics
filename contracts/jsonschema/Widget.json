@@ -172,6 +172,18 @@
         "maxLength": 200
       }
     },
+    "link": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "chart": {
       "default": "sparkline",
       "type": "string",
@@ -201,6 +213,7 @@
     "granularity",
     "range",
     "params",
+    "link",
     "chart",
     "visible"
   ],

@@ -8,6 +8,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "Revenue and subscriptions from your Dodo Payments account.",
   docsUrl: "https://app.dodopayments.com/developer/api-keys",
+  dashboardUrl: "https://app.dodopayments.com",
   iconPath: "/connectors/dodopayments.svg",
   accentColor: "#111111",
   keywords: ["payments", "billing", "merchant of record", "subscriptions", "dodo"],

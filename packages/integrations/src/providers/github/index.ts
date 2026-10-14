@@ -55,6 +55,7 @@ export const manifest: ProviderManifest = {
   category: "developer",
   tagline: "Stars, forks and open work, per repository.",
   docsUrl: "https://docs.github.com/en/rest/metrics",
+  dashboardUrl: "https://github.com",
   iconPath: "/connectors/github.svg",
   // The brand black. The catalogue renders the mark on a light tile rather
   // than white on this, which is how GitHub itself shows the logo.
@@ -73,6 +74,7 @@ export const manifest: ProviderManifest = {
   metrics: [
     {
       id: "stars",
+      linkTemplate: "https://github.com/{repository}/stargazers",
       label: "Stars",
       shortLabel: "Stars",
       unit: "count",
@@ -86,6 +88,7 @@ export const manifest: ProviderManifest = {
     },
     {
       id: "forks",
+      linkTemplate: "https://github.com/{repository}/forks",
       label: "Forks",
       shortLabel: "Forks",
       unit: "count",
@@ -97,6 +100,7 @@ export const manifest: ProviderManifest = {
     },
     {
       id: "open_issues",
+      linkTemplate: "https://github.com/{repository}/issues",
       label: "Open issues",
       shortLabel: "Issues",
       unit: "count",
@@ -111,6 +115,7 @@ export const manifest: ProviderManifest = {
     },
     {
       id: "open_pull_requests",
+      linkTemplate: "https://github.com/{repository}/pulls",
       label: "Open pull requests",
       shortLabel: "PRs",
       unit: "count",
@@ -122,6 +127,9 @@ export const manifest: ProviderManifest = {
     },
     {
       id: "ci_runs",
+      // `{branch}` drops out of the query when the widget does not name one,
+      // which is what Actions itself shows for "every branch".
+      linkTemplate: "https://github.com/{repository}/actions?query=branch%3A{branch}",
       label: "CI runs",
       shortLabel: "CI",
       // The rows are the widget. `value` is the count behind them, which is

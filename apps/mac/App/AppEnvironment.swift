@@ -242,6 +242,20 @@ final class AppEnvironment {
         // says what to do instead.
         if Self.isDemo {
             layoutModel.replace(with: Self.demoLayout())
+            // Demo tiles go somewhere too: a click that does nothing in the
+            // one mode built for screenshots is how a regression here would
+            // be missed.
+            notch.update(
+                widgetLinks: WidgetLink.Catalogue(
+                    byMetric: [
+                        "github/ci_runs":
+                            "https://github.com/{repository}/actions?query=branch%3A{branch}"
+                    ],
+                    byApp: [
+                        "stripe": "https://dashboard.stripe.com",
+                        "google-analytics": "https://analytics.google.com",
+                        "github": "https://github.com",
+                    ]))
             // Demo mode never refreshes, so the titles would otherwise miss
             // the time window a live notch shows — and a screenshot of the
             // demo is the place that most needs to look like the real thing.
@@ -469,15 +483,32 @@ final class AppEnvironment {
         }
         // Not gated on sign-in: the catalogue is readable either way, and a
         // demo or signed-out notch should label its tiles the same as a live one.
+        var links: WidgetLink.Catalogue?
         if let catalogue = try? await api.catalogue() {
+            links = WidgetLink.Catalogue()
             for connector in catalogue.allConnectors {
-                for metric in connector.metrics
-                where metric.supportsSeries || metric.supportsCompare {
-                    keys.insert("\(connector.id)/\(metric.id)")
+                // Where a tile of this connector's goes when it is clicked,
+                // read from the same walk rather than a second request: both
+                // are facts about a metric that only the catalogue holds.
+                if let dashboard = connector.dashboardUrl {
+                    links?.byApp[connector.id] = dashboard
+                }
+                for metric in connector.metrics {
+                    if metric.supportsSeries || metric.supportsCompare {
+                        keys.insert("\(connector.id)/\(metric.id)")
+                    }
+                    if let template = metric.linkTemplate {
+                        links?.byMetric["\(connector.id)/\(metric.id)"] = template
+                    }
                 }
             }
         }
         notch.update(timeWindowedMetrics: keys)
+        // Only when the catalogue actually answered. Pushing an empty one
+        // after a failed request would make every tile unclickable until the
+        // next successful fetch — and would wipe the demo notch's links, which
+        // is how this was found.
+        if let links { notch.update(widgetLinks: links) }
     }
 
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
@@ -820,7 +851,8 @@ final class AppEnvironment {
                 NotchWidget(
                     id: "demo-ci", kind: .providerMetric, appId: "github",
                     metric: "ci_runs", title: "CI", size: .square,
-                    col: 0, row: 1, position: 5, chart: .none),
+                    col: 0, row: 1, position: 5, chart: .none,
+                    params: ["repository": "haxzie/notch-metrics", "branch": "main"]),
                 NotchWidget(
                     id: "demo-stars", kind: .customMetric, appId: "github",
                     customMetricId: "github-stars", title: "Stars", size: .small,

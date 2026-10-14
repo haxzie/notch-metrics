@@ -9,7 +9,7 @@ private func metric(
     MetricDescriptor(
         id: id, label: label, shortLabel: short, unit: .count, granularities: [.day],
         supportsSeries: true, supportsCompare: true, keywords: keywords, help: nil,
-        params: nil, methodology: "x")
+        params: nil, methodology: "x", linkTemplate: nil)
 }
 
 private func app(
@@ -17,7 +17,7 @@ private func app(
 ) -> ConnectorEntry {
     ConnectorEntry(
         id: id, name: name, category: "revenue", tagline: "", docsUrl: "https://example.com",
-        accentColor: "#111111", keywords: keywords, authMode: "api_key", oauth: nil, fields: [],
+        dashboardUrl: nil, accentColor: "#111111", keywords: keywords, authMode: "api_key", oauth: nil, fields: [],
         metrics: metrics, notifications: nil, status: "stable", minAppVersion: "0.1.0",
         connections: [])
 }

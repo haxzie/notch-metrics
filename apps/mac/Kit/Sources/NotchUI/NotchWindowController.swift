@@ -18,6 +18,8 @@ public final class NotchWindowController {
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
     /// Opens the share editor on a tile. See `ShareRequest`.
     public var onShareWidget: (ShareRequest) -> Void = { _ in }
+    /// Opens a clicked tile's destination. See `WidgetLink`.
+    public var onOpenWidget: (URL) -> Void = { _ in }
     public var onAddWidget: () -> Void = {}
     /// Starts the browser sign-in handshake. Owned by the app target, which
     /// is where the PKCE challenge and the website's URL live.
@@ -207,6 +209,24 @@ public final class NotchWindowController {
         view?.timeWindowedMetrics = timeWindowedMetrics
     }
 
+    /// Where a clicked tile goes.
+    ///
+    /// Kept here as well as pushed into the view: the configure pane resolves
+    /// the same destination to show what leaving its field empty will do, and
+    /// a second copy of the catalogue in the app would be a second thing to
+    /// keep in step.
+    public private(set) var widgetLinks = WidgetLink.Catalogue()
+
+    public func update(widgetLinks: WidgetLink.Catalogue) {
+        self.widgetLinks = widgetLinks
+        view?.widgetLinks = widgetLinks
+    }
+
+    /// Where this widget would go if it were clicked now.
+    public func link(for widget: NotchWidget) -> URL? {
+        WidgetLink.resolve(widget, in: widgetLinks)
+    }
+
     private func scheduleRebuild() {
         // Debounced. Waking a display, attaching a dock, or changing
         // resolution fires didChangeScreenParameters five to ten times in a
@@ -255,6 +275,7 @@ public final class NotchWindowController {
         viewModel.onShareWidget = { [weak self] request in
             self?.onShareWidget(request)
         }
+        viewModel.onOpenWidget = { [weak self] url in self?.onOpenWidget(url) }
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
         viewModel.onSignIn = { [weak self] in self?.onSignIn() }
         viewModel.isSignedIn = isSignedIn

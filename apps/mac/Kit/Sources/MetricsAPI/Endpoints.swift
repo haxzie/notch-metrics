@@ -64,6 +64,9 @@ public struct ProviderManifest: Codable, Sendable, Identifiable, Hashable {
     public let category: String
     public let tagline: String
     public let docsUrl: String
+    /// The provider's own app, for a tile that is clicked. Optional: a
+    /// provider with no web app has nowhere to send anybody.
+    public let dashboardUrl: String?
     public let iconPath: String
     public let accentColor: String
     /// Search synonyms. Optional on the wire: a non-optional array would
@@ -141,6 +144,11 @@ public struct MetricDescriptor: Codable, Sendable, Hashable, Identifiable {
     public let params: [AuthField]?
     /// Always present. "MRR" is somebody's definition and this is ours.
     public let methodology: String
+    /// Where this number lives in the provider's app, with `{param}`
+    /// placeholders the widget's own parameters fill. Optional on the wire:
+    /// most metrics have no page of their own and fall back to the
+    /// connector's `dashboardUrl`. See `WidgetLink`.
+    public let linkTemplate: String?
 }
 
 public struct Integration: Codable, Sendable, Identifiable, Hashable {
@@ -266,6 +274,9 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
     public let category: String
     public let tagline: String
     public let docsUrl: String
+    /// The provider's own app, for a tile that is clicked. Optional: a
+    /// provider with no web app has nowhere to send anybody.
+    public let dashboardUrl: String?
     public let accentColor: String
     /// Search synonyms. Optional on the wire: a non-optional array would
     /// make an older server's response fail to decode entirely, which is the

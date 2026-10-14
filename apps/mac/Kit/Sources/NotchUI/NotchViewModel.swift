@@ -38,6 +38,13 @@ public final class NotchViewModel {
     /// would be wrong for every widget made before the copy existed.
     public var timeWindowedMetrics: Set<String> = []
 
+    /// Where each tile goes when it is clicked, from the server's catalogue.
+    ///
+    /// Templates rather than URLs: a widget's own parameters finish them, and
+    /// two GitHub tiles on one connection go to different repositories. See
+    /// `WidgetLink`.
+    public var widgetLinks = WidgetLink.Catalogue()
+
     /// The size of the panel as actually rendered, reported back by the view.
     ///
     /// The window is much larger than what is drawn — it is sized once to the
@@ -185,6 +192,14 @@ public final class NotchViewModel {
     /// now. The request carries the resolved app and state rather than an id,
     /// because the notch is the only place that has both — see `ShareRequest`.
     public var onShareWidget: @MainActor (ShareRequest) -> Void = { _ in }
+
+    /// Opening a tile's destination in the browser.
+    ///
+    /// A callback rather than an `NSWorkspace.open` in the view, for the same
+    /// reason the share editor is one: the app has to stand the notch down
+    /// before the browser comes forward, or the panel is left hovering over
+    /// the window the user was sent to.
+    public var onOpenWidget: @MainActor (URL) -> Void = { _ in }
     /// Opens the browser of widgets that can be added.
     public var onAddWidget: @MainActor () -> Void = {}
     /// Starts the browser sign-in handshake.

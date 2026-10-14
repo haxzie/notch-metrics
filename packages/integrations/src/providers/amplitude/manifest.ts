@@ -16,6 +16,7 @@ export const manifest: ProviderManifest = {
   category: "analytics",
   tagline: "Active users and events from Amplitude.",
   docsUrl: "https://amplitude.com/docs/apis/authentication",
+  dashboardUrl: "https://analytics.amplitude.com",
   iconPath: "/connectors/amplitude.svg",
   accentColor: "#1E61F0",
   keywords: ["product analytics", "events", "behaviour", "cohorts"],

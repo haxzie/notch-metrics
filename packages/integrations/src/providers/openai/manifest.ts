@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   category: "ai",
   tagline: "Token usage and spend across your OpenAI organisation.",
   docsUrl: "https://platform.openai.com/settings/organization/admin-keys",
+  dashboardUrl: "https://platform.openai.com/usage",
   iconPath: "/connectors/openai.svg",
   accentColor: "#000000",
   keywords: ["llm", "ai", "gpt", "chatgpt", "inference", "api"],

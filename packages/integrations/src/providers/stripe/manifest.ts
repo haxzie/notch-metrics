@@ -8,6 +8,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "Revenue, MRR and subscribers straight from your Stripe account.",
   docsUrl: "https://dashboard.stripe.com/apikeys",
+  dashboardUrl: "https://dashboard.stripe.com",
   iconPath: "/connectors/stripe.svg",
   accentColor: "#635BFF",
   keywords: ["payments", "billing", "checkout", "subscriptions", "revenue"],

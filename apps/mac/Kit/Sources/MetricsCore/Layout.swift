@@ -131,6 +131,13 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
     /// the server in `MetricDescriptor.params`; nothing here interprets them.
     public var params: [String: String]
 
+    /// Where clicking this tile goes, when the user has said.
+    ///
+    /// Nil means "wherever the catalogue says" — the metric's own link filled
+    /// in from `params`, and the provider's dashboard failing that. See
+    /// `WidgetLink`.
+    public var link: String?
+
     /// How the number reads. Nil means "whatever the series says".
     public var format: WidgetFormat?
     /// How the chart draws. Nil means "whatever the app's colours say".
@@ -145,7 +152,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         row: Int = 0,
         position: Int = 0, granularity: Granularity = .day, range: TimeRange = .month,
         chart: ChartKind = .sparkline, params: [String: String] = [:],
-        format: WidgetFormat? = nil,
+        link: String? = nil, format: WidgetFormat? = nil,
         chartStyle: WidgetChartStyle? = nil, visible: Bool = true
     ) {
         self.id = id
@@ -164,6 +171,7 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         self.range = range
         self.chart = chart
         self.params = params
+        self.link = link
         self.format = format
         self.chartStyle = chartStyle
         self.visible = visible
@@ -171,7 +179,8 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, appId, integrationId, metric, customMetricId, title, name, size
-        case col, row, position, granularity, range, chart, params, format, chartStyle, visible
+        case col, row, position, granularity, range, chart, params, link, format, chartStyle
+        case visible
     }
 
     public init(from decoder: any Decoder) throws {
@@ -195,6 +204,10 @@ public struct NotchWidget: Codable, Sendable, Identifiable, Hashable {
         // connections that still carry their own repository, and the server
         // falls back to it.
         params = try c.decodeIfPresent([String: String].self, forKey: .params) ?? [:]
+        // Absent in every layout.json written before a tile could be clicked.
+        // Nil is the honest reading: those widgets fall back to the
+        // catalogue's link, which is where they would have gone anyway.
+        link = try c.decodeIfPresent(String.self, forKey: .link)
         // Absent in every layout.json written before formats existed, and nil
         // means "use the series", so those widgets render exactly as they did.
         format = try c.decodeIfPresent(WidgetFormat.self, forKey: .format)

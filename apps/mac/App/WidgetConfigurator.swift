@@ -136,6 +136,38 @@ struct WidgetConfigPanel: View {
             })
     }
 
+    /// The widget's own link, as a text field's binding.
+    ///
+    /// Blank clears it rather than storing an empty string, so "unset" has one
+    /// representation and the catalogue's own link is what fills the gap —
+    /// the same rule the metric's parameters follow.
+    private func linkField(_ binding: Binding<NotchWidget>) -> Binding<String> {
+        Binding(
+            get: { binding.wrappedValue.link ?? "" },
+            set: { typed in
+                var next = binding.wrappedValue
+                let trimmed = typed.trimmingCharacters(in: .whitespaces)
+                next.link = trimmed.isEmpty ? nil : trimmed
+                binding.wrappedValue = next
+                env.widgetConfigurationChanged(widgetId)
+            })
+    }
+
+    private var noLinkPlaceholder: String { "Nothing to open" }
+
+    /// What the tile opens with no link of its own, shown as the placeholder
+    /// so the field says what leaving it empty means.
+    private var defaultLinkPlaceholder: String {
+        guard let draft,
+            let url = WidgetLink.resolve(
+                NotchWidget(
+                    id: draft.id, kind: draft.kind, appId: draft.appId, metric: draft.metric,
+                    customMetricId: draft.customMetricId, params: draft.params, link: nil),
+                in: env.notch.widgetLinks)
+        else { return noLinkPlaceholder }
+        return url.absoluteString
+    }
+
     private var descriptor: MetricDescriptor? {
         guard let draft, let metric = draft.metric else { return nil }
         return entry?.metrics.first { $0.id == metric }
@@ -379,6 +411,28 @@ struct WidgetConfigPanel: View {
                 }
                 Divider().opacity(0.4)
             }
+            // Where the tile goes when it is clicked. Last in Data because it
+            // is the one field here that changes nothing about the number.
+            row("Opens") {
+                TextField(defaultLinkPlaceholder, text: linkField(binding))
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 13))
+                    .autocorrectionDisabled()
+                    .frame(width: 200)
+            }
+            HStack {
+                Spacer(minLength: 0)
+                Text(
+                    defaultLinkPlaceholder == noLinkPlaceholder
+                        ? "This app has no page to open."
+                        : "Leave empty to open the app's own page.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            Divider().opacity(0.4)
             if usesTimeWindow {
                 row("Range") {
                     Picker("", selection: Binding(

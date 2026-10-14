@@ -19,6 +19,7 @@ export const manifest: ProviderManifest = {
   category: "analytics",
   tagline: "Users, sessions and page views from GA4.",
   docsUrl: "https://analytics.google.com/analytics/web/",
+  dashboardUrl: "https://analytics.google.com",
   iconPath: "/connectors/google-analytics.svg",
   accentColor: "#E8710A",
   keywords: ["ga4", "web analytics", "traffic", "google", "visitors"],

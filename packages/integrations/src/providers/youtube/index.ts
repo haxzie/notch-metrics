@@ -22,6 +22,7 @@ export const manifest: ProviderManifest = {
   category: "marketing",
   tagline: "Views, watch time and subscribers for your channel.",
   docsUrl: "https://studio.youtube.com",
+  dashboardUrl: "https://studio.youtube.com",
   iconPath: "/connectors/youtube.svg",
   accentColor: "#FF0000",
   keywords: ["yt", "channel", "video", "creator", "studio", "google"],

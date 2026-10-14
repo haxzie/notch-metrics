@@ -19,6 +19,7 @@
       "params": {
         "repository": "haxzie/notch-metrics"
       },
+      "link": null,
       "chart": "sparkline",
       "visible": true
     },
@@ -37,6 +38,7 @@
       "granularity": "day",
       "range": "30d",
       "params": {},
+      "link": null,
       "chart": "none",
       "visible": true
     }

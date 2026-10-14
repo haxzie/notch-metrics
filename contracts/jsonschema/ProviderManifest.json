@@ -47,6 +47,10 @@
       "type": "string",
       "format": "uri"
     },
+    "dashboardUrl": {
+      "type": "string",
+      "format": "uri"
+    },
     "iconPath": {
       "type": "string"
     },
@@ -338,6 +342,10 @@
             "type": "integer",
             "minimum": 60,
             "maximum": 86400
+          },
+          "linkTemplate": {
+            "type": "string",
+            "pattern": "^https:\\/\\/"
           }
         },
         "required": [

@@ -42,3 +42,20 @@ extension View {
         }
     }
 }
+
+extension View {
+    /// The pointing hand over a tile that goes somewhere.
+    ///
+    /// `pointerStyle` rather than `NSCursor` in a hover callback, for the
+    /// reason above: the hosting view's cursor pass runs after the callback
+    /// and wins, which is why the resize handle only changed the cursor on the
+    /// second hover.
+    @ViewBuilder
+    func linkCursor(_ active: Bool) -> some View {
+        if #available(macOS 15.0, *) {
+            pointerStyle(active ? .link : nil)
+        } else {
+            self
+        }
+    }
+}

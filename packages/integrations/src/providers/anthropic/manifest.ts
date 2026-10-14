@@ -11,6 +11,7 @@ export const manifest: ProviderManifest = {
   category: "ai",
   tagline: "Token usage and spend across your Claude organisation.",
   docsUrl: "https://platform.claude.com/docs/en/manage-claude/admin-api-keys",
+  dashboardUrl: "https://console.anthropic.com",
   iconPath: "/connectors/anthropic.svg",
   accentColor: "#D97757",
   keywords: ["llm", "ai", "claude", "anthropic", "inference", "api"],

@@ -97,6 +97,16 @@ export const Widget = z.object({
    * Defaulted, so every widget written before this existed still parses.
    */
   params: MetricParams,
+  /**
+   * Where clicking this tile goes, when the user has said.
+   *
+   * Null means "wherever the catalogue says": the metric's own link for the
+   * parameters this widget carries, and the provider's dashboard failing
+   * that. Stored per widget because the useful destination is a judgement —
+   * a repository's Actions tab for one person, their team's deploy board for
+   * another — and neither the provider nor the app can know which.
+   */
+  link: z.url().nullable().default(null),
   chart: ChartKind.default("sparkline"),
   visible: z.boolean().default(true),
 });

@@ -81,6 +81,22 @@ export const MetricDescriptor = z.object({
    * notch's five-minute poll into a provider request every time.
    */
   freshnessSeconds: z.number().int().min(60).max(86_400).optional(),
+  /**
+   * Where this particular number lives in the provider's app.
+   *
+   * `{param}` placeholders are filled from the widget's own `params`, so one
+   * template serves every tile on a connector: GitHub's stars go to the
+   * repository the widget names, not to github.com.
+   *
+   * A placeholder with nothing to fill it drops the query item it is in — an
+   * unset branch means "all branches", not a search for the empty string —
+   * and an unfilled one in the *path* falls back to `dashboardUrl`, because a
+   * URL with a hole in it is a 404 with extra steps.
+   */
+  linkTemplate: z
+    .string()
+    .regex(/^https:\/\//)
+    .optional(),
 });
 export type MetricDescriptor = z.infer<typeof MetricDescriptor>;
 
@@ -207,6 +223,15 @@ export const ProviderManifest = z.object({
   tagline: z.string(),
   /** Where to find the API key, linked from the connect sheet. */
   docsUrl: z.url(),
+  /**
+   * The provider's own app, for a tile that is clicked.
+   *
+   * Not `docsUrl`: that is where to find an API key, and somebody clicking a
+   * revenue tile wants the revenue, not the documentation. Optional, because
+   * a provider with no web app of its own has nowhere to send them and a
+   * guessed link is worse than none.
+   */
+  dashboardUrl: z.url().optional(),
   /**
    * The connector's mark, resolved against the *website* — not the assets
    * host, which only mirrors releases and 404s these.

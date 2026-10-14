@@ -8,6 +8,7 @@ export const manifest: ProviderManifest = {
   category: "revenue",
   tagline: "Sales, orders and customers from your Shopify store.",
   docsUrl: "https://help.shopify.com/en/manual/apps/app-types/custom-apps",
+  dashboardUrl: "https://admin.shopify.com",
   iconPath: "/connectors/shopify.svg",
   accentColor: "#7AB55C",
   keywords: ["ecommerce", "e-commerce", "store", "shop", "orders", "retail", "commerce"],
