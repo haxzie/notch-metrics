@@ -46,6 +46,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Active subscriptions, each `recurring_pre_tax_amount` normalised to a monthly amount using its payment frequency. A snapshot of the book right now, not a total over the window.",
     },
@@ -61,6 +62,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Every succeeded payment in the window, subscription renewals and one-time purchases together, by `total_amount`. Gross, before refunds and fees.",
     },
@@ -72,6 +74,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Succeeded payments in the window that are not tied to a subscription, by `total_amount`. Gross, before refunds and fees.",
     },
@@ -83,6 +86,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology: "Subscriptions in status `active` right now.",
     },
     recentPaymentsDescriptor(

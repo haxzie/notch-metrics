@@ -123,10 +123,15 @@ public enum EnergyPolicy {
 
     /// How often to refetch the metrics the notch displays.
     ///
-    /// Slower and more forgiving than the alert feed, because every poll also
-    /// spends the user's provider rate limit — the reason the original 300s was
-    /// chosen. What changes here is only that it now *stops* when nobody is
-    /// looking.
+    /// A poll is not the same as a provider call: the Worker answers most of
+    /// these from its cache, and each metric's own freshness decides when that
+    /// cache is re-read — a payment every 60s, a Search Console figure that is
+    /// itself two days behind on the slow TTL. So asking more often costs a
+    /// cheap round trip, not somebody's rate limit, and the numbers that can
+    /// move actually move.
+    ///
+    /// Still gated hard on power, because the round trip is cheap and the
+    /// *radio* is not.
     public static func metricCadence(_ c: EnergyConditions) -> Cadence {
         if suspensionReason(c) != nil { return .suspended }
         if c.lowPowerMode || c.thermalPressure { return .every(.seconds(900)) }
@@ -134,7 +139,13 @@ public enum EnergyPolicy {
         if let percent = c.batteryPercent, c.onBattery, percent <= 20 {
             return .every(.seconds(900))
         }
-        return .every(.seconds(300))
+        // Looking at it: match the fastest thing the server will serve, so an
+        // open notch is as live as the data can be.
+        if c.notchExpanded { return .every(.seconds(30)) }
+        // On battery the radio cost is the whole argument, and a number nobody
+        // is looking at does not need to be a minute old.
+        if c.onBattery { return .every(.seconds(180)) }
+        return .every(.seconds(60))
     }
 }
 

@@ -352,6 +352,7 @@ public struct NotchContentView: View {
             connectionNames: view.connectionNames,
             timeWindowedMetrics: view.timeWindowedMetrics,
             widgetLinks: view.widgetLinks,
+            refreshingIDs: view.visibleRefreshingIDs,
             onConfigureWidget: onConfigureWidget,
             onShareWidget: onShareWidget,
             onOpenWidget: view.onOpenWidget)
@@ -1050,6 +1051,14 @@ public struct NotchWidgetCanvas: View {
     public var timeWindowedMetrics: Set<String> = []
     /// Where each tile goes when it is clicked. See `WidgetLink`.
     public var widgetLinks = WidgetLink.Catalogue()
+    /// Widgets with a fetch in flight right now.
+    ///
+    /// Separate from `TileState.loading`, which means "has nothing to show
+    /// yet". A refresh deliberately keeps the last number on screen rather
+    /// than blanking the tile, so without this there is no signal at all that
+    /// a figure is being checked — the notch just silently changes its mind a
+    /// second later, or does not.
+    public var refreshingIDs: Set<String> = []
     /// Opens the app on a widget's configuration.
     public var onConfigureWidget: (NotchWidget) -> Void = { _ in }
     /// Opens the share editor on a widget, with everything it is currently
@@ -1094,6 +1103,7 @@ public struct NotchWidgetCanvas: View {
         connectionNames: [String: String] = [:],
         timeWindowedMetrics: Set<String> = [],
         widgetLinks: WidgetLink.Catalogue = .init(),
+        refreshingIDs: Set<String> = [],
         onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
         onShareWidget: @escaping (ShareRequest) -> Void = { _ in },
         onOpenWidget: @escaping (URL) -> Void = { _ in }
@@ -1104,6 +1114,7 @@ public struct NotchWidgetCanvas: View {
         self.connectionNames = connectionNames
         self.timeWindowedMetrics = timeWindowedMetrics
         self.widgetLinks = widgetLinks
+        self.refreshingIDs = refreshingIDs
         self.onConfigureWidget = onConfigureWidget
         self.onShareWidget = onShareWidget
         self.onOpenWidget = onOpenWidget
@@ -1201,18 +1212,34 @@ public struct NotchWidgetCanvas: View {
                     // badges do not sit under the top-trailing resize handle
                     // when a widget is both hovered and selected.
                     .overlay(alignment: .topTrailing) {
-                        if hoveredID == widget.id {
-                            HStack(spacing: 4) {
-                                if model.isEditing {
-                                    TileBadge(symbol: "slider.horizontal.3", help: "Configure") {
-                                        onConfigureWidget(widget)
-                                    }
-                                    TileBadge(symbol: "xmark", help: "Remove this widget") {
-                                        if selectedID == widget.id { selectedID = nil }
-                                        hoveredID = nil
-                                        model.remove(widget.id)
-                                    }
-                                } else {
+                        HStack(spacing: 4) {
+                            // Shown whether or not the pointer is here: a tile
+                            // only says it is busy while it is busy, and
+                            // requiring a hover to find that out defeats it.
+                            // It sits inboard of the badges so the share icon
+                            // does not move when a refresh starts under it.
+                            if refreshingIDs.contains(widget.id) {
+                                TileSpinner()
+                                    .transition(.opacity)
+                            }
+
+                            if hoveredID == widget.id {
+                                // Grouped so the whole cluster carries one
+                                // transition; a bare `if` inside an HStack
+                                // cannot take one.
+                                Group {
+                                    if model.isEditing {
+                                        TileBadge(
+                                            symbol: "slider.horizontal.3", help: "Configure"
+                                        ) {
+                                            onConfigureWidget(widget)
+                                        }
+                                        TileBadge(symbol: "xmark", help: "Remove this widget") {
+                                            if selectedID == widget.id { selectedID = nil }
+                                            hoveredID = nil
+                                            model.remove(widget.id)
+                                        }
+                                    } else {
                                     // Share is the one affordance that belongs
                                     // outside edit mode: it does not change
                                     // the widget, and asking somebody to enter
@@ -1220,16 +1247,19 @@ public struct NotchWidgetCanvas: View {
                                     // would put the dotted well and the resize
                                     // handles between them and the thing they
                                     // wanted to post.
-                                    TileBadge(
-                                        symbol: "square.and.arrow.up", help: "Share this metric"
-                                    ) {
-                                        onShareWidget(shareRequest(for: widget))
+                                        TileBadge(
+                                            symbol: "square.and.arrow.up",
+                                            help: "Share this metric"
+                                        ) {
+                                            onShareWidget(shareRequest(for: widget))
+                                        }
                                     }
                                 }
+                                .transition(.scale(scale: 0.7).combined(with: .opacity))
                             }
-                            .padding(6)
-                            .transition(.scale(scale: 0.7).combined(with: .opacity))
                         }
+                        .padding(6)
+                        .animation(.snappy(duration: 0.18), value: refreshingIDs.contains(widget.id))
                     }
                     .overlay {
                         if model.isEditing, selectedID == widget.id {

@@ -45,6 +45,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Order totals for orders placed in the window that took payment, in the store's own currency. Gross: a later refund does not remove the order from the day it was placed. The Refunds widget is the other half.",
     },
@@ -56,6 +57,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Orders placed in the window that took payment. Test orders and abandoned or unpaid checkouts are excluded, so this sits below the Shopify admin's own order count when the store has pending orders.",
     },
@@ -70,6 +72,7 @@ export const manifest: ProviderManifest = {
       // The headline is the window's own ratio, not the mean of the daily
       // ones: averaging averages weights a Tuesday with two orders the same
       // as a Black Friday with four hundred.
+      freshnessSeconds: 300,
       methodology:
         "Sales divided by orders over the whole window. Each point is that day's own ratio, so the headline is not the average of the points.",
     },
@@ -81,6 +84,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Amounts refunded against orders placed in the window, bucketed by the order's date rather than the refund's. A refund of a much older order is not counted here.",
     },
@@ -92,6 +96,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology:
         "Customer records created in the window. Shopify creates one at checkout, so a guest who buys twice counts once. Somebody who only signed up for the newsletter counts too.",
     },
@@ -103,6 +108,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 300,
       methodology:
         "Every customer record on the store right now, which is what the admin's Customers page counts. Shopify reports this as an estimate above ten thousand.",
     },

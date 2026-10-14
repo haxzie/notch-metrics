@@ -269,6 +269,26 @@ struct EnergyPolicyTests {
         #expect(
             EnergyPolicy.alertCadence(flat, serverFloor: .seconds(60)) == .every(.seconds(600)))
         #expect(EnergyPolicy.metricCadence(flat) == .every(.seconds(900)))
+        // Not flat, but unplugged: slower than on AC, far short of suspended.
+        #expect(EnergyPolicy.metricCadence(battery) == .every(.seconds(180)))
+    }
+
+    @Test("metrics poll fastest with the notch open, and back off unplugged")
+    func metricCadenceTracksAttention() {
+        // The server answers most polls from cache and each metric's own
+        // freshness decides when that is re-read, so a faster poll here buys
+        // latency rather than spending somebody's provider rate limit.
+        #expect(
+            EnergyPolicy.metricCadence(EnergyConditions(onBattery: false))
+                == .every(.seconds(60)))
+        #expect(
+            EnergyPolicy.metricCadence(EnergyConditions(onBattery: false, notchExpanded: true))
+                == .every(.seconds(30)))
+        // Looking at it on battery still wins: the user is right there.
+        #expect(
+            EnergyPolicy.metricCadence(
+                EnergyConditions(onBattery: true, batteryPercent: 80, notchExpanded: true))
+                == .every(.seconds(30)))
     }
 
     @Test("Low Power Mode and thermal pressure stop the poll entirely")

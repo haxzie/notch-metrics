@@ -28,6 +28,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology: "Conversations awaiting a reply.",
     },
     {
@@ -38,6 +39,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 300,
       methodology: "Total contacts in the CRM.",
     },
     {
@@ -48,6 +50,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology: "Contacts created in the window.",
     },
   ],

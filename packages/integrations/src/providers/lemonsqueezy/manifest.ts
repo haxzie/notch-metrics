@@ -38,6 +38,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Active subscriptions, each price normalised to a monthly amount by its renewal interval. A snapshot of the book right now, not a total over the window.",
     },
@@ -49,6 +50,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Orders in the window that took payment, by `total`. Gross: a later refund does not remove the order from the day it was paid.",
     },
@@ -60,6 +62,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology: "Subscriptions in status `active` right now, trials included.",
     },
     {
@@ -72,6 +75,7 @@ export const manifest: ProviderManifest = {
       supportsCompare: true,
       // Bucketed by the order's own date, because Lemon Squeezy does not
       // expose when the refund happened — only that it did and for how much.
+      freshnessSeconds: 60,
       methodology:
         "`refunded_amount` on orders in the window, bucketed by the order date rather than the refund date, which the API does not expose.",
     },

@@ -50,6 +50,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Polar's own MRR: active subscriptions normalised to a month, yearly plans divided by twelve, trials excluded. The latest day Polar has computed.",
     },
@@ -61,6 +62,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Order subtotals in the window as Polar reports them, before Polar's fees and before tax. In the organization's currency.",
     },
@@ -72,6 +74,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Active subscriptions on the latest day Polar has computed, including paused and past-due ones, excluding trials.",
     },
@@ -83,6 +86,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 180,
       methodology: "Subscriptions started in the window, as Polar counts them.",
     },
     {
@@ -93,6 +97,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 180,
       methodology: "Subscriptions that ended in the window, as Polar counts them.",
     },
     recentPaymentsDescriptor(

@@ -47,6 +47,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology:
         "Input plus output tokens on chat and completions requests in the window. Input includes cached reads and cache writes, so this matches what the Usage page totals rather than what you were charged for.",
     },
@@ -58,6 +59,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology:
         "Input tokens on completions requests, cached reads and cache writes included. Audio and image inputs are counted in their own token units, as OpenAI reports them.",
     },
@@ -69,6 +71,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology: "Output tokens generated on completions requests in the window.",
     },
     {
@@ -79,6 +82,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology:
         "Model requests on the completions endpoint. One batch job counts as the requests inside it, not as one.",
     },
@@ -93,6 +97,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology:
         "Billed cost per day from OpenAI's cost report, every line item included: tokens, tools and storage. Rounded to the cent per day, so it tracks the invoice rather than the fractional amounts the API returns.",
     },

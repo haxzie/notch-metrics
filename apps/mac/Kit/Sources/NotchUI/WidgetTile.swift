@@ -448,3 +448,40 @@ extension MetricListItemState {
         }
     }
 }
+
+/// The "this number is being checked" indicator, in a tile's trailing corner.
+///
+/// Drawn rather than an `NSProgressIndicator`: the AppKit spinner brings its
+/// own sizing and a system tint that reads as a sheet loading rather than as a
+/// figure being refreshed, and at this size its hub is a grey smudge.
+///
+/// Only ever on screen while a fetch is in flight *and* the notch is open, so
+/// the `repeatForever` animation cannot idle in the background — the grid is
+/// not rendered at all when the notch is collapsed.
+struct TileSpinner: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var turning = false
+
+    var body: some View {
+        Circle()
+            // Not a full ring: a gap is what makes the rotation legible. A
+            // complete circle spinning looks static.
+            .trim(from: 0, to: 0.7)
+            .stroke(
+                NotchTheme.secondaryText,
+                style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+            .frame(width: 11, height: 11)
+            .rotationEffect(.degrees(turning ? 360 : 0))
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .linear(duration: 0.85).repeatForever(autoreverses: false),
+                value: turning)
+            // Reduce Motion gets the same arc, held still. Swapping it for a
+            // pulse would be a second thing to look at; the arc's presence is
+            // already the message, and the spin is only the polish.
+            .opacity(reduceMotion ? 0.75 : 1)
+            .onAppear { turning = true }
+            .accessibilityLabel("Refreshing")
+    }
+}

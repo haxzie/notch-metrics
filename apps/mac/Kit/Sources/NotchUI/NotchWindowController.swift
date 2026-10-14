@@ -189,6 +189,11 @@ public final class NotchWindowController {
         view?.states = states
     }
 
+    /// Which widgets have a fetch in flight, for the tile spinners.
+    public func update(refreshing ids: Set<String>) {
+        view?.refreshingIDs = ids
+    }
+
     /// Whether the refresh glyph is turning.
     public var isRefreshing: Bool {
         get { view?.isRefreshing ?? false }

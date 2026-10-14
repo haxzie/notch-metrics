@@ -145,6 +145,22 @@ public final class NotchViewModel {
     /// pane, the controller may be holding the notch open for it.
     public var onEndBrowsing: @MainActor () -> Void = {}
 
+    /// Widgets with a fetch in flight. See `NotchWidgetCanvas.refreshingIDs`.
+    ///
+    /// `NOTCH_DEBUG_SPINNER=1` holds every tile in this state. A real refresh
+    /// is over in well under a second, which no screenshot catches reliably —
+    /// and an indicator that never clears is the failure worth being able to
+    /// see on purpose.
+    public var refreshingIDs: Set<String> = []
+    private let holdsSpinners =
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_SPINNER"] == "1"
+
+    /// Every widget's id when the debug hold is on, otherwise what is actually
+    /// in flight.
+    public var visibleRefreshingIDs: Set<String> {
+        holdsSpinners ? Set(states.keys) : refreshingIDs
+    }
+
     /// True while the notch is showing the notification centre.
     ///
     /// Mutually exclusive with `isBrowsing` and `configuringID`; the controller

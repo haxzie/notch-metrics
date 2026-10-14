@@ -35,6 +35,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Active subscriptions right now, each item normalised to a monthly amount (annual ÷ 12, weekly × 52/12) and reduced by any percentage coupon. A snapshot, not a sum over the window.",
     },
@@ -46,6 +47,7 @@ export const manifest: ProviderManifest = {
       granularities: ["hour", "day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Gross charges from balance transactions in the window, before Stripe fees. Refunds are reported separately rather than netted off.",
     },
@@ -57,6 +59,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology: "Subscriptions in Stripe status `active` right now. Trials are not counted.",
     },
     {
@@ -67,6 +70,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 180,
       methodology: "Subscriptions created in the window, bucketed by creation time.",
     },
     {
@@ -77,6 +81,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 180,
       methodology: "Subscriptions cancelled in the window, bucketed by cancellation time.",
     },
     {
@@ -87,6 +92,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology: "Refund balance transactions in the window, as a positive amount.",
     },
     recentPaymentsDescriptor(

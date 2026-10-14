@@ -44,6 +44,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Active subscriptions, each recurring item's unit price times quantity normalised to a month by its billing cycle. Discounts are not applied. A snapshot of the book right now.",
     },
@@ -55,6 +56,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Transactions billed in the window that are paid or completed, by their total including tax, before Paddle's fee. Bucketed by billing date.",
     },
@@ -66,6 +68,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Subscriptions in status `active` right now. Trialing and paused are not counted.",
     },
@@ -77,6 +80,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 180,
       methodology:
         "Subscriptions whose `started_at` falls in the window, in any status. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
     },
@@ -88,6 +92,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 180,
       methodology:
         "Subscriptions whose `canceled_at` falls in the window. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
     },

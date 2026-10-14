@@ -585,6 +585,14 @@ final class AppEnvironment {
         // so adoption gets a chance to rebind it before the next poll.
         var staleBindings = false
 
+        // The tiles say they are being checked for as long as the batch is in
+        // flight. Cleared in a `defer` rather than after the call: every exit
+        // from here — a throw, a superseded response, a rebind that returns
+        // early — has to clear it, and a spinner that never stops is a worse
+        // bug than no spinner at all.
+        notch.update(refreshing: Set(widgets.map(\.id)))
+        defer { notch.update(refreshing: []) }
+
         do {
             let results = try await api.batch(widgets.map(MetricQueryRequest.init(widget:)))
             // Superseded while it was in flight. The answer is for the

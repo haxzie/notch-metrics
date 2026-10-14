@@ -29,6 +29,12 @@ export function recentPaymentsDescriptor(methodology: string): MetricDescriptor 
     // whatever the range says, so neither a chart nor a comparison applies.
     supportsSeries: false,
     supportsCompare: false,
+    // The fastest the floor allows. A payment is an event rather than a
+    // figure: it exists the moment it settles, and a feed of them is the one
+    // tile somebody watches *because* it changes. Held for the daily bucket's
+    // fifteen minutes it would show a sale a quarter of an hour after the
+    // money arrived, which is the whole thing it is for.
+    freshnessSeconds: 60,
     methodology,
   };
 }

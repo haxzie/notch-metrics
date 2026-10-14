@@ -83,6 +83,7 @@ export const manifest: ProviderManifest = {
       supportsCompare: false,
       // A snapshot, not a total. GitHub's API reports the current count and
       // offers no history, so a series would have to be invented.
+      freshnessSeconds: 120,
       methodology: "Stargazers on the repository right now.",
       params: [REPOSITORY_PARAM],
     },
@@ -95,6 +96,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 300,
       methodology: "Forks of the repository right now.",
       params: [REPOSITORY_PARAM],
     },
@@ -110,6 +112,7 @@ export const manifest: ProviderManifest = {
       // GitHub counts pull requests as issues on the repository object, so
       // this has to be a search query rather than `open_issues_count` — that
       // field reads high and nobody can see why.
+      freshnessSeconds: 120,
       methodology: "Open issues, excluding pull requests.",
       params: [REPOSITORY_PARAM],
     },
@@ -122,6 +125,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 120,
       methodology: "Pull requests currently open.",
       params: [REPOSITORY_PARAM],
     },
@@ -165,6 +169,7 @@ export const manifest: ProviderManifest = {
       // No `params`: this one is about the account that authorised, not a
       // repository, which is the reason params are declared per metric
       // rather than per connector.
+      freshnessSeconds: 300,
       methodology: "People following the GitHub account this connection signed in as.",
     },
   ],

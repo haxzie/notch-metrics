@@ -28,6 +28,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 300,
       methodology: "Total contacts in the CRM.",
     },
     {
@@ -38,6 +39,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology: "Contacts created in the window.",
     },
     {
@@ -48,6 +50,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 300,
       methodology: "Deals currently in an open stage.",
     },
     {
@@ -58,6 +61,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: true,
       supportsCompare: true,
+      freshnessSeconds: 300,
       methodology: "Deals closed won in the window.",
     },
     {
@@ -68,6 +72,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "week", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 300,
       methodology: "Total value of open deals.",
     },
   ],

@@ -37,6 +37,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "RevenueCat's own MRR figure for the project: active paid subscriptions normalised to a month, as shown on the Overview. A snapshot of the book right now.",
     },
@@ -50,6 +51,7 @@ export const manifest: ProviderManifest = {
       // is a second call and a sparkline is not available without a chart walk.
       supportsSeries: false,
       supportsCompare: true,
+      freshnessSeconds: 60,
       methodology:
         "Gross revenue across every app in the project for the days in the window, before store commission and taxes. Today is partial while transactions are still arriving.",
     },
@@ -61,6 +63,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Paid subscriptions active right now, including ones that are cancelled or in a grace period until they expire. Trials are not counted.",
     },
@@ -72,6 +75,7 @@ export const manifest: ProviderManifest = {
       granularities: ["day", "month"],
       supportsSeries: false,
       supportsCompare: false,
+      freshnessSeconds: 180,
       methodology:
         "Free trials active right now, including cancelled ones, until they convert to paid or expire.",
     },
