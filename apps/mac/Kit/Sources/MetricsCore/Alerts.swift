@@ -50,7 +50,11 @@ public struct NotchAlert: Codable, Sendable, Identifiable, Hashable {
     public let occurredAt: String
     /// When the server found out. The gap is the latency the user feels.
     public let createdAt: String
-    public let read: Bool
+    /// `var`, alone among these, because `AlertInbox` holds a row's read state
+    /// out of band until the server's copy catches up and projects it back on
+    /// here. Every view renders unread from this one field; a second source of
+    /// truth for it is how "Mark all read" ends up changing nothing on screen.
+    public var read: Bool
     /// False inside quiet hours: file it, do not raise a banner for it.
     public let alert: Bool
 
@@ -111,7 +115,9 @@ public struct AlertConnectionSummary: Codable, Sendable, Hashable, Identifiable 
     public let integrationId: String?
     public let provider: String
     public let label: String
-    public let unread: Int
+    /// `var` for the same reason as `NotchAlert.read`: the inbox nets the
+    /// server's count against reads it has not acknowledged yet.
+    public var unread: Int
     public let total: Int
 
     public init(

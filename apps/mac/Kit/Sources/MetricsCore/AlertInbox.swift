@@ -80,12 +80,47 @@ public actor AlertInbox {
     public var cursor: Int { file.cursor }
 
     public func snapshot() -> AlertSnapshot {
-        AlertSnapshot(
-            alerts: file.alerts,
-            connections: file.connections,
-            unread: file.alerts.filter { !isRead($0) }.count,
+        // `readIDs` is projected on to the rows here rather than left for the
+        // UI to consult separately. Every view renders unread from
+        // `NotchAlert.read`, so without this a local mark-read moves only the
+        // count in the sidebar and leaves the rows themselves bold and dotted.
+        let rows = file.alerts.map { row -> NotchAlert in
+            guard !row.read, file.readIDs.contains(row.id) else { return row }
+            var copy = row
+            copy.read = true
+            return copy
+        }
+
+        // The server's per-connection counts predate those same local reads, so
+        // they are netted against the ones it has not seen yet. Once the next
+        // feed page comes back with `read` set, `pending` is empty and this is
+        // the server's own number again.
+        let pending = pendingReads()
+
+        return AlertSnapshot(
+            alerts: rows,
+            connections: file.connections.map { summary in
+                guard let id = summary.integrationId, let local = pending[id] else {
+                    return summary
+                }
+                var copy = summary
+                copy.unread = Swift.max(0, summary.unread - local)
+                return copy
+            },
+            unread: rows.filter { !$0.read }.count,
             cursor: file.cursor,
             hasMore: file.hasMore)
+    }
+
+    /// Rows marked read locally that the server still reports as unread, by
+    /// connection.
+    private func pendingReads() -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for alert in file.alerts where !alert.read && file.readIDs.contains(alert.id) {
+            guard let id = alert.integrationId else { continue }
+            counts[id, default: 0] += 1
+        }
+        return counts
     }
 
     private func isRead(_ alert: NotchAlert) -> Bool {

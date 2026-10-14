@@ -142,6 +142,35 @@ struct AlertInboxTests {
         #expect(await box.cursor == 0)
     }
 
+    @Test("a marked row is handed to the UI as read, and discounted in the sidebar")
+    func projectsReadStateOntoRows() async {
+        let (box, _) = inbox()
+        _ = await box.merge(page([alert("a", seq: 1), alert("b", seq: 2)]))
+
+        await box.markAllRead(in: .all)
+        let snapshot = await box.snapshot()
+
+        // The whole pane renders unread from `read`, so a snapshot that leaves
+        // it false is a "Mark all read" that changes nothing visible.
+        #expect(snapshot.alerts.filter(\.read).count == 2)
+        #expect(snapshot.unread == 0)
+        // The server's own summary still says two — it has not been told yet —
+        // so the badge has to be netted against the reads held locally.
+        #expect(snapshot.connections.first?.unread == 0)
+    }
+
+    @Test("a row the server already reports read is not discounted twice")
+    func doesNotDoubleCountServerReads() async {
+        let (box, _) = inbox()
+        // The summary says two unread; one of the rows is already read there,
+        // so only the other may be subtracted from it.
+        _ = await box.merge(
+            page([alert("a", seq: 1, read: true), alert("b", seq: 2)]))
+
+        await box.markAllRead(in: .all)
+        #expect(await box.snapshot().connections.first?.unread == 1)
+    }
+
     @Test("marking a connection read leaves the others alone")
     func scopedRead() async {
         let (box, _) = inbox()

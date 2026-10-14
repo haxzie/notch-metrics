@@ -1144,14 +1144,25 @@ extension AppEnvironment {
     }
 
     func markAlertsRead(in scope: AlertScope) async {
+        // Collected before the local mark, which is what sets `read` on the
+        // rows: after it there is nothing left for the server to be told about.
+        // Scoped to the connection too — unscoping it here marks a user's whole
+        // inbox read on every other device because they cleared one connection.
+        var pending: [String] = []
+        if case .connection(let integrationId) = scope {
+            pending = alertSnapshot.alerts
+                .filter { $0.integrationId == integrationId && !$0.read }
+                .map(\.id)
+        }
+
         await alerts.markAllRead(in: scope)
         let snapshot = await alerts.snapshot()
         apply(snapshot)
+
         if case .all = scope {
             _ = try? await api.markAlertsRead(upToSeq: snapshot.cursor)
-        } else {
-            let ids = alertSnapshot.alerts.filter { !$0.read }.map(\.id)
-            if !ids.isEmpty { _ = try? await api.markAlertsRead(ids: ids) }
+        } else if !pending.isEmpty {
+            _ = try? await api.markAlertsRead(ids: pending)
         }
     }
 
