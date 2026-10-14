@@ -11,7 +11,7 @@ moves faster than its bucket says so.
 
 Payments, revenue, orders and refunds re-read every 60s — a payment is an event
 rather than a figure, and a feed of them is the one tile somebody watches
-*because* it changes. Subscription figures every 3 minutes, developer counts
+_because_ it changes. Subscription figures every 3 minutes, developer counts
 every 2, spend and CRM every 5.
 
 Product analytics, Search Console and YouTube are deliberately untouched. Their
