@@ -770,16 +770,6 @@ public struct NotchContentView: View {
         .help(help)
     }
 
-    /// Widgets that start below the visible rows.
-    ///
-    /// Not "hidden" any more — the area scrolls, so they are reachable. The
-    /// count is still worth showing, because a notch two rows tall gives no
-    /// other hint that there is a third row under it.
-    private var belowFoldCount: Int {
-        let visible = Int(model.visibleRows.rounded())
-        return model.displayed.widgets.count { $0.visible && $0.row >= visible }
-    }
-
     /// Entering edit mode pins the notch open.
     ///
     /// Without that, the first drag that takes the pointer towards the edge
@@ -802,51 +792,36 @@ public struct NotchContentView: View {
         let lit = isResizing || isGrabberHovered
         return Capsule()
             .fill(lit ? NotchTheme.editHighlight : Color.white.opacity(0.22))
-            .frame(width: lit ? 56 : 44, height: 4)
-            .padding(.vertical, 8)
-            // The hit area is the full width and taller than the capsule: a
-            // 44x4 target is below every sane minimum, and this is the only
-            // way to change the height.
+            .frame(width: lit ? 56 : 44, height: Self.grabberCapsuleHeight)
+            // The hit area is the full width and much taller than the capsule:
+            // a 44x4 target is below every sane minimum, and the band is the
+            // last thing in the panel, so the pointer arrives at it from
+            // outside and should find it before it reaches the capsule itself.
+            .padding(.vertical, (Self.grabberHeight - Self.grabberCapsuleHeight) / 2)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
-            // Continuous rather than enter/exit, and `set()` rather than
-            // `push()`: the hosting view resets the cursor to an arrow on
-            // its own cursor-update pass, so a single push on entry was
-            // undone by the next mouse move and the handle looked inert.
-            // Re-setting on every move is what keeps the resize cursor up.
+            // The cursor comes from `pointerStyle`, which SwiftUI resolves on
+            // the hosting view's own cursor-update pass. Setting `NSCursor`
+            // from the hover callback below is that pass's loser: on the first
+            // hover the callback ran and the pass then put the arrow back, so
+            // the handle looked inert until the pointer left and came back.
+            // The callback stays for the hover highlight, and for macOS 14,
+            // where `pointerStyle` does not exist.
+            .rowResizeCursor()
             .onContinuousHover { phase in
                 switch phase {
                 case .active:
                     isGrabberHovered = true
-                    NSCursor.resizeUpDown.set()
+                    if #unavailable(macOS 15.0) { NSCursor.resizeUpDown.set() }
                 case .ended:
                     isGrabberHovered = false
                     // Mid-drag the pointer routinely leaves the band; the
                     // gesture's end puts the arrow back.
-                    if !isResizing { NSCursor.arrow.set() }
+                    if !isResizing, #unavailable(macOS 15.0) { NSCursor.arrow.set() }
                 }
             }
             .gesture(resizeGesture)
-            // Below the fold, not lost. Saying so beats silently showing
-            // fewer numbers than the user added. It sits in the handle's band
-            // because the handle is the fix: drag it down and they appear.
-            // Not hit-testable, so the whole band still drags.
-            .overlay(alignment: .leading) {
-                if belowFoldCount > 0 {
-                    HStack(spacing: 3) {
-                        Text("+\(belowFoldCount) below")
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .semibold))
-                    }
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(NotchTheme.tertiaryText)
-                    .padding(.leading, NotchWidgetCanvas.contentHorizontal + 4)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-                }
-            }
             .animation(.easeOut(duration: 0.14), value: lit)
-            .animation(.easeOut(duration: 0.14), value: belowFoldCount)
             .accessibilityLabel("Resize")
             .accessibilityValue("\(model.displayed.rows) rows")
             .accessibilityAdjustableAction { direction in
@@ -870,12 +845,33 @@ public struct NotchContentView: View {
                 // under a pointer that was moving smoothly; the detent
                 // belongs at the end of the gesture.
                 let stride = NotchWidgetCanvas.rowHeight + NotchWidgetCanvas.rowSpacing
-                model.dragRows(to: CGFloat(rowsAtDragStart) + value.translation.height / stride)
+                // And explicitly unanimated. The band around the handle
+                // carries an `.animation`, and an animation covers where its
+                // view *is* as well as how it looks — so anything that eases
+                // in there mid-drag leaves the handle gliding towards a
+                // position the panel's bottom edge has already snapped to.
+                // That is the bottom jumping around under the pointer: one
+                // edge on a spring, the other on the mouse.
+                var instant = Transaction()
+                instant.disablesAnimations = true
+                withTransaction(instant) {
+                    model.dragRows(
+                        to: CGFloat(rowsAtDragStart) + value.translation.height / stride)
+                }
             }
             .onEnded { _ in
                 isResizing = false
                 view.isInteracting = false
-                model.endRowDrag()
+                // Animated, unlike the drag itself. The release snaps to a
+                // whole row, which moves the bottom edge by up to half a row,
+                // and unanimated that reads as the panel jumping away from
+                // where it was let go.
+                withAnimation(
+                    reduceMotion
+                        ? .easeOut(duration: 0.1) : .spring(response: 0.22, dampingFraction: 0.9)
+                ) {
+                    model.endRowDrag()
+                }
                 if !isGrabberHovered { NSCursor.arrow.set() }
             }
     }
@@ -962,14 +958,28 @@ public struct NotchContentView: View {
             width: bodyWantsFullWidth
                 ? widest
                 : min(widest, max(560, geometry.notchRect.width + 480)),
-            height: min(NotchPanel.maxSize.height, headerHeight + content)
+            // Rounded up to a whole point. A fractional height — which a drag
+            // produces on every frame, since it tracks the pointer in rows —
+            // puts the bottom corner radius and the 1pt stroke on a half
+            // pixel, and the edge shimmers as it moves. Up rather than to
+            // nearest so the rounding never takes a point away from the
+            // content.
+            height: min(NotchPanel.maxSize.height, (headerHeight + content).rounded(.up))
         )
     }
 
     /// The notification centre's body, deliberately equal to the browser's.
     static let alertsBodyHeight: CGFloat = 440
 
-    static let grabberHeight: CGFloat = 19
+    /// The handle's whole band, capsule plus the slack that makes it hittable.
+    ///
+    /// The band's padding is derived from this rather than written out beside
+    /// it. The two were 20 and 19, which left the handle's last point outside
+    /// the height `expandedSize` reserved for it — so the capsule sat on the
+    /// panel's bottom edge instead of inside it, and the bottom of the pointer
+    /// target hung over nothing.
+    static let grabberHeight: CGFloat = 22
+    static let grabberCapsuleHeight: CGFloat = 4
 
     /// How tall the configure pane opens: whatever the form measured, clamped.
     ///
@@ -1066,6 +1076,10 @@ public struct NotchWidgetCanvas: View {
     @State private var deleteKeyMonitor: Any?
     /// Where the pointer was when the span last changed, for hysteresis.
     @State private var resizeAnchorCell: CGPoint?
+    /// How far the flow is scrolled, in points. Read back from the scroll view
+    /// rather than remembered, so the fold button still knows where it is
+    /// after a trackpad scroll it had nothing to do with.
+    @State private var scrollOffset: CGFloat = 0
 
     public init(
         model: NotchLayoutModel,
@@ -1102,11 +1116,38 @@ public struct NotchWidgetCanvas: View {
                 rows: rows, spacing: Self.rowSpacing,
                 origin: .zero, rowHeight: Self.rowHeight)
             let layout = model.displayedWithResize
+            // Is any of the flow still below the viewport? A count of widgets
+            // would be wrong once the grid has been scrolled: what matters is
+            // where the content ends relative to where the window onto it is.
+            let hasMoreBelow =
+                scrollOffset + proxy.size.height
+                < grid.contentSize.height + Self.editInset * 2 - 1
 
             // The viewport scrolls over the flow. Before this, a grid that
             // was full simply refused the next widget.
+            ScrollViewReader { scroller in
             ScrollView(.vertical, showsIndicators: false) {
             ZStack(alignment: .topLeading) {
+
+                // One anchor per row, so the fold button has something to
+                // scroll *to*. The grid is absolutely positioned — there is no
+                // stack of rows for `scrollTo` to aim at, and `scrollPosition`
+                // needs a scroll-target layout this does not have.
+                //
+                // Laid out, not offset. `.offset` moves what is drawn and not
+                // what the scroll view measures, so eight anchors all sat at
+                // the top of the flow and `scrollTo` had nowhere to go — the
+                // button clicked and nothing moved. This stack is exactly as
+                // tall as the grid beside it.
+                VStack(spacing: Self.rowSpacing) {
+                    ForEach(0..<rows, id: \.self) { row in
+                        Color.clear
+                            .frame(height: Self.rowHeight)
+                            .id(Self.foldAnchor(row))
+                    }
+                }
+                .frame(width: grid.contentSize.width)
+                .allowsHitTesting(false)
 
                 // A notch with nothing in it has to say so. There used to be
                 // three seeded Stripe tiles here instead, which meant every
@@ -1287,6 +1328,33 @@ public struct NotchWidgetCanvas: View {
             // No rubber-banding when everything already fits. A two-row grid
             // that bounces reads as broken rather than as scrollable.
             .scrollBounceBehavior(.basedOnSize)
+            // A `GeometryReader` in the content reporting its frame through a
+            // preference is the usual trick for this and does not work here:
+            // preferences are re-sent when the view tree updates, and a scroll
+            // does not update it — the offset stayed 0 for the life of the
+            // panel and the button never knew it had reached the bottom.
+            .trackScrollOffset($scrollOffset)
+            // Over the last row rather than under it, and inside the viewport
+            // rather than in the handle's band: the band is one hit target for
+            // the resize drag, and a button in it would take the mouse-down
+            // that drag needs.
+            .overlay(alignment: .bottom) {
+                if hasMoreBelow, model.draggingID == nil, model.resizingID == nil {
+                    FoldButton {
+                        scrollDownOneFold(
+                            viewport: proxy.size.height, stride: grid.rowStride, rows: rows,
+                            content: grid.contentSize.height + Self.editInset * 2,
+                            using: scroller)
+                    }
+                    .padding(.bottom, 2)
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
+                }
+            }
+            // Keyed on the boolean, not on the offset: on the offset this
+            // would animate the scroll view's own layout on every frame of
+            // every scroll.
+            .animation(.easeOut(duration: 0.16), value: hasMoreBelow)
+            }
         }
         // The viewport. The content inside is as tall as the flow needs.
         .frame(height: Self.viewportHeight(rows: model.visibleRows))
@@ -1408,8 +1476,38 @@ public struct NotchWidgetCanvas: View {
 
     /// The grid plus the well's band above and below it — what the viewport
     /// has to be for `rows` rows to be fully visible inside the well.
+    /// The id of the invisible marker at the top of `row`.
+    static func foldAnchor(_ row: Int) -> String { "fold-anchor-\(row)" }
+
+    /// Brings the next screenful of the flow into view.
+    ///
+    /// A row boundary rather than exactly one viewport: the grid is a grid, and
+    /// landing mid-tile would leave a band of a widget's bottom edge at the top
+    /// of the viewport, which reads as the scroll having missed.
+    private func scrollDownOneFold(
+        viewport: CGFloat, stride: CGFloat, rows: Int, content: CGFloat,
+        using scroller: ScrollViewProxy
+    ) {
+        guard stride > 0 else { return }
+        let target = min(max(0, Int(((scrollOffset + viewport) / stride).rounded(.down))), rows - 1)
+        withAnimation(.snappy(duration: 0.3)) {
+            scroller.scrollTo(Self.foldAnchor(target), anchor: .top)
+        }
+        // Moved here too, rather than waiting to be told. On macOS 15 the
+        // observer above corrects this a moment later — including for a
+        // trackpad scroll this button knows nothing about — but on 14 there is
+        // no observer, and a button that cannot tell it has reached the bottom
+        // would sit there for ever with nowhere left to go. Clamped like the
+        // scroll view clamps, for the same reason.
+        scrollOffset = min(CGFloat(target) * stride, max(0, content - viewport))
+    }
+
     static func viewportHeight(rows: CGFloat) -> CGFloat {
-        canvasHeight(rows: rows) + editInset * 2
+        // Whole points, for the same reason the panel's height is: `rows` is
+        // fractional during a drag, and a viewport on a half point drags the
+        // grabber below it onto one too. Everything that moves while the handle
+        // is held lands on a point boundary or the whole bottom edge crawls.
+        (canvasHeight(rows: rows) + editInset * 2).rounded(.up)
     }
 
     /// Turns a handle drag into a target rectangle in grid cells.
@@ -1731,6 +1829,48 @@ enum ResizeGate {
         case (false, true): return dy >= threshold
         default: return dx >= threshold || dy >= threshold
         }
+    }
+}
+
+/// The chevron that takes you to the next screenful of widgets.
+///
+/// It replaced a "+3 below" label in the handle's band. The label said the
+/// right thing and did nothing about it — and it sat in the one strip of the
+/// panel that belongs to the resize drag, so it could not have been clickable
+/// there without taking the mouse-down that drag needs. This floats over the
+/// last row instead, centred, and only while there is something below.
+private struct FoldButton: View {
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.white.opacity(isHovered ? 1 : 0.85))
+                .frame(width: 24, height: 24)
+                // The notch's own recipe, the same as `TileBadge`: frosted
+                // glass under a dark tint. A flat disc the colour of the panel
+                // disappears over a dark tile and glares over a bright one.
+                .background(
+                    Circle()
+                        .fill(NotchTheme.surfaceMaterial)
+                        .overlay(Circle().fill(Color.black.opacity(isHovered ? 0.3 : 0.45)))
+                )
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
+                .scaleEffect(isHovered ? 1.1 : 1)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .animation(.easeOut(duration: 0.1), value: isHovered)
+        .help("Show the widgets below")
+        .accessibilityLabel("Show the widgets below")
     }
 }
 

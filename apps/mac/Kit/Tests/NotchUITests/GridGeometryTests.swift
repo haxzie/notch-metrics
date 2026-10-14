@@ -115,3 +115,36 @@ struct DownsamplerTests {
         #expect(sampled.contains { $0.y == 500 })
     }
 }
+
+/// The handle drag reports rows as a fraction, so every size derived from it
+/// has to be rounded somewhere. If it is not, the panel's bottom edge spends
+/// the whole gesture on half pixels and the 1pt stroke along it shimmers.
+struct ViewportHeightTests {
+    @Test("every height a drag can ask for is a whole number of points")
+    func wholePoints() {
+        for step in 0...80 {
+            let rows = 1 + CGFloat(step) / 10
+            let height = NotchWidgetCanvas.viewportHeight(rows: rows)
+            #expect(height == height.rounded(), "\(rows) rows gave \(height)")
+        }
+    }
+
+    @Test("rounding never takes a point away from the row it is showing")
+    func neverRoundsDown() {
+        for rows in [1.0, 1.5, 2.0, 2.5, 3.0, 4.75] as [CGFloat] {
+            #expect(
+                NotchWidgetCanvas.viewportHeight(rows: rows)
+                    >= NotchWidgetCanvas.canvasHeight(rows: rows) + NotchWidgetCanvas.editInset * 2)
+        }
+    }
+
+    @Test("a taller viewport is never shorter than a shorter one")
+    func monotonic() {
+        var last = CGFloat.zero
+        for step in 0...80 {
+            let height = NotchWidgetCanvas.viewportHeight(rows: 1 + CGFloat(step) / 10)
+            #expect(height >= last)
+            last = height
+        }
+    }
+}
