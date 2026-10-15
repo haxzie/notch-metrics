@@ -1,5 +1,12 @@
 # @notch/mac
 
+## 0.3.1
+
+### Patch Changes
+
+- [#6](https://github.com/haxzie/notch-metrics/pull/6) [`78ed549`](https://github.com/haxzie/notch-metrics/commit/78ed5498cbe5daa93e3c4f92f938c819c678140b) Thanks [@haxzie](https://github.com/haxzie)! - 0.3.0 was built pointing at `http://localhost:8787` and could not reach
+  anything. It is withheld; this is the same app against the real servers.
+
 ## 0.3.0
 
 ### Minor Changes
