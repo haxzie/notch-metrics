@@ -5,6 +5,7 @@ import MetricsCore
 import NotchUI
 import PluginRuntime
 import SwiftUI
+import Updater
 
 /// Everything long-lived, assembled once.
 @MainActor
@@ -18,6 +19,7 @@ final class AppEnvironment {
     let auth: AuthStore
     let api: APIClient
     let cache: MetricsCache
+    let updates: UpdateController
 
     private(set) var settings = AppSettings()
     private(set) var states: [String: TileState] = [:]
@@ -189,6 +191,13 @@ final class AppEnvironment {
         return URL(string: string ?? "") ?? URL(string: "https://notchmetrics.com")!
     }
 
+    /// Only the updater uses this, and only as the fallback for a Worker that
+    /// is not answering. See `UpdateFeed`.
+    static var assetsURL: URL {
+        let string = Bundle.main.object(forInfoDictionaryKey: "NMAssetsBaseURL") as? String
+        return URL(string: string ?? "") ?? URL(string: "https://assets.notchmetrics.com")!
+    }
+
     init() {
         try? AppPaths.ensureDirectories()
 
@@ -205,6 +214,7 @@ final class AppEnvironment {
         self.alerts = AlertInbox()
         self.settingsStore = SettingsStore()
         self.plugins = PluginRegistry()
+        self.updates = UpdateController(api: Self.apiURL, mirror: Self.assetsURL)
 
         let persistedLayout = Self.loadLayout()
         var model: NotchLayoutModel!
@@ -231,8 +241,22 @@ final class AppEnvironment {
         plugins.setApproved(settings.approvedPluginIDs)
         plugins.start()
 
+        // Demo mode takes screenshots and must not reach the network; the
+        // pane's states are reachable through NOTCH_DEBUG_UPDATE instead.
+        if !Self.isDemo {
+            updates.automatic = settings.checkForUpdatesAutomatically
+            updates.start()
+        }
+
         notch.apply(settings: settings)
         notch.start()
+
+        // The chip in the notch's bottom corner. Pushed from the controller
+        // rather than observed, so NotchUI stays ignorant of the updater.
+        updates.onOfferChanged = { [weak self] version in
+            self?.notch.availableUpdate = version
+        }
+        notch.availableUpdate = updates.state.offer
 
         isSignedIn = await auth.isSignedIn
 
@@ -766,6 +790,7 @@ final class AppEnvironment {
             settings = await settingsStore.current
             plugins.setApproved(settings.approvedPluginIDs)
             notch.apply(settings: settings)
+            updates.automatic = settings.checkForUpdatesAutomatically
         }
     }
 

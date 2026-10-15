@@ -46,7 +46,6 @@
     "APP_URL": "http://localhost:3000",
     "API_URL": "http://localhost:8787",
     "ASSETS_URL": "http://localhost:8787",
-    "GITHUB_REPO": "haxzie/notch-metrics",
 
     // Which KEK generation new rows are sealed with. A var rather than a
     // secret: it names a secret, it is not one. Rotation is documented in
@@ -80,7 +79,6 @@
         "APP_URL": "https://notchmetrics.com",
         "API_URL": "https://api.notchmetrics.com",
         "ASSETS_URL": "https://assets.notchmetrics.com",
-        "GITHUB_REPO": "haxzie/notch-metrics",
         "INTEGRATION_KEK_ACTIVE": "1",
         "DODOPAYMENT_MODE": "live",
         "DODOPAYMENT_MONTHLY_PRODUCT_ID": "pdt_0NpLLv7nGeZyq1nAvHVVj",

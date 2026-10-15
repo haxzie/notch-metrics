@@ -10,10 +10,21 @@ on:
       tag:
         required: true
         type: string
+      build:
+        # From the bundle release-mac.yml actually built, never from this
+        # job's own checkout of Config/Version.xcconfig. See the note on the
+        # step that reads it: the two disagree in CI, and the updater compares
+        # exactly these two integers.
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
         description: "The mac-v* tag to mirror"
+        required: true
+        type: string
+      build:
+        description: "CFBundleVersion of the app in that release. Read it from the app; do not guess."
         required: true
         type: string
 
@@ -30,6 +41,9 @@ env:
   BUCKET: notch
   PREFIX: desktop
   PUBLIC_URL: https://assets.notchmetrics.com
+  # Where a release note can be read. The repository is private, so a GitHub
+  # release URL is a sign-in wall for everybody but the author.
+  SITE_URL: https://notchmetrics.com
   # R2 rejects the integrity headers the AWS CLI sends by default, with an
   # error that reads as a credentials problem. These three lines are the fix
   # and they are not optional.
@@ -46,6 +60,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       TAG: ${{ inputs.tag }}
+      BUILD: ${{ inputs.build }}
       GH_TOKEN: ${{ github.token }}
 
     steps:
@@ -71,13 +86,19 @@ jobs:
 
           file=$(basename "$(ls dist/*.dmg)")
           published_at=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq .publishedAt)
-          build=$(node -p "require('./apps/mac/package.json').version" >/dev/null 2>&1 && \
-                  grep -E '^CURRENT_PROJECT_VERSION' apps/mac/Config/Version.xcconfig | awk '{print $3}')
+
+          # Supplied by the caller, and validated rather than defaulted. A
+          # `${BUILD:-0}` here writes build 0 into latest.json, which makes
+          # every installed copy decide it is already newer than the release
+          # and stop offering updates — silently, and only visible to users.
+          build="$BUILD"
+          case "$build" in ''|*[!0-9]*) echo "::error::build is '$build', not an integer."; exit 1 ;; esac
+          [ "$build" -gt 0 ] || { echo "::error::build is 0."; exit 1; }
 
           {
             echo "tag=$TAG"
             echo "version=$version"
-            echo "build=${build:-0}"
+            echo "build=$build"
             echo "file=$file"
             echo "size=$(stat -c%s "dist/$file")"
             echo "sha256=$(sha256sum "dist/$file" | cut -d' ' -f1)"
@@ -129,14 +150,14 @@ jobs:
         run: |
           jq -n \
             --arg version "$VERSION" \
-            --argjson build "${BUILD:-0}" \
+            --argjson build "$BUILD" \
             --arg tag "$TAG_NAME" \
             --arg publishedAt "$PUBLISHED_AT" \
             --arg minimumSystemVersion "14.0" \
             --arg filename "$FILE" \
             --arg url "$PUBLIC_URL/$PREFIX/$VERSION/$FILE" \
             --arg sha256 "$SHA256" \
-            --arg notes "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG_NAME" \
+            --arg notes "$SITE_URL/changelog#v$(echo "$VERSION" | tr . -)" \
             --argjson size "$SIZE" \
             '{ version: $version, build: $build, tag: $tag, publishedAt: $publishedAt,
                platform: "darwin-arm64", minimumSystemVersion: $minimumSystemVersion,

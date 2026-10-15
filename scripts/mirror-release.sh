@@ -25,6 +25,9 @@ export AWS_DEFAULT_REGION=auto
 BUCKET="${BUCKET:-notch}"
 PREFIX="${PREFIX:-desktop}"
 PUBLIC_URL="${PUBLIC_URL:-https://assets.notchmetrics.com}"
+# The release notes a user can actually open. The repository is private, so a
+# GitHub release URL is a sign-in wall for everybody but the author.
+SITE_URL="${SITE_URL:-https://notchmetrics.com}"
 ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
 VERSION="${TAG#mac-v}"
 
@@ -50,15 +53,36 @@ aws s3 cp "$WORK/$FILE" "s3://$BUCKET/$PREFIX/$VERSION/$FILE" \
   --cache-control "public, max-age=31536000, immutable" \
   --only-show-errors
 
-BUILD=$(grep -E '^CURRENT_PROJECT_VERSION' apps/mac/Config/Version.xcconfig | awk '{print $3}')
+# Out of the disk image, not out of Config/Version.xcconfig.
+#
+# The updater compares latest.json's `build` with the running app's
+# CFBundleVersion, so those two integers have to come from the same place.
+# The xcconfig in this checkout is not that place: CI regenerates it from a
+# run number, and a hand-run mirror of an older tag reads whatever the working
+# tree happens to hold. Reading it out of the bundle being published cannot
+# drift.
+MOUNT="$(mktemp -d)"
+hdiutil attach "$WORK/$FILE" -nobrowse -readonly -mountpoint "$MOUNT" >/dev/null
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+  "$MOUNT"/*.app/Contents/Info.plist)"
+BUNDLED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+  "$MOUNT"/*.app/Contents/Info.plist)"
+hdiutil detach "$MOUNT" -force >/dev/null
+
+case "$BUILD" in ''|*[!0-9]*) echo "::error::CFBundleVersion is '$BUILD', not an integer."; exit 1 ;; esac
+[ "$BUILD" -gt 0 ] || { echo "::error::CFBundleVersion is 0."; exit 1; }
+[ "$BUNDLED_VERSION" = "$VERSION" ] || {
+  echo "::error::$FILE contains $BUNDLED_VERSION, not the $VERSION its name claims."
+  exit 1
+}
 
 jq -n \
-  --arg version "$VERSION" --argjson build "${BUILD:-0}" --arg tag "$TAG" \
+  --arg version "$VERSION" --argjson build "$BUILD" --arg tag "$TAG" \
   --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg minimumSystemVersion "14.0" --arg filename "$FILE" \
   --arg url "$PUBLIC_URL/$PREFIX/$VERSION/$FILE" \
   --arg sha256 "$(shasum -a 256 "$WORK/$FILE" | cut -d' ' -f1)" \
-  --arg notes "https://github.com/haxzie/notch-metrics/releases/tag/$TAG" \
+  --arg notes "$SITE_URL/changelog#v$(echo "$VERSION" | tr . -)" \
   --argjson size "$(stat -f%z "$WORK/$FILE")" \
   '{ version: $version, build: $build, tag: $tag, publishedAt: $publishedAt,
      platform: "darwin-arm64", minimumSystemVersion: $minimumSystemVersion,

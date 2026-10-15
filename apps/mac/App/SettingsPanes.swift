@@ -3,6 +3,7 @@ import MetricsCore
 import NotchUI
 import PluginRuntime
 import SwiftUI
+import Updater
 
 struct GeneralPane: View {
     @Environment(AppEnvironment.self) private var env
@@ -141,9 +142,133 @@ struct UpdatesPane: View {
                             env.updateSettings { $0.checkForUpdatesAutomatically = value }
                         }))
             }
+
+            Section("Updates") { status }
         }
         .formStyle(.grouped)
     }
+
+    /// One row per state, because they are mutually exclusive.
+    ///
+    /// Everything that is not a state of the update itself — the installed
+    /// version, the automatic toggle — stays in the section above, so this one
+    /// can be read top to bottom as "what is happening right now".
+    @ViewBuilder
+    private var status: some View {
+        switch env.updates.state {
+        case .idle:
+            LabeledContent("Status") {
+                Button("Check now") { check() }
+            }
+
+        case .checking:
+            working("Checking for updates…")
+
+        case let .upToDate(checkedAt):
+            LabeledContent("Status") {
+                HStack(spacing: 10) {
+                    Text("Notch Metrics is up to date.")
+                    Spacer(minLength: 0)
+                    Button("Check now") { check() }
+                }
+            }
+            LabeledContent("Last checked", value: Self.when.localizedString(for: checkedAt, relativeTo: Date()))
+
+        case let .available(manifest):
+            offer(manifest)
+            LabeledContent("Download") {
+                Button("Download") { Task { await env.updates.download() } }
+                    .buttonStyle(.borderedProminent)
+            }
+
+        case let .downloading(manifest, fraction):
+            offer(manifest)
+            LabeledContent("Downloading") {
+                // Determinate, because the one thing somebody wants to know
+                // about an 18 MB download is whether it is moving.
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 220)
+            }
+
+        case let .verifying(manifest):
+            offer(manifest)
+            working("Checking the download…")
+
+        case let .readyToInstall(manifest, _):
+            offer(manifest)
+            LabeledContent("Ready") {
+                Button("Install and restart") { env.updates.install() }
+                    .buttonStyle(.borderedProminent)
+            }
+            Text("Notch Metrics quits, swaps itself for the new version, and reopens.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+        case let .installing(manifest):
+            offer(manifest)
+            working("Installing…")
+
+        case let .failed(message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            LabeledContent("Status") {
+                Button("Try again") {
+                    env.updates.dismissFailure()
+                    check()
+                }
+            }
+        }
+    }
+
+    /// The headline for every state that has a manifest behind it, so the
+    /// version being downloaded is on screen the whole way through rather than
+    /// only on the screen that offered it.
+    @ViewBuilder
+    private func offer(_ manifest: LatestManifest) -> some View {
+        LabeledContent("Available") {
+            HStack(spacing: 10) {
+                Text("Version \(manifest.version)")
+                Text(Self.size.string(fromByteCount: Int64(manifest.size)))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                if let notes = manifest.notes {
+                    Link("Release notes", destination: notes)
+                }
+            }
+        }
+    }
+
+    private func working(_ text: String) -> some View {
+        LabeledContent("Status") {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(text).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func check() {
+        Task { await env.updates.check(userInitiated: true) }
+    }
+
+    private static let size: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB]
+        formatter.countStyle = .file
+        return formatter
+    }()
+
+    private static let when: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        // `.named` so a check that has just finished reads "now". The default
+        // rounds the sub-second gap to zero and then picks the future phrasing
+        // for it, so the row said the last check happened "in 0 seconds".
+        formatter.dateTimeStyle = .named
+        return formatter
+    }()
 }
 
 struct AboutPane: View {

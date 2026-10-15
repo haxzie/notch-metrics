@@ -18,6 +18,28 @@ public struct LatestManifest: Codable, Sendable, Equatable {
     public let notes: URL?
     public let mandatory: Bool
 
+    /// A public struct gets no public memberwise initialiser, and the only
+    /// thing that needs one is `UpdateSample` — the fixed release the Updates
+    /// pane is screenshotted against.
+    public init(
+        version: String, build: Int, tag: String, publishedAt: String, platform: String,
+        minimumSystemVersion: String, filename: String, url: URL, size: Int, sha256: String,
+        notes: URL?, mandatory: Bool
+    ) {
+        self.version = version
+        self.build = build
+        self.tag = tag
+        self.publishedAt = publishedAt
+        self.platform = platform
+        self.minimumSystemVersion = minimumSystemVersion
+        self.filename = filename
+        self.url = url
+        self.size = size
+        self.sha256 = sha256
+        self.notes = notes
+        self.mandatory = mandatory
+    }
+
     /// Whether this Mac can actually run the build on offer.
     ///
     /// Checked before downloading, so a Mac on 14 is not made to fetch 18 MB of

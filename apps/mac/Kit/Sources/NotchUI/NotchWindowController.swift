@@ -72,6 +72,15 @@ public final class NotchWindowController {
         didSet { view?.unreadAlertCount = unreadAlertCount }
     }
 
+    /// The version the updater is offering, if any. Drives the chip in the
+    /// bottom corner of the expanded notch.
+    public var availableUpdate: String? {
+        didSet { view?.availableUpdate = availableUpdate }
+    }
+
+    /// The update chip was pressed.
+    public var onOpenUpdate: () -> Void = {}
+
     /// Which connection the notification centre should open on.
     ///
     /// Forwarded rather than reached through the view model, so the app target
@@ -289,6 +298,8 @@ public final class NotchWindowController {
         viewModel.browserPanel = browserPanel
         viewModel.alertCentrePanel = alertCentrePanel
         viewModel.unreadAlertCount = unreadAlertCount
+        viewModel.availableUpdate = availableUpdate
+        viewModel.onOpenUpdate = { [weak self] in self?.onOpenUpdate() }
         viewModel.onOpenAlerts = { [weak self] in self?.beginAlerts() }
         viewModel.onEndAlerts = { [weak self] in self?.endAlerts() }
         viewModel.onBannerTapped = { [weak self] in

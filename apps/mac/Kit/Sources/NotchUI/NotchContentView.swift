@@ -211,11 +211,58 @@ public struct NotchContentView: View {
             // this was a third copy of the same if-ladder, and it drifted —
             // the grabber drew over the notification centre while
             // `expandedSize` left no room for it.
-            if bodyKind == .grid { grabber }
+            if bodyKind == .grid {
+                // The chip rides the handle's band rather than taking a row of
+                // its own: the band is already full width and its capsule is
+                // centred, so the trailing end of it is empty space. The band
+                // grows to `bottomBandHeight` to hold it, which is the number
+                // `expandedSize` reserves — see the note on that constant.
+                ZStack {
+                    grabber
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        updateChip
+                    }
+                }
+                .frame(height: bottomBandHeight)
+            }
         }
         // One value, so the frame change and the body swap cannot animate on
         // different clocks.
         .animation(.snappy(duration: 0.28), value: bodyKind)
+    }
+
+    /// "Update to 0.4.0", in the bottom corner, when there is one.
+    ///
+    /// Proactive on purpose. The Updates pane is three clicks away and nobody
+    /// goes looking in it, so a release that fixes the thing somebody is about
+    /// to report sits uninstalled for weeks. Coloured rather than grey because
+    /// it is the one thing in the notch that is not a number, and it has to
+    /// read as an offer rather than as a label.
+    @ViewBuilder
+    private var updateChip: some View {
+        if let version = view.availableUpdate {
+            Button(action: view.onOpenUpdate) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("Update to \(version)")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(NotchTheme.brand))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("A newer version of Notch Metrics is ready to install")
+            // Clear of the bottom corner radius on both axes. Flush against
+            // the edge the chip reads as something that has fallen out of the
+            // panel rather than as something in it.
+            .padding(.trailing, 16)
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        }
     }
 
     /// The widget being configured, resolved against the live layout.
@@ -560,7 +607,7 @@ public struct NotchContentView: View {
                     .font(.system(size: 11, weight: .medium))
             }
                 .padding(.leading, 8)
-                .padding(.trailing, 10)
+                .padding(.trailing, 14)
                 .padding(.vertical, 5)
                 .background(Capsule().fill(Color.white.opacity(0.1)))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
@@ -623,7 +670,7 @@ public struct NotchContentView: View {
                     .font(.system(size: 11, weight: .medium))
             }
             .padding(.leading, 8)
-            .padding(.trailing, 10)
+            .padding(.trailing, 14)
             .padding(.vertical, 5)
             .background(Capsule().fill(Color.white.opacity(0.1)))
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
@@ -948,7 +995,7 @@ public struct NotchContentView: View {
                 NotchWidgetCanvas.contentTop
                 + NotchWidgetCanvas.viewportHeight(rows: model.visibleRows)
                 + NotchWidgetCanvas.contentBottom
-                + Self.grabberHeight
+                + bottomBandHeight
         }
         // Less the ears, which the panel frame adds back — the window is a
         // fixed 900 and a body at the cap would push them outside it, where
@@ -973,6 +1020,24 @@ public struct NotchContentView: View {
 
     /// The notification centre's body, deliberately equal to the browser's.
     static let alertsBodyHeight: CGFloat = 440
+
+    /// The band under the grid: the resize handle, and the update chip when
+    /// there is one.
+    ///
+    /// One value, read by `expandedContent` and by `expandedSize`. Those two
+    /// disagreeing about the height of this band is exactly how the handle
+    /// came to sit on the panel's bottom edge once already — see
+    /// `grabberHeight`.
+    private var bottomBandHeight: CGFloat {
+        view.availableUpdate == nil ? Self.grabberHeight : Self.updateBandHeight
+    }
+
+    /// The same band with a chip in it.
+    ///
+    /// Tall enough that the chip clears the bottom corner radius rather than
+    /// sitting on it: at the handle's own 22 the capsule touched the panel's
+    /// edge and overhung the curve.
+    static let updateBandHeight: CGFloat = 42
 
     /// The handle's whole band, capsule plus the slack that makes it hittable.
     ///

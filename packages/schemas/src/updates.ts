@@ -15,8 +15,13 @@ export const LatestJson = z.object({
    * Comparing semver strings in Swift is doable and is one more thing to get
    * wrong — "0.10.0" sorts before "0.9.0" under a string compare, and that bug
    * only appears on the tenth minor release.
+   *
+   * Positive, so a manifest built from an unset variable is rejected rather
+   * than published. Build 0 parses perfectly and is lower than every installed
+   * copy, so it does not break a release — it makes the release invisible, to
+   * everyone, with nothing anywhere saying why.
    */
-  build: z.number().int(),
+  build: z.number().int().positive(),
   tag: z.string(),
   publishedAt: z.string(),
   platform: z.literal("darwin-arm64"),
