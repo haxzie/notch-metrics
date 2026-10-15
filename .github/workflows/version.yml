@@ -104,15 +104,35 @@ jobs:
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Created through the API, not with `git push`.
+          #
+          # `git push` here looked like it worked and raised no `push` event,
+          # so release-mac.yml never ran. Setting the remote URL to carry the
+          # PAT is not enough: `actions/checkout` leaves an
+          # `http.https://github.com/.extraheader` credential in the repository
+          # config, git sends that Authorization header in preference to the
+          # basic auth in the URL, and the push is therefore attributed to
+          # GITHUB_TOKEN — whose events GitHub's recursion guard suppresses.
+          # That is the single most likely way for a release to do nothing,
+          # and the previous mitigation was defeated by a config setting
+          # written by another action.
+          #
+          # `gh api` reads GH_TOKEN directly, so there is exactly one
+          # credential in play and no git config can override it.
+          #
+          # Two calls: a tag *object*, then the ref that points at it. The
+          # one-call form creates a lightweight tag, and `gh release create
+          # --verify-tag` plus `release-notes.mjs` both expect an annotated one.
+          object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags" \
+            -f tag="$tag" -f message="Notch Metrics $version" \
+            -f object="$GITHUB_SHA" -f type=commit --jq .sha)
 
-          # Annotated. `--follow-tags` pushes annotated tags only and silently
-          # ignores lightweight ones, so `git tag "$tag"` here would look like
-          # it worked and leave the tag nowhere.
-          # `$GITHUB_SHA`, not HEAD: see above — HEAD is wherever the
-          # changesets action left it, which is the Version PR's branch.
-          git tag -a "$tag" "$GITHUB_SHA" -m "Notch Metrics $version"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push origin "$tag"
-          echo "pushed $tag — release-mac.yml takes it from here."
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$tag" -f sha="$object" --jq .ref
+
+          echo "pushed $tag at $GITHUB_SHA — release-mac.yml takes it from here."
+
+          # The push event is what actually matters, and it is asynchronous.
+          # Say plainly where to look if nothing happens, because the failure
+          # this guards against is silent by construction.
+          echo "If no 'Release the Mac app' run appears, RELEASE_PAT is the first thing to check."
