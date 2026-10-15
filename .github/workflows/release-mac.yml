@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 90
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
+      build: ${{ steps.built.outputs.build }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,6 +120,39 @@ jobs:
       - name: Build and export
         run: ./scripts/build-mac.sh
 
+      - name: Read the build number out of the app that was actually built
+        id: built
+        # Out of the bundle, not out of Config/Version.xcconfig.
+        #
+        # `mac.sh gen` regenerates that file, and in Actions
+        # sync-mac-version.mjs prefers GITHUB_RUN_NUMBER — *this* workflow's
+        # run number, which is a different counter from the one version.yml
+        # used when it committed the file. The mirror job is a separate
+        # checkout and used to read the committed value, so latest.json
+        # advertised one build number while the app it pointed at had another.
+        #
+        # The updater compares those two integers. They disagreed in the
+        # direction that makes every installed copy offer, forever, the exact
+        # version it is already running.
+        run: |
+          set -euo pipefail
+          plist="apps/mac/build/export/NotchMetrics.app/Contents/Info.plist"
+          build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist")
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")
+
+          case "$build" in ''|*[!0-9]*) echo "::error::CFBundleVersion is '$build', not an integer."; exit 1 ;; esac
+          [ "$build" -gt 0 ] || { echo "::error::CFBundleVersion is 0."; exit 1; }
+
+          # The one that catches an xcconfig overridden by a build setting in
+          # project.yml, which is otherwise invisible until a user downloads it.
+          if [ "$version" != "${{ steps.meta.outputs.version }}" ]; then
+            echo "::error::the app says $version, the tag says ${{ steps.meta.outputs.version }}."
+            exit 1
+          fi
+
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "built $version ($build)"
+
       - name: Sign, notarise and staple the app
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -171,4 +205,5 @@ jobs:
     uses: ./.github/workflows/release-mirror.yml
     with:
       tag: ${{ needs.build.outputs.tag }}
+      build: ${{ needs.build.outputs.build }}
     secrets: inherit

@@ -32,6 +32,18 @@ release-mac.yml  archive → sign → notarise → staple → dmg → notarise �
 release-mirror.yml  upload the dmg to R2, write latest.json, verify through assets.notchmetrics.com
 ```
 
+`release-mac.yml` reads `CFBundleVersion` out of the app it just built and
+hands that to the mirror as an input. Do not reintroduce a read of
+`Config/Version.xcconfig` in the mirror job: `mac.sh gen` rewrites that file
+from `GITHUB_RUN_NUMBER`, which is a _different counter_ from the one
+`version.yml` used when it committed it. The two disagreed in the direction
+that makes every installed copy offer, forever, the version it is already
+running.
+
+Release notes live at `notchmetrics.com/changelog`, generated from
+`apps/mac/CHANGELOG.md`. The repository is private, so a GitHub release URL in
+`latest.json` is a sign-in wall for everybody but the author.
+
 ## The two traps that make a release silently do nothing
 
 **1. A tag pushed with `GITHUB_TOKEN` raises no `push` event.** GitHub's
@@ -61,12 +73,13 @@ the release, not two.
 
 ## Recovery
 
-| What failed                                 | What to do                                                                                                                                                        |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The build, after the tag was pushed         | Fix, then re-run `release-mac.yml` by `workflow_dispatch` with the same tag. It is idempotent: `sign-and-notarize.sh` short-circuits on anything already stapled. |
-| The mirror, after the GitHub release exists | `R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… scripts/mirror-release.sh mac-v0.2.0`                                                                  |
-| "Refuse to go backwards" fired              | Believe it. `latest.json` already points at something newer; you are mirroring an old tag.                                                                        |
-| Notarisation was rejected                   | `xcrun notarytool log <submission-id> --key …`. It is the only output that names the offending binary. See the `signing` skill.                                   |
+| What failed                                   | What to do                                                                                                                                                        |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The build, after the tag was pushed           | Fix, then re-run `release-mac.yml` by `workflow_dispatch` with the same tag. It is idempotent: `sign-and-notarize.sh` short-circuits on anything already stapled. |
+| The mirror, after the GitHub release exists   | `R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… scripts/mirror-release.sh mac-v0.2.0`                                                                  |
+| "Refuse to go backwards" fired                | Believe it. `latest.json` already points at something newer; you are mirroring an old tag.                                                                        |
+| "CFBundleVersion is 0" or "is not an integer" | The build number never reached the mirror. Nothing is published, which is correct: build 0 makes a release invisible rather than broken, and that is worse.       |
+| Notarisation was rejected                     | `xcrun notarytool log <submission-id> --key …`. It is the only output that names the offending binary. See the `signing` skill.                                   |
 
 ## Verifying, from a different Mac
 

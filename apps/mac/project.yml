@@ -59,6 +59,11 @@ targets:
     dependencies:
       - package: NotchMetricsKit
         product: NotchUI
+      # Named explicitly even though NotchUI already links it. A transitive
+      # target is linked but not importable, so the settings pane that drives
+      # the updater cannot `import Updater` without this line.
+      - package: NotchMetricsKit
+        product: Updater
       - target: UpdateInstaller
         embed: true
         codeSign: true

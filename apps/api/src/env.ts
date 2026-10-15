@@ -19,7 +19,6 @@ export interface Env {
   APP_URL: string;
   API_URL: string;
   ASSETS_URL: string;
-  GITHUB_REPO: string;
   INTEGRATION_KEK_ACTIVE: string;
   DODOPAYMENT_MODE: string;
   DODOPAYMENT_MONTHLY_PRODUCT_ID: string;

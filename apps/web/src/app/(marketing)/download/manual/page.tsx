@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL ?? "https://assets.notchmetrics.com";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "https://api.notchmetrics.com";
 
 export const metadata: Metadata = {
   title: "Download",
@@ -9,10 +9,13 @@ export const metadata: Metadata = {
 };
 
 /**
- * The fallback when `latest.json` cannot be read.
+ * The fallback when the update feed cannot be read.
  *
  * Exists so the download button is never dead: a release manifest that is
- * briefly unreachable should not make the product look unshipped.
+ * briefly unreachable should not make the product look unshipped. The direct
+ * link goes to the Worker rather than to the bucket, so a release withheld by
+ * `PINNED_VERSION` stays withheld here too — a bucket URL on this page would
+ * be the one route around a rollback.
  */
 export default function ManualDownload() {
   return (
@@ -27,9 +30,8 @@ export default function ManualDownload() {
       />
       <h1 className="mt-8 text-4xl font-semibold tracking-tight">Download Notch Metrics</h1>
       <p className="text-ink/60 mt-4 text-pretty">
-        We could not reach the release manifest just now. This is usually brief. The disk images are
-        served from <code className="text-ink/80 font-mono text-[13px]">{ASSETS}</code>, so trying
-        again in a moment normally works.
+        The release feed did not answer just now. This is usually brief. Trying again in a moment
+        normally works.
       </p>
       <Link
         href="/download"
@@ -37,7 +39,13 @@ export default function ManualDownload() {
       >
         Try the download again
       </Link>
-      <p className="text-ink/40 mt-4 font-mono text-[11px] tracking-wide">
+      <a
+        href={`${API}/v1/updates/download`}
+        className="text-ink/60 hover:text-ink mt-4 text-sm underline underline-offset-4 transition"
+      >
+        Or take the disk image straight from the release feed
+      </a>
+      <p className="text-ink/40 mt-6 font-mono text-[11px] tracking-wide">
         Apple silicon · macOS 14 or later
       </p>
     </main>

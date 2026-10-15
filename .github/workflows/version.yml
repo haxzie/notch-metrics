@@ -32,27 +32,41 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Version or publish
+      - name: Open or merge the Version Packages PR
         id: changesets
         uses: changesets/action@v1
         with:
           # `pnpm run version` also regenerates apps/mac/Config/Version.xcconfig,
           # so the Version Packages PR carries the Mac app's version with it.
           version: pnpm run version
-          publish: pnpm run release
+          # Deliberately no `publish:`.
+          #
+          # Every package in the workspace is private, so `changeset publish`
+          # has nothing to do — but it would still run, still need an
+          # `NPM_TOKEN` that does not exist, and still fail the job. The only
+          # thing this workflow releases is the Mac app, and that goes out as
+          # a tag. Put `publish: pnpm run release` back, with the secret,
+          # when something here is actually meant to reach npm.
           commit: "Version packages"
           title: "Version packages"
-          # One release per npm package would make the release list unreadable,
-          # and the Mac release is created by release-mac.yml.
           createGithubReleases: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
 
       - name: Tag the Mac release
-        # Only once the Version PR has been merged — i.e. when this run had no
-        # changesets left to consume and therefore published instead.
-        if: steps.changesets.outputs.published == 'true'
+        # NOT gated on `steps.changesets.outputs.published`.
+        #
+        # That output means "changeset publish pushed something to npm", which
+        # is now never, so the gate would hold the release back for ever with
+        # nothing anywhere saying why — the same silent no-op as a tag pushed
+        # with GITHUB_TOKEN, and harder to spot because the job is green.
+        #
+        # The condition below is the one that was always meant: main has no
+        # unconsumed changesets, so the version in apps/mac/package.json is a
+        # version that has been through the Version PR. Tagging it is then
+        # idempotent — the tag either exists already or is the release — which
+        # also makes it self-healing, because a tag push that failed is retried
+        # by the next push to main.
         env:
           # NOT GITHUB_TOKEN.
           #
@@ -63,6 +77,16 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: |
           set -euo pipefail
+
+          # Anything other than README.md and config.json is a pending
+          # changeset, which means the Version PR is open and this version is
+          # not the one to release.
+          pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
+          if [ "$pending" != "0" ]; then
+            echo "$pending changeset(s) still pending; the Version PR is not merged yet."
+            exit 0
+          fi
+
           version=$(node -p "require('./apps/mac/package.json').version")
           tag="mac-v$version"
 

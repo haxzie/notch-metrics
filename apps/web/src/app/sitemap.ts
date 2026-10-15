@@ -91,6 +91,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.5,
     })),
     {
+      url: `${SITE_URL}/changelog`,
+      changeFrequency: "weekly",
+      priority: 0.5,
+    },
+    {
       url: `${SITE_URL}/security`,
       changeFrequency: "yearly",
       priority: 0.5,

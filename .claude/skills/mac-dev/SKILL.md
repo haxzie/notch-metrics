@@ -64,6 +64,18 @@ The notch is awkward to inspect because it hides when the pointer leaves it.
 | `NOTCH_SUPPORT_DIR=…`    | Point Application Support somewhere disposable.              |
 | `NOTCH_RUNNER_PATH=…`    | Use a locally built custom-metric runner.                    |
 
+`NOTCH_DEBUG_UPDATE` takes two kinds of value. `available`, `downloading`,
+`verifying`, `ready`, `installing`, `uptodate` and `failed` force the pane into
+that state from `UpdateSample`, with no network — those are the screenshots.
+`chip` is `available` without opening Settings, for framing the notch itself.
+
+`fetch` and `run` are different: they exercise the **real** path now rather
+than a minute from now, against whatever `NM_API_URL` points at. `fetch` checks
+and downloads; `run` goes the whole way, through the swap and the relaunch.
+That is the only way to test an updater without publishing a release, which is
+the difference between this flow being checked when it is touched and being
+checked twice a year.
+
 `NOTCH_DEBUG_EXPAND` pins rather than merely expanding, and that matters: the
 exit watch installed on expand finds the pointer elsewhere and collapses within
 half a second, so an unpinned debug expand is useless for a screenshot.

@@ -181,6 +181,17 @@ public final class NotchViewModel {
     /// immediately rather than on the next refresh, like `isSignedIn`.
     public var unreadAlertCount = 0
 
+    /// The version on offer, when the updater has found one and it is not yet
+    /// installing. `nil` the rest of the time, which is almost always.
+    ///
+    /// A string rather than the manifest: NotchUI does not need to know what a
+    /// `LatestManifest` is to draw a chip, and the chip's only job is to get
+    /// somebody to the Updates pane.
+    public var availableUpdate: String?
+
+    /// The update chip was pressed.
+    public var onOpenUpdate: @MainActor () -> Void = {}
+
     /// The notification currently out of the notch, if any.
     public var bannerAlert: NotchAlert?
 

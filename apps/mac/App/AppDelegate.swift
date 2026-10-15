@@ -77,6 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.env.beginSignIn()
         }
 
+        // The chip in the notch's bottom corner. It lands on the pane rather
+        // than starting a download: an 18 MB fetch beginning because somebody
+        // clicked a thing to find out what it was is the wrong first move.
+        env.notch.onOpenUpdate = { [weak self] in
+            self?.env.settingsPane = .updates
+            self?.openSettings()
+        }
+
         env.notch.onRefresh = { [weak self] in
             guard let self else { return }
             Task { await self.env.refreshNow() }
@@ -115,6 +123,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .seconds(1))
                 env.notch.beginAlerts(
                     focus: value == "1" ? nil : AlertFocus(integrationId: value))
+            }
+        }
+
+        // Runs the *real* update path now rather than a minute from now, and
+        // without the six-hour wait between polls.
+        //
+        // Earns its place because an updater is otherwise only exercisable by
+        // publishing a release, which is the one thing nobody does to test a
+        // change — so this is the difference between the flow being checked
+        // every time it is touched and being checked twice a year.
+        //
+        //   fetch — check, and download if there is something
+        //   run   — the whole way, ending in the swap and the relaunch
+        if let wanted = ProcessInfo.processInfo.environment["NOTCH_DEBUG_UPDATE"],
+           wanted == "fetch" || wanted == "run" {
+            env.settingsPane = .updates
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                openSettings()
+                await env.updates.check(userInitiated: true)
+                guard case .available = env.updates.state else { return }
+                await env.updates.download()
+                guard wanted == "run" else { return }
+                env.updates.install()
+            }
+        }
+
+        // Drives the Updates pane into a state that needs a release newer
+        // than this build — which is to say, every state but "up to date".
+        if let wanted = ProcessInfo.processInfo.environment["NOTCH_DEBUG_UPDATE"],
+           let state = UpdateSample.state(wanted) {
+            env.updates.preview(state)
+            env.notch.availableUpdate = state.offer
+            // `chip` frames the notch itself; anything else opens the pane.
+            guard wanted != "chip" else { return }
+            env.settingsPane = .updates
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                openSettings()
             }
         }
 
