@@ -24,6 +24,18 @@ jobs:
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       build: ${{ steps.built.outputs.build }}
+    # Job level, not on the `gen` step.
+    #
+    # These were on `mac.sh gen` alone, and `build-mac.sh` re-runs
+    # sync-mac-config.mjs — so the step that generated production URLs was
+    # followed by one that silently regenerated localhost ones, and 0.3.0
+    # shipped notarised and unable to reach anything. Every step in this job
+    # now sees them, so a script that regenerates the config cannot regenerate
+    # it wrong.
+    env:
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.notchmetrics.com' }}
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://notchmetrics.com' }}
+      NEXT_PUBLIC_ASSETS_URL: ${{ vars.NOTCH_ASSETS_URL || 'https://assets.notchmetrics.com' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,10 +64,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Generate the project against production URLs
-        env:
-          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.notchmetrics.com' }}
-          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://notchmetrics.com' }}
-          NEXT_PUBLIC_ASSETS_URL: ${{ vars.NOTCH_ASSETS_URL || 'https://assets.notchmetrics.com' }}
         run: ./scripts/mac.sh gen
 
       - name: Pre-flight
@@ -120,10 +128,13 @@ jobs:
       - name: Build and export
         run: ./scripts/build-mac.sh
 
-      - name: Read the build number out of the app that was actually built
+      - name: Check the app that was actually built
         id: built
-        # Out of the bundle, not out of Config/Version.xcconfig.
+        # Everything here reads the exported bundle, never the inputs that
+        # produced it. Both bugs this step exists for were caused by a later
+        # script rewriting a file an earlier check had already approved.
         #
+        # The build number, first.
         # `mac.sh gen` regenerates that file, and in Actions
         # sync-mac-version.mjs prefers GITHUB_RUN_NUMBER — *this* workflow's
         # run number, which is a different counter from the one version.yml
@@ -142,6 +153,23 @@ jobs:
 
           case "$build" in ''|*[!0-9]*) echo "::error::CFBundleVersion is '$build', not an integer."; exit 1 ;; esac
           [ "$build" -gt 0 ] || { echo "::error::CFBundleVersion is 0."; exit 1; }
+
+          # The URLs, read back out of the bundle.
+          #
+          # check-release-env.mjs runs before this and reads Config.xcconfig,
+          # which is an *input* — and build-mac.sh regenerates it, so the
+          # pre-flight was checking a file that no longer described the build.
+          # 0.3.0 passed that check and shipped pointing at localhost. This
+          # asks the artefact instead, after everything that could rewrite it.
+          for key in NMAPIBaseURL NMAppBaseURL NMAssetsBaseURL; do
+            url=$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist")
+            echo "$key = $url"
+            case "$url" in
+              ""|*localhost*|*127.0.0.1*|*0.0.0.0*)
+                echo "::error::$key in the built app is '$url'. Refusing to ship it."
+                exit 1 ;;
+            esac
+          done
 
           # The one that catches an xcconfig overridden by a build setting in
           # project.yml, which is otherwise invisible until a user downloads it.
