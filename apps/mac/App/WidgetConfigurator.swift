@@ -306,7 +306,13 @@ struct WidgetConfigPanel: View {
                         // wider than the pane — which pushed the row's own
                         // label down to one letter a line. 200 to line up with
                         // the Name field above it.
-                        .frame(width: 200)
+                        //
+                        // Trailing, because a pop-up button does not fill the
+                        // width it is given: it hugs its title and centres
+                        // inside the slot, which left a gap of half the spare
+                        // width to the right of it and put its edge somewhere
+                        // different from every text field in the pane.
+                        .frame(width: 200, alignment: .trailing)
                         .lineLimit(1)
                         .truncationMode(.tail)
                     }
