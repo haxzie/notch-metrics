@@ -1,5 +1,6 @@
 {
   "name": "@notch/mcp",
+  "private": true,
   "version": "0.2.0",
   "description": "Author custom Notch Metrics dashboard metrics from Claude Code or any MCP client.",
   "license": "MIT",
@@ -11,9 +12,6 @@
     "dist",
     "README.md"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "dev": "node build.mjs --watch",
     "build": "node build.mjs",
