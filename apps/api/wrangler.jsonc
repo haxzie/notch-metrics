@@ -83,15 +83,7 @@
         "DODOPAYMENT_MODE": "live",
         "DODOPAYMENT_MONTHLY_PRODUCT_ID": "pdt_0NpLLv7nGeZyq1nAvHVVj",
         "DODOPAYMENT_YEARLY_PRODUCT_ID": "pdt_0NpLM2d1sI71znxEzvgVl",
-        "POSTHOG_HOST": "https://us.i.posthog.com",
-        // Withholding 0.3.0: it shipped pointing at http://localhost:8787 and
-        // cannot reach anything. Set forward to the fix rather than to a
-        // previous version, because there is no previous version — 0.3.0 was
-        // the first release. The feed 404s until 0.3.1 is mirrored and then
-        // serves it with no second deploy.
-        //
-        // Delete this line once 0.3.1 is out and verified.
-        "PINNED_VERSION": "0.3.1"
+        "POSTHOG_HOST": "https://us.i.posthog.com"
       },
       "triggers": { "crons": ["*/5 * * * *"] },
       "routes": [{ "pattern": "api.notchmetrics.com", "custom_domain": true }],
