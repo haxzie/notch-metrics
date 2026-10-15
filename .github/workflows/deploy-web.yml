@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - "apps/web/**"
+      # /changelog is built from the Mac app's changelog, so a release that
+      # changes nothing else still has to rebuild the site. Without this a
+      # release tags, builds and mirrors, and the page it points at — the
+      # `notes` URL in latest.json — keeps describing the previous version,
+      # with the anchor for the new one missing entirely.
+      - "apps/mac/CHANGELOG.md"
       - "packages/ui/**"
       - "packages/env/**"
       - "packages/schemas/**"
