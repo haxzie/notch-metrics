@@ -48,9 +48,25 @@ Release notes live at `notchmetrics.com/changelog`, generated from
 
 **1. A tag pushed with `GITHUB_TOKEN` raises no `push` event.** GitHub's
 recursion guard suppresses it, so `release-mac.yml` never runs and nothing
-anywhere says why. `version.yml` therefore pushes the tag with `RELEASE_PAT`, a
-fine-grained token with `contents: write`. If a merge of the Version PR
-produced no release, check that secret first.
+anywhere says why.
+
+Knowing that is not enough, because **putting the PAT in the remote URL does
+not fix it.** `actions/checkout` leaves an
+`http.https://github.com/.extraheader` credential in the repository config, and
+git sends that Authorization header in preference to the basic auth in the URL
+— so `git remote set-url origin https://x-access-token:$PAT@…` pushes the tag
+successfully, as `GITHUB_TOKEN`, and the event is swallowed anyway. This has
+happened: `mac-v0.3.0` was created and `release-mac.yml` had zero runs.
+
+`version.yml` therefore creates the tag through the **API** — a tag object,
+then the ref — with `gh api`, which reads `GH_TOKEN` and cannot be overridden
+by a git config another action wrote. `RELEASE_PAT` is a fine-grained token
+with `contents: write`, and a bad one now fails the step loudly instead of
+being quietly bypassed.
+
+If a merge of the Version PR produced no release, the tag probably exists
+already: check `git ls-remote --tags origin`, then recover with the first row
+of the table below rather than re-tagging.
 
 **3. The changesets action rewrites the workspace under you.** It runs
 `pnpm run version` to build the Version PR, which consumes `.changeset/*.md`,
@@ -85,6 +101,7 @@ the release, not two.
 
 | What failed                                   | What to do                                                                                                                                                        |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The tag exists but nothing ran                | `gh workflow run release-mac.yml -f tag=mac-v0.3.0`. The trigger failed, not the release; the tag is fine and this is the same code path.                         |
 | The build, after the tag was pushed           | Fix, then re-run `release-mac.yml` by `workflow_dispatch` with the same tag. It is idempotent: `sign-and-notarize.sh` short-circuits on anything already stapled. |
 | The mirror, after the GitHub release exists   | `R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… scripts/mirror-release.sh mac-v0.2.0`                                                                  |
 | "Refuse to go backwards" fired                | Believe it. `latest.json` already points at something newer; you are mirroring an old tag.                                                                        |
