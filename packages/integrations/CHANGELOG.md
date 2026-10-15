@@ -1,5 +1,141 @@
 # @notch/integrations
 
+## 0.2.0
+
+### Minor Changes
+
+- [`ac5f044`](https://github.com/haxzie/notch-metrics/commit/ac5f04496d9c803fb9d60a26c63220416c081712) Thanks [@haxzie](https://github.com/haxzie)! - Tiles are clickable. A click opens the number where it lives: the metric's own
+  page where the connector declares one — a GitHub tile goes to its repository's
+  stargazers, issues or Actions, filtered to the branch the widget names — and
+  the provider's dashboard otherwise. The configure pane's new **Opens** field
+  overrides both, for anyone whose useful destination is their own board rather
+  than the provider's.
+
+  Connectors declare `dashboardUrl`, and a metric may declare a `linkTemplate`
+  whose `{param}` placeholders the widget's own parameters fill. Both are
+  catalogue fields, so a provider that moves its dashboard fixes every existing
+  tile with a Worker deploy rather than an app release.
+
+- [`a7a79c7`](https://github.com/haxzie/notch-metrics/commit/a7a79c7f5e14a07ca8f1e4d1576d4386af3a1380) Thanks [@haxzie](https://github.com/haxzie)! - A GitHub CI widget: point it at a repository and, if you want, one branch, and
+  it lists the last ten Actions runs newest first, each with its outcome as an
+  icon — passed, failed, still running, or skipped.
+
+  List rows now carry a `state` beside the provider's own `status`, so a tile can
+  draw an outcome without matching on a provider's vocabulary; a metric can also
+  declare `freshnessSeconds`, which this one sets to a minute. Without it a CI
+  feed would inherit the daily bucket's fifteen-minute cache and could report a
+  build that had since gone red.
+
+  Public repositories only, for now: this connection asks GitHub for
+  `public_repo`, because the read-only alternative for private ones does not
+  exist for an OAuth app.
+
+- [`07541c2`](https://github.com/haxzie/notch-metrics/commit/07541c2304d07ca3fdbd7937e8321cd552e8bf90) Thanks [@haxzie](https://github.com/haxzie)! - Refresh the numbers that can actually move, and say when you are
+
+  `MetricDescriptor.freshnessSeconds` existed but only GitHub's CI feed used it;
+  everything else sat on the granularity's fifteen minutes. Now every metric that
+  moves faster than its bucket says so.
+
+  Payments, revenue, orders and refunds re-read every 60s — a payment is an event
+  rather than a figure, and a feed of them is the one tile somebody watches
+  _because_ it changes. Subscription figures every 3 minutes, developer counts
+  every 2, spend and CRM every 5.
+
+  Product analytics, Search Console and YouTube are deliberately untouched. Their
+  data is delayed at the source — Search Console "runs two to three days behind",
+  in this repository's own words — so a faster poll spends a daily quota to get
+  the identical number back. The connector is what knows how fast its data moves,
+  which is why this lives on the descriptor rather than in a table keyed on
+  `MetricId`: YouTube's `revenue` and Stripe's are not the same number.
+
+  The client follows, or the TTL is academic: 30s with the notch open, 60s on AC,
+  180s on battery, and unchanged under Low Power Mode, thermal pressure, a
+  metered network or sleep. A faster poll costs a cached round trip rather than
+  somebody's rate limit — the TTL is what bounds provider calls, whatever the
+  client asks for.
+
+  Tiles also show a small spinner in the corner the share icon uses while a fetch
+  is in flight. Refresh deliberately keeps the last number on screen rather than
+  blanking the tile, so until now nothing said a figure was being checked at all.
+
+- [`ad1b0ff`](https://github.com/haxzie/notch-metrics/commit/ad1b0ff02da8e761104919882b2fabe87898997f) Thanks [@haxzie](https://github.com/haxzie)! - Notifications, and a notification centre in the notch
+
+  Providers now declare what they can notify about in their manifest, so a new
+  provider's notifications ship with a Worker deploy and no app release — the same
+  property widgets already have. The Worker evaluates the enabled ones on the cron
+  it already runs, reusing the series it was fetching anyway, so the feature costs
+  no extra provider calls.
+
+  The Mac shows them in a two-column pane inside the notch, connections on the
+  left. A new one drops out of the notch as a round app mark, falls clear, then
+  opens into a card with the headline and a line of detail — and goes back the
+  same way, closing to a circle before it rises, so it reads as being swallowed
+  rather than deleted. Clicking it opens the provider's own dashboard.
+
+  There is no `UNUserNotificationCenter` involved and so no permission prompt, no
+  entitlement and no Info.plist change: the notch is already on screen, so the app
+  owns the presentation.
+
+  Honest about what it is: notifications arrive within about five minutes for
+  polled providers, and nothing is delivered while the Mac is asleep. This is a log
+  you catch up on, not a pager.
+
+  Per-connection notification toggles live in Connections, beside rename and
+  disconnect: what Stripe is allowed to tell you is a fact about your Stripe
+  connection rather than an app-wide preference. The Notifications pane keeps what
+  genuinely is app-wide — whether banners show, how long they stay, the sound,
+  quiet hours — and links across.
+
+  A notification can also make a sound. Silent by default — adding audio to every
+  existing install on an update reads as a bug rather than a feature — with a
+  curated shortlist in Settings that previews each one as you select it.
+
+  Fixes a latent fault in `AppSettings` while adding preferences to it. It decoded
+  through Swift's synthesised initialiser, which ignores property defaults and
+  throws on any key the file does not have, so the first release to add a
+  preference would have silently reset every _existing_ user's launch-at-login,
+  display choice, hover timings and approved plugins. It now decodes field by
+  field, and a test pins it with a real pre-notifications settings file.
+
+  Also moves the existing five-minute metrics refresh onto the same energy gate.
+  It previously ran unconditionally — on battery, in Low Power Mode, with the lid
+  shut — and `stopRefreshing()` had no callers. On an eight-hour sleep that was
+  ~96 wake-ups and 96 hits against the user's provider rate limit.
+
+### Patch Changes
+
+- [`6e4cb6e`](https://github.com/haxzie/notch-metrics/commit/6e4cb6e7e2340e4725022d5b277cd862b50ad062) Thanks [@haxzie](https://github.com/haxzie)! - Fix connecting Claude, which failed with "api.anthropic.com returned 400"
+  however good the admin key was.
+
+  The cost report snaps `starting_at` up to the next UTC day and defaults
+  `ending_at` to the start of today, so the `now - 24h` the connect check used
+  snapped to exactly that default and the range was empty. Anthropic refuses
+  that with "ending date must be after starting date" — a 400 that reads as a
+  rejected credential. Outside the midnight UTC hour it failed every time, so
+  the connector could not be connected at all. The window is now a whole day,
+  and the spend query floors to the day as well rather than letting the snap
+  drop the first one.
+
+  A provider's own explanation is also no longer thrown away. A 4xx that is not
+  401, 403 or 429 now carries the message the provider sent, so the next bad
+  parameter names itself instead of showing a bare status.
+
+  And a refused cost report no longer takes the connection down with it. Cost
+  is a separate permission from usage on both providers, so a key that reads
+  tokens but not dollars connects with spend greyed out — that was the intent,
+  but only an explicit 403 took the narrow path, and any other failure was
+  fatal to a connection whose other metrics all worked.
+
+- [`33d152b`](https://github.com/haxzie/notch-metrics/commit/33d152b03528eefe0cb9e4a9868817b427b859c2) Thanks [@haxzie](https://github.com/haxzie)! - Reword the connector taglines and metric methodology strings without em
+  dashes, so they read correctly on the new public source pages as well as in
+  the app's tooltips.
+
+- [`5f27d66`](https://github.com/haxzie/notch-metrics/commit/5f27d66618798e78c35978dac6f7892da501a12c) Thanks [@haxzie](https://github.com/haxzie)! - Adds a sweep that puts every metric through every range its own manifest
+  offers, so a connector that advertises a window it cannot serve fails its
+  own test rather than a user's tile.
+- Updated dependencies [[`f98d0a9`](https://github.com/haxzie/notch-metrics/commit/f98d0a9e4ed812288a2353f9c4a9ed3ce894ce16), [`ad1b0ff`](https://github.com/haxzie/notch-metrics/commit/ad1b0ff02da8e761104919882b2fabe87898997f), [`eca363b`](https://github.com/haxzie/notch-metrics/commit/eca363ba62ade87c90157c57d50d66dcee447a2d)]:
+  - @notch/schemas@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

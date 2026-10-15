@@ -1,5 +1,214 @@
 # @notch/mac
 
+## 0.3.0
+
+### Minor Changes
+
+- [`799e800`](https://github.com/haxzie/notch-metrics/commit/799e8001b57b3ae506a6bfa6b7cda3acb224cdda) Thanks [@haxzie](https://github.com/haxzie)! - The Integrations pane has a search field above the list. It matches a
+  connector's name, tagline and keywords as well as its metrics' labels, so
+  "mrr" finds the providers that can show you one — the same matching the
+  widget browser uses, rather than a second one that disagrees with it.
+  Categories with nothing in them drop out while you type.
+
+- [`ac5f044`](https://github.com/haxzie/notch-metrics/commit/ac5f04496d9c803fb9d60a26c63220416c081712) Thanks [@haxzie](https://github.com/haxzie)! - Tiles are clickable. A click opens the number where it lives: the metric's own
+  page where the connector declares one — a GitHub tile goes to its repository's
+  stargazers, issues or Actions, filtered to the branch the widget names — and
+  the provider's dashboard otherwise. The configure pane's new **Opens** field
+  overrides both, for anyone whose useful destination is their own board rather
+  than the provider's.
+
+  Connectors declare `dashboardUrl`, and a metric may declare a `linkTemplate`
+  whose `{param}` placeholders the widget's own parameters fill. Both are
+  catalogue fields, so a provider that moves its dashboard fixes every existing
+  tile with a Worker deploy rather than an app release.
+
+- [`a7a79c7`](https://github.com/haxzie/notch-metrics/commit/a7a79c7f5e14a07ca8f1e4d1576d4386af3a1380) Thanks [@haxzie](https://github.com/haxzie)! - A GitHub CI widget: point it at a repository and, if you want, one branch, and
+  it lists the last ten Actions runs newest first, each with its outcome as an
+  icon — passed, failed, still running, or skipped.
+
+  List rows now carry a `state` beside the provider's own `status`, so a tile can
+  draw an outcome without matching on a provider's vocabulary; a metric can also
+  declare `freshnessSeconds`, which this one sets to a minute. Without it a CI
+  feed would inherit the daily bucket's fifteen-minute cache and could report a
+  build that had since gone red.
+
+  Public repositories only, for now: this connection asks GitHub for
+  `public_repo`, because the read-only alternative for private ones does not
+  exist for an OAuth app.
+
+- [`a3e451f`](https://github.com/haxzie/notch-metrics/commit/a3e451fda95d9d3db175e407a9ccefd82d241ba4) Thanks [@haxzie](https://github.com/haxzie)! - The app now keeps a log on disk at
+  `~/Library/Application Support/NotchMetrics/logs/app-<date>.log`: every
+  request with its status and timing, every failed widget with the server's
+  own reason, and the build and server it started against. Five days are
+  kept. Anything shaped like a token or a key is blanked before it is
+  written.
+
+  A tile that fails on one range and not another, or only on one person's
+  account, previously left nothing behind to look at — the unified log needs
+  Console.app and cannot be handed to anybody.
+
+  Switching a widget's range also no longer leaves the previous range's number
+  on screen when the new one fails. The last good figure is still held through
+  a provider blip, but only while it answers the same question; a 30-day total
+  under a title reading "7d" is worse than the error it was standing in for.
+
+- [`07541c2`](https://github.com/haxzie/notch-metrics/commit/07541c2304d07ca3fdbd7937e8321cd552e8bf90) Thanks [@haxzie](https://github.com/haxzie)! - Refresh the numbers that can actually move, and say when you are
+
+  `MetricDescriptor.freshnessSeconds` existed but only GitHub's CI feed used it;
+  everything else sat on the granularity's fifteen minutes. Now every metric that
+  moves faster than its bucket says so.
+
+  Payments, revenue, orders and refunds re-read every 60s — a payment is an event
+  rather than a figure, and a feed of them is the one tile somebody watches
+  _because_ it changes. Subscription figures every 3 minutes, developer counts
+  every 2, spend and CRM every 5.
+
+  Product analytics, Search Console and YouTube are deliberately untouched. Their
+  data is delayed at the source — Search Console "runs two to three days behind",
+  in this repository's own words — so a faster poll spends a daily quota to get
+  the identical number back. The connector is what knows how fast its data moves,
+  which is why this lives on the descriptor rather than in a table keyed on
+  `MetricId`: YouTube's `revenue` and Stripe's are not the same number.
+
+  The client follows, or the TTL is academic: 30s with the notch open, 60s on AC,
+  180s on battery, and unchanged under Low Power Mode, thermal pressure, a
+  metered network or sleep. A faster poll costs a cached round trip rather than
+  somebody's rate limit — the TTL is what bounds provider calls, whatever the
+  client asks for.
+
+  Tiles also show a small spinner in the corner the share icon uses while a fetch
+  is in flight. Refresh deliberately keeps the last number on screen rather than
+  blanking the tile, so until now nothing said a figure was being checked at all.
+
+- [`87a4447`](https://github.com/haxzie/notch-metrics/commit/87a4447e8e6010d49720749663928308557a59b9) Thanks [@haxzie](https://github.com/haxzie)! - The notch now gets out of the way when an action opens a window somewhere
+  else. Connecting an account, signing in and opening Settings all used to
+  leave the panel pinned on top of the browser tab or window they had just
+  brought forward.
+
+  A connect flow started from the notch also comes back to it. Finishing one
+  always landed on the Settings Integrations pane, which threw away the widget
+  you were half-way through configuring; now it reopens on the pane you left,
+  and only a flow started from Settings stays in Settings.
+
+- [`ad1b0ff`](https://github.com/haxzie/notch-metrics/commit/ad1b0ff02da8e761104919882b2fabe87898997f) Thanks [@haxzie](https://github.com/haxzie)! - Notifications, and a notification centre in the notch
+
+  Providers now declare what they can notify about in their manifest, so a new
+  provider's notifications ship with a Worker deploy and no app release — the same
+  property widgets already have. The Worker evaluates the enabled ones on the cron
+  it already runs, reusing the series it was fetching anyway, so the feature costs
+  no extra provider calls.
+
+  The Mac shows them in a two-column pane inside the notch, connections on the
+  left. A new one drops out of the notch as a round app mark, falls clear, then
+  opens into a card with the headline and a line of detail — and goes back the
+  same way, closing to a circle before it rises, so it reads as being swallowed
+  rather than deleted. Clicking it opens the provider's own dashboard.
+
+  There is no `UNUserNotificationCenter` involved and so no permission prompt, no
+  entitlement and no Info.plist change: the notch is already on screen, so the app
+  owns the presentation.
+
+  Honest about what it is: notifications arrive within about five minutes for
+  polled providers, and nothing is delivered while the Mac is asleep. This is a log
+  you catch up on, not a pager.
+
+  Per-connection notification toggles live in Connections, beside rename and
+  disconnect: what Stripe is allowed to tell you is a fact about your Stripe
+  connection rather than an app-wide preference. The Notifications pane keeps what
+  genuinely is app-wide — whether banners show, how long they stay, the sound,
+  quiet hours — and links across.
+
+  A notification can also make a sound. Silent by default — adding audio to every
+  existing install on an update reads as a bug rather than a feature — with a
+  curated shortlist in Settings that previews each one as you select it.
+
+  Fixes a latent fault in `AppSettings` while adding preferences to it. It decoded
+  through Swift's synthesised initialiser, which ignores property defaults and
+  throws on any key the file does not have, so the first release to add a
+  preference would have silently reset every _existing_ user's launch-at-login,
+  display choice, hover timings and approved plugins. It now decodes field by
+  field, and a test pins it with a real pre-notifications settings file.
+
+  Also moves the existing five-minute metrics refresh onto the same energy gate.
+  It previously ran unconditionally — on battery, in Low Power Mode, with the lid
+  shut — and `stopRefreshing()` had no callers. On an eight-hour sleep that was
+  ~96 wake-ups and 96 hits against the user's provider rate limit.
+
+- [#3](https://github.com/haxzie/notch-metrics/pull/3) [`eca363b`](https://github.com/haxzie/notch-metrics/commit/eca363ba62ade87c90157c57d50d66dcee447a2d) Thanks [@haxzie](https://github.com/haxzie)! - Notch Metrics updates itself. The Updates pane checks the release feed, offers
+  the version it finds, downloads it, checks it and swaps the app over, and a
+  coloured chip in the bottom corner of the notch says so without anybody going
+  looking in Settings.
+
+  The installing half already existed. What is new is everything that decides
+  whether to install anything: a six-hourly poll, the build-number comparison,
+  the download with a progress bar, and the states the pane draws. A build this
+  Mac cannot run reads as up to date rather than as a failure, a half-written
+  download is thrown away rather than offered, and a verified one survives a
+  relaunch so quitting mid-update does not mean fetching it again.
+
+  The feed is the Worker's, with the bucket as a fallback for the case the Worker
+  is down. A 404 from the Worker is treated as an answer rather than as a reason
+  to read the bucket, which is what keeps `PINNED_VERSION` able to pull a bad
+  release back.
+
+### Patch Changes
+
+- [`046c445`](https://github.com/haxzie/notch-metrics/commit/046c4455e99d0653fc83e675e9c40058acda5114) Thanks [@haxzie](https://github.com/haxzie)! - Line the account picker up with the fields above it
+
+  A SwiftUI pop-up button does not fill the width it is given: it hugs its title
+  and centres inside the slot. The 200pt frame that lines the picker up with the
+  Name field was therefore leaving half the spare width as a gap to its right,
+  and putting the control's edge somewhere different from every text field in
+  the pane. Trailing alignment puts it back on the same line.
+
+- [`a99fa5b`](https://github.com/haxzie/notch-metrics/commit/a99fa5b2a15a57a942f6de809dd74bc4d4cc5071) Thanks [@haxzie](https://github.com/haxzie)! - Changing a widget's settings now visibly refetches it. The tile drops to its
+  loading skeleton — or to the last number it has for the range you picked —
+  instead of leaving the previous window's figure sitting there, and the
+  request for the settings you just moved off is cancelled rather than left to
+  land on top of the new one. Rapid changes coalesce into one fetch instead of
+  one per keystroke.
+
+- [#3](https://github.com/haxzie/notch-metrics/pull/3) [`eca363b`](https://github.com/haxzie/notch-metrics/commit/eca363ba62ade87c90157c57d50d66dcee447a2d) Thanks [@haxzie](https://github.com/haxzie)! - The download button goes through the release feed rather than reading the
+  bucket directly, so withholding a release withholds it from the website as well
+  as from the app. Release notes are at notchmetrics.com/changelog, generated
+  from the app's own changelog.
+
+- [`4ada868`](https://github.com/haxzie/notch-metrics/commit/4ada8686f1d0312b61e127600b03d6ecc11b666f) Thanks [@haxzie](https://github.com/haxzie)! - Fix widget ranges erroring on the AI connectors. A widget froze its bucket
+  when it was created — the first one its metric listed, which is `hour` for
+  both OpenAI and Claude — and kept sending it as the range moved, so a
+  90-day tile asked for ninety days of hourly buckets and the connector
+  refused a walk it could not finish. The bucket now follows the range, the
+  way the server and the range picker already assumed.
+
+- [`6c8cb2c`](https://github.com/haxzie/notch-metrics/commit/6c8cb2c88390b25559d83361fd09c4d315514f53) Thanks [@haxzie](https://github.com/haxzie)! - "Mark all read" in the notification centre now actually marks the rows read.
+  The inbox held read state alongside the notifications rather than on them, and
+  every row, badge and bold title reads it off the notification itself, so the
+  button changed only the count in the sidebar and left the list looking
+  untouched. Marking one connection read also told the server to clear the whole
+  inbox, which another Mac would then agree with.
+
+- [`4f0ae49`](https://github.com/haxzie/notch-metrics/commit/4f0ae493a06d3fee928830337b84cf3bc0b7e3a5) Thanks [@haxzie](https://github.com/haxzie)! - Steadier resize handle: the pointer turns into a resize cursor the first time
+  it reaches the handle rather than the second, the panel's bottom edge no longer
+  eases and snaps on two clocks while the handle is held, and letting go settles
+  onto the row instead of jumping to it.
+
+  The "+3 below" label is now a button — a chevron centred just above the handle
+  that scrolls down a screenful, and hides once the last widget is in view.
+
+- [`b1ad4ea`](https://github.com/haxzie/notch-metrics/commit/b1ad4eaec4d2eed0ff1491d92e24ec06cae4c10d) Thanks [@haxzie](https://github.com/haxzie)! - The range picker now offers only the ranges a metric can actually answer
+  for. Every connector has declared which buckets its metrics support since
+  the first one shipped, and nothing read it — all five ranges were offered
+  for everything, so picking one the metric could not serve came back as an
+  error on the tile. On the AI connectors that was "12m" on any metric and
+  "24h" on spend, which both report once a day. A widget already saved on a
+  range its metric cannot serve is moved to the nearest one that works when
+  its settings are opened.
+
+  Changing a setting no longer resets the widget's size. The configure pane
+  held a copy of the widget taken when it opened and wrote the whole copy back
+  on every edit, so resizing a tile with the pane still open and then touching
+  any control sprang it back to the size it had been.
+
 ## 0.2.0
 
 ### Minor Changes
