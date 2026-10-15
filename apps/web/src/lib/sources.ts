@@ -251,7 +251,7 @@ export function generatedSourceFaq(
     },
     {
       question: `What does ${manifest.name} in the notch cost?`,
-      answer: `Every connector is included, with no per-integration charge. Notch Metrics is $14 a month or $79 a year, after a seven-day trial that needs no card. ${manifest.name} counts as one of the connectors on every plan.`,
+      answer: `Every connector is included, with no per-integration charge. Notch Metrics is $9 a month or $49 a year, after a seven-day trial that needs no card. ${manifest.name} counts as one of the connectors on every plan.`,
     },
   ];
 
@@ -309,7 +309,7 @@ export function generatedMetricFaq(
 
   faq.push({
     question: `What does it cost to put ${full} in the notch?`,
-    answer: `$14 a month, or $79 a year, with every connector included and no per-integration charge. The seven-day trial needs no card, so you can see your own ${metric.label.toLowerCase()} before deciding.`,
+    answer: `$9 a month, or $49 a year, with every connector included and no per-integration charge. The seven-day trial needs no card, so you can see your own ${metric.label.toLowerCase()} before deciding.`,
   });
 
   return faq;

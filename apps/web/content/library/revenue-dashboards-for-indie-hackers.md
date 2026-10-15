@@ -23,7 +23,7 @@ faq:
     answer: >-
       It depends on how many places your money arrives. One Stripe account and
       one number: MRRDock, free and open source. Several sources plus traffic
-      and search: Notch Metrics, $14 a month or $79 a year with fourteen
+      and search: Notch Metrics, $9 a month or $49 a year with fourteen
       connectors included.
   - question: Do I need a paid analytics tool as an indie hacker?
     answer: >-
@@ -40,12 +40,12 @@ faq:
 
 ## TL;DR
 
-| If you                                         | Use               | Price                |
-| ---------------------------------------------- | ----------------- | -------------------- |
-| Take money in one place, want one number       | MRRDock           | Free, MIT            |
-| Take money in several places, check constantly | **Notch Metrics** | **$14/mo or $79/yr** |
-| Are under $180K ARR and want analysis          | Baremetrics       | Free to $180K ARR    |
-| Want the full detail, occasionally             | Stripe Dashboard  | Free                 |
+| If you                                         | Use               | Price               |
+| ---------------------------------------------- | ----------------- | ------------------- |
+| Take money in one place, want one number       | MRRDock           | Free, MIT           |
+| Take money in several places, check constantly | **Notch Metrics** | **$9/mo or $49/yr** |
+| Are under $180K ARR and want analysis          | Baremetrics       | Free to $180K ARR   |
+| Want the full detail, occasionally             | Stripe Dashboard  | Free                |
 
 Prices checked on 11 October 2026.
 
@@ -120,7 +120,7 @@ For anything with no connector, a coding agent writes a
 [custom metric](/blog/writing-a-custom-metric) over MCP: one JavaScript
 module on your own Mac, secrets in the Keychain.
 
-**Price.** $14/month or $79/year. Seven-day trial, no card.
+**Price.** $9/month or $49/year. Seven-day trial, no card.
 
 [Download Notch Metrics](/download)
 

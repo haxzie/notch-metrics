@@ -39,13 +39,13 @@ faq:
 
 ## TL;DR
 
-| Option                | Price                | What you give up                      |
-| --------------------- | -------------------- | ------------------------------------- |
-| MRRDock               | Free, MIT licensed   | Keys on your laptop, revenue only     |
-| Orbl (base app)       | Free                 | Revenue integrations need $39 Premium |
-| Baremetrics free tier | Free to $180K ARR    | Price steps up as you grow            |
-| Stripe Dashboard      | Free                 | It is a browser tab                   |
-| **Notch Metrics**     | **$14/mo or $79/yr** | Nothing on this list, for a price     |
+| Option                | Price               | What you give up                      |
+| --------------------- | ------------------- | ------------------------------------- |
+| MRRDock               | Free, MIT licensed  | Keys on your laptop, revenue only     |
+| Orbl (base app)       | Free                | Revenue integrations need $39 Premium |
+| Baremetrics free tier | Free to $180K ARR   | Price steps up as you grow            |
+| Stripe Dashboard      | Free                | It is a browser tab                   |
+| **Notch Metrics**     | **$9/mo or $49/yr** | Nothing on this list, for a price     |
 
 Prices checked on 11 October 2026.
 
@@ -160,7 +160,7 @@ one of them.
 **You do not want a key on your laptop.** This is the one that is hard to fix
 for free, because the free model depends on being local.
 
-That is where [Notch Metrics](/) sits: $14 a month or $79 a year, fourteen
+That is where [Notch Metrics](/) sits: $9 a month or $49 a year, fourteen
 connectors with no per-integration charge, and keys that are encrypted on the
 server and never reach the Mac at all. The numbers live in the MacBook notch,
 so there is nothing to open.

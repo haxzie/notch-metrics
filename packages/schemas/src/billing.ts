@@ -55,11 +55,11 @@ export interface PlanOption {
  * product in the Dodo dashboard.
  */
 export const PLANS: Record<"pro" | "pro_annual", PlanOption> = {
-  pro: { id: "pro", interval: "month", amount: 1400, currency: "USD" },
-  pro_annual: { id: "pro_annual", interval: "year", amount: 7900, currency: "USD" },
+  pro: { id: "pro", interval: "month", amount: 900, currency: "USD" },
+  pro_annual: { id: "pro_annual", interval: "year", amount: 4900, currency: "USD" },
 };
 
-/** `1400` → `"$14"`, and `7900` → `"$79"`. Whole amounts lose the `.00`. */
+/** `900` → `"$9"`, and `4900` → `"$49"`. Whole amounts lose the `.00`. */
 export function formatPrice(amount: number, currency: string, locale = "en-US"): string {
   return new Intl.NumberFormat(locale, {
     style: "currency",

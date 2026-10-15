@@ -29,7 +29,7 @@ faq:
   - question: Is there a free Stripe menu bar app instead?
     answer: >-
       There are several free menu bar apps that show Stripe MRR. Notch Metrics
-      is $14 a month or $79 a year, and what you get for it is every connector
+      is $9 a month or $49 a year, and what you get for it is every connector
       with no per-integration charge, server-side key storage so no credential
       sits on your Mac, and custom metrics for numbers no connector covers.
   - question: How often does the Stripe MRR widget refresh?
@@ -100,6 +100,6 @@ conversion happens on the way out.
 ## Getting it
 
 Apple silicon, macOS 14 and later. Seven days of everything, with no card,
-then $14 a month or $79 a year with every connector included.
+then $9 a month or $49 a year with every connector included.
 
 [Download Notch Metrics](/download), connect Stripe, and close the tab.

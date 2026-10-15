@@ -88,6 +88,6 @@ Revenue also comes from [Stripe](/sources/stripe),
 
 ## Getting it
 
-Apple silicon, macOS 14 and later. Seven days with no card, then $14 a month
-or $79 a year with every connector included.
+Apple silicon, macOS 14 and later. Seven days with no card, then $9 a month
+or $49 a year with every connector included.
 [Download Notch Metrics](/download).

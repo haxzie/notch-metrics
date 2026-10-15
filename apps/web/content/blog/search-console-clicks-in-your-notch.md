@@ -88,5 +88,5 @@ Traffic from [Plausible](/sources/plausible) and
 [Stripe](/sources/stripe), video from [YouTube](/sources/youtube).
 [Every source](/sources).
 
-Apple silicon, macOS 14 and later. Seven days with no card, then $14 a month
-or $79 a year. [Download Notch Metrics](/download).
+Apple silicon, macOS 14 and later. Seven days with no card, then $9 a month
+or $49 a year. [Download Notch Metrics](/download).
