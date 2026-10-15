@@ -78,16 +78,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Anything other than README.md and config.json is a pending
-          # changeset, which means the Version PR is open and this version is
-          # not the one to release.
-          pending=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
-          if [ "$pending" != "0" ]; then
-            echo "$pending changeset(s) still pending; the Version PR is not merged yet."
+          # Everything here reads $GITHUB_SHA — the commit that was pushed to
+          # main — and never the working tree or HEAD.
+          #
+          # `changesets/action` runs `pnpm run version` in this workspace to
+          # build the Version PR: that consumes .changeset/*.md, bumps
+          # package.json, and leaves HEAD on the commit it made on the PR
+          # branch. A step reading the working tree therefore sees the *next*
+          # version with no changesets pending, on every run — so this tagged
+          # 0.3.0 while the Version PR was still open, pointing at a commit
+          # that was not on main and never would be once the PR was squashed.
+          pending=$(git ls-tree -r --name-only "$GITHUB_SHA" .changeset \
+            | grep '\.md$' | grep -cv '/README\.md$' || true)
+          if [ "${pending:-0}" != "0" ]; then
+            echo "$pending changeset(s) still pending on main; the Version PR is not merged yet."
             exit 0
           fi
 
-          version=$(node -p "require('./apps/mac/package.json').version")
+          version=$(git show "$GITHUB_SHA:apps/mac/package.json" \
+            | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
           tag="mac-v$version"
 
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
@@ -101,7 +110,9 @@ jobs:
           # Annotated. `--follow-tags` pushes annotated tags only and silently
           # ignores lightweight ones, so `git tag "$tag"` here would look like
           # it worked and leave the tag nowhere.
-          git tag -a "$tag" -m "Notch Metrics $version"
+          # `$GITHUB_SHA`, not HEAD: see above — HEAD is wherever the
+          # changesets action left it, which is the Version PR's branch.
+          git tag -a "$tag" "$GITHUB_SHA" -m "Notch Metrics $version"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin "$tag"
           echo "pushed $tag — release-mac.yml takes it from here."

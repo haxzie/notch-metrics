@@ -44,13 +44,23 @@ Release notes live at `notchmetrics.com/changelog`, generated from
 `apps/mac/CHANGELOG.md`. The repository is private, so a GitHub release URL in
 `latest.json` is a sign-in wall for everybody but the author.
 
-## The two traps that make a release silently do nothing
+## The three traps that make a release silently do nothing
 
 **1. A tag pushed with `GITHUB_TOKEN` raises no `push` event.** GitHub's
 recursion guard suppresses it, so `release-mac.yml` never runs and nothing
 anywhere says why. `version.yml` therefore pushes the tag with `RELEASE_PAT`, a
 fine-grained token with `contents: write`. If a merge of the Version PR
 produced no release, check that secret first.
+
+**3. The changesets action rewrites the workspace under you.** It runs
+`pnpm run version` to build the Version PR, which consumes `.changeset/*.md`,
+bumps `package.json` and leaves HEAD on the PR branch's commit. Any later step
+in that job which reads the working tree sees _the next version, with nothing
+pending_ — on every run, including the ones where the Version PR is still open.
+The tag step therefore reads `$GITHUB_SHA` for all three of its questions (are
+there changesets, what is the version, what gets tagged) and never HEAD. This
+trap has fired once already: it tagged `mac-v0.3.0` at a commit on
+`changeset-release/main`, which is a commit that main would never contain.
 
 **2. `--follow-tags` pushes annotated tags only.** `git tag mac-v0.2.0` without
 `-a` reports success and leaves the tag on your machine. Always `git tag -a`.
