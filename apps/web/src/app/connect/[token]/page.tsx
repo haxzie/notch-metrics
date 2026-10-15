@@ -447,7 +447,7 @@ function Shell({
   connector?: { id: string; name: string; accentColor: string };
 }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
+    <main className="dark-surface mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
       {connector ? (
         <ConnectPair connector={connector} />
       ) : (

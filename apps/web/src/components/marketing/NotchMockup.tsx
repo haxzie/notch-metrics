@@ -7,41 +7,140 @@ import { PERSONAS, type Widget } from "./personas";
  * Drawn rather than screenshotted so it stays sharp at any width and so the
  * numbers can be whatever reads well. The layout matches the app's canvas:
  * six columns, with 2x2s, 2x1s and 1x1s packed the way a real one looks once
- * somebody has set it up. No menu bar: the notch hangs from the top edge of
- * the display, and the real one leaves the bar untouched.
+ * somebody has set it up.
+ *
+ * The menu bar is drawn because the notch is only legible against it. On a
+ * bare wallpaper a black rounded shape reads as a floating widget; sitting
+ * in the bar, over the menus, it reads as the hardware it hangs from.
  */
 export function NotchMockup({
-  variant = "expanded",
   widgets = PERSONAS[0]?.widgets ?? [],
+  controls,
 }: {
-  variant?: "expanded" | "collapsed";
   widgets?: Widget[];
+  /** Anything that belongs on the desktop under the notch, like the setup
+      picker on the home page. Inside the screen rather than under the frame,
+      so the mockup stays one object. */
+  controls?: React.ReactNode;
 }) {
-  const expanded = variant === "expanded";
   return (
-    <div className="relative overflow-hidden rounded-[28px] border border-white/[0.09] bg-[#0c0b0f] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.9)]">
-      {/* Wallpaper. */}
+    /* No bottom edge. A display with all four sides drawn is a picture of a
+       Mac sitting on the page; one that runs off the bottom is the Mac the
+       reader is looking at. The fade below does the cutting, so there is no
+       hard line anywhere. */
+    <div className="relative">
+      <div className="rounded-t-[34px] bg-black px-[7px] pt-[7px]">
+        <div className="relative overflow-hidden rounded-t-[27px] bg-[#f1ecf5]">
+          <MenuBar />
+
+          <div className="relative h-[590px] sm:h-[620px]">
+            <ExpandedNotch widgets={widgets} />
+            {controls && (
+              <div className="absolute inset-x-0 bottom-[148px] z-20 flex justify-center px-4">
+                {controls}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* The paper, brought up over the bottom of the screen. It has to be
+          the page's own colour rather than a mask: the frame is black to its
+          edge, and a mask would fade the desktop and the bezel at different
+          rates and leave the bezel as two grey legs. */}
       <div
         aria-hidden
-        className="absolute inset-0"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[128px]"
         style={{
           background:
-            "radial-gradient(90% 70% at 20% 110%, rgba(216,25,194,0.55), transparent 60%), radial-gradient(70% 60% at 85% 100%, rgba(255,193,7,0.45), transparent 60%), radial-gradient(60% 50% at 60% 40%, rgba(88,40,140,0.5), transparent 70%), linear-gradient(180deg, #110d1c 0%, #1a1026 100%)",
+            "linear-gradient(to bottom, rgba(251,250,252,0) 0%, rgba(251,250,252,0.72) 46%, rgba(251,250,252,0.97) 72%, #fbfafc 86%)",
         }}
       />
+    </div>
+  );
+}
 
-      <div className={`relative ${expanded ? "h-[500px] sm:h-[520px]" : "h-[170px]"}`}>
-        {expanded ? <ExpandedNotch widgets={widgets} /> : <CollapsedNotch />}
+const MENUS = ["Finder", "File", "Edit", "View", "Window", "Help"];
+
+/**
+ * The macOS menu bar, which the notch hangs into.
+ *
+ * Absolutely placed so it sits under the notch panel rather than pushing it
+ * down: on a real Mac the bar runs edge to edge behind the camera housing,
+ * and the app's panel covers the middle of it when it opens.
+ */
+function MenuBar() {
+  return (
+    <div
+      aria-hidden
+      className="text-ink/70 absolute inset-x-0 top-0 z-0 flex h-[30px] items-center justify-between px-3 text-[11px]"
+    >
+      <div className="flex items-center gap-3.5">
+        <AppleMenuMark />
+        {MENUS.map((menu, index) => (
+          <span key={menu} className={index === 0 ? "text-ink font-semibold" : ""}>
+            {menu}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-2.5">
+        <BatteryMark />
+        <WifiMark />
+        <ControlCentreMark />
+        <span className="font-medium tabular-nums">Wed 9:41 AM</span>
       </div>
     </div>
   );
 }
 
-function CollapsedNotch() {
+function AppleMenuMark() {
   return (
-    <div className="absolute left-1/2 top-0 h-[30px] w-[180px] -translate-x-1/2 rounded-b-[14px] bg-black">
-      <Flares />
-    </div>
+    <svg viewBox="0 0 24 24" className="fill-ink h-[13px] w-[13px]">
+      <path d="M16.3 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.9-3-.8c-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .8 1.1 1.7 2.3 2.9 2.2 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.2.9-1.2 1.3-2.5 1.3-2.5s-2.5-1-2.5-3.6ZM14 5.9c.6-.8 1-1.9.9-3-.9 0-2.1.6-2.7 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.5 2.8-1.3Z" />
+    </svg>
+  );
+}
+
+function BatteryMark() {
+  return (
+    <svg viewBox="0 0 28 14" className="h-[11px] w-[22px]">
+      <rect
+        x="0.75"
+        y="0.75"
+        width="22.5"
+        height="12.5"
+        rx="3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity="0.45"
+        strokeWidth="1.5"
+      />
+      <rect x="2.75" y="2.75" width="15" height="8.5" rx="1.75" fill="currentColor" />
+      <path
+        d="M25.5 5v4c1-.4 1.5-1.1 1.5-2s-.5-1.6-1.5-2Z"
+        fill="currentColor"
+        fillOpacity="0.45"
+      />
+    </svg>
+  );
+}
+
+function WifiMark() {
+  return (
+    <svg viewBox="0 0 24 18" className="h-[12px] w-[16px] fill-current">
+      <path d="M12 16.5 9.2 13a3.6 3.6 0 0 1 5.6 0ZM12 9.2c-1.9 0-3.6.8-4.8 2.1L5.4 9c1.7-1.7 4-2.8 6.6-2.8s4.9 1.1 6.6 2.8l-1.8 2.3A6.4 6.4 0 0 0 12 9.2ZM12 2.4c-3.6 0-6.9 1.5-9.2 3.9L1 3.9A15.3 15.3 0 0 1 12 .6c4.3 0 8.2 1.7 11 4.4L21 7.3A12.3 12.3 0 0 0 12 2.4Z" />
+    </svg>
+  );
+}
+
+function ControlCentreMark() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-[12px] w-[12px] fill-none stroke-current">
+      <rect x="3" y="3.5" width="14" height="5.5" rx="2.75" strokeWidth="1.4" />
+      <circle cx="7" cy="6.25" r="1.4" fill="currentColor" stroke="none" />
+      <rect x="3" y="11" width="14" height="5.5" rx="2.75" strokeWidth="1.4" />
+      <circle cx="13" cy="13.75" r="1.4" fill="currentColor" stroke="none" />
+    </svg>
   );
 }
 
@@ -53,21 +152,23 @@ const SPANS: Record<NonNullable<Widget["span"]>, string> = {
 
 function ExpandedNotch({ widgets }: { widgets: Widget[] }) {
   return (
-    <>
-      <div className="absolute left-1/2 top-0 w-[min(660px,94%)] -translate-x-1/2 rounded-b-[30px] bg-black p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.9)]">
-        <Flares />
-        <div className="grid grid-cols-6 grid-rows-3 gap-2">
-          {widgets.map((widget, index) => (
-            <WidgetTile key={index} widget={widget} />
-          ))}
-        </div>
+    <div className="absolute left-1/2 top-[-1px] z-10 w-[min(660px,94%)] -translate-x-1/2 rounded-b-[30px] bg-black p-3 pt-[13px] shadow-[0_30px_60px_-20px_rgba(11,10,14,0.45)]">
+      <Flares />
+      <DrawerHeader />
+      <div className="grid grid-cols-6 grid-rows-3 gap-2">
+        {widgets.map((widget, index) => (
+          <WidgetTile key={index} widget={widget} />
+        ))}
       </div>
 
-      {/* The pointer, resting where it would be to keep the notch open. */}
+      {/* The pointer, resting on the bottom edge of the panel, which is where
+          it has to be for the notch to stay open. Placed against the panel
+          rather than the screen so it still touches the edge when a setup
+          with fewer widgets makes the panel shorter. */}
       <svg
         aria-hidden
         viewBox="0 0 24 24"
-        className="absolute left-[calc(50%+120px)] top-[328px] h-6 w-6 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)] sm:top-[338px]"
+        className="absolute -bottom-2 right-[22%] h-6 w-6 drop-shadow-[0_2px_6px_rgba(11,10,14,0.35)]"
       >
         <path
           d="M5 3.5 19 10.2l-6.1 1.9-2.6 5.9Z"
@@ -77,7 +178,95 @@ function ExpandedNotch({ widgets }: { widgets: Widget[] }) {
           strokeLinejoin="round"
         />
       </svg>
-    </>
+    </div>
+  );
+}
+
+/**
+ * The row along the top of the open drawer, as the app draws it: the app's
+ * own name and controls on the left, the widget editor and the close button
+ * on the right.
+ *
+ * It is what tells a visitor the black shape is an app and not a screenshot
+ * of a dashboard, so the mockup is wrong without it.
+ */
+function DrawerHeader() {
+  return (
+    <div className="mb-2.5 flex items-center justify-between px-1 pt-0.5">
+      <div className="flex items-center gap-2.5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" width={16} height={16} />
+        <span className="text-[12px] font-semibold text-white/90">Notch Metrics</span>
+        <span className="flex items-center gap-2 text-white/45">
+          <RefreshGlyph />
+          <BellGlyph />
+          <GearGlyph />
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-2.5 py-1 text-[11px] font-medium text-white/80">
+          <GridGlyph />
+          Edit Widgets
+        </span>
+        <span className="text-white/45">
+          <CloseGlyph />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const GLYPH = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  className: "h-3.5 w-3.5",
+} as const;
+
+function RefreshGlyph() {
+  return (
+    <svg {...GLYPH} aria-hidden>
+      <path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4h-4" />
+    </svg>
+  );
+}
+
+function BellGlyph() {
+  return (
+    <svg {...GLYPH} aria-hidden>
+      <path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6M13.7 20a2 2 0 0 1-3.4 0" />
+    </svg>
+  );
+}
+
+function GearGlyph() {
+  return (
+    <svg {...GLYPH} aria-hidden>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4M18.7 18.7l-1.4-1.4M6.7 6.7 5.3 5.3" />
+    </svg>
+  );
+}
+
+function GridGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3" aria-hidden>
+      <circle cx="7" cy="7" r="2.4" />
+      <circle cx="17" cy="7" r="2.4" />
+      <circle cx="7" cy="17" r="2.4" />
+      <circle cx="17" cy="17" r="2.4" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg {...GLYPH} aria-hidden>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
   );
 }
 
@@ -219,7 +408,7 @@ function Sparkline({ colour, points }: { colour: string; points: number[] }) {
  * glass is black there too, so each is a square with a quarter circle of
  * wallpaper cut out of its outer-bottom corner.
  */
-function Flares() {
+export function Flares() {
   const r = 14;
   const flare = (side: "left" | "right") => ({
     width: r,

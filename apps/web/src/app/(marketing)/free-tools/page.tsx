@@ -60,13 +60,12 @@ export default function FreeToolsIndex() {
   return (
     <main className="relative isolate mx-auto max-w-3xl px-6 pb-16 pt-36">
       <JsonLd data={jsonLd} />
-      <div className="hero-glow" />
 
       <p className="eyebrow">Free tools</p>
       <h1 className="mt-4 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
         Calculators for the numbers you <span className="accent">track</span>
       </h1>
-      <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-white/60">
+      <p className="text-ink/60 mt-5 max-w-xl text-pretty text-lg leading-relaxed">
         {tools.length} free calculators, no signup. Each one runs in your browser and explains the
         formula, what it leaves out, and where the figure usually goes wrong.
       </p>
@@ -74,18 +73,18 @@ export default function FreeToolsIndex() {
       <div className="mt-14 flex flex-col gap-12">
         {groups.map((group) => (
           <section key={group.category}>
-            <h2 className="text-sm font-medium text-white/70">{group.label}</h2>
+            <h2 className="text-ink/70 text-sm font-medium">{group.label}</h2>
             <ul className="panel mt-5 overflow-hidden">
               {group.tools.map((tool) => (
-                <li key={tool.slug} className="border-t border-white/[0.07] first:border-t-0">
+                <li key={tool.slug} className="border-ink/[0.07] border-t first:border-t-0">
                   <Link
                     href={`/free-tools/${tool.slug}`}
-                    className="group block px-6 py-5 transition hover:bg-white/[0.04] sm:px-7"
+                    className="hover:bg-ink/[0.04] group block px-6 py-5 transition sm:px-7"
                   >
-                    <h3 className="text-[17px] font-semibold tracking-tight transition group-hover:text-white">
+                    <h3 className="group-hover:text-ink text-[17px] font-semibold tracking-tight transition">
                       {tool.name}
                     </h3>
-                    <p className="mt-1.5 text-pretty text-[15px] leading-relaxed text-white/55">
+                    <p className="text-ink/55 mt-1.5 text-pretty text-[15px] leading-relaxed">
                       {tool.description}
                     </p>
                   </Link>
@@ -100,14 +99,14 @@ export default function FreeToolsIndex() {
 
       <aside className="panel mt-16 flex flex-col items-start gap-4 p-7">
         <h2 className="text-lg font-semibold tracking-tight">Stop calculating these by hand</h2>
-        <p className="text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 text-[15px] leading-relaxed">
           Notch Metrics reads MRR, revenue, churn and more from{" "}
           <Link href="/sources">fourteen sources</Link> and puts them in the MacBook notch. Hover
           the camera housing to look, move away and it is gone.
         </p>
         <Link
           href="/download"
-          className="inline-flex h-10 items-center rounded-full bg-white px-5 text-sm font-semibold text-black transition hover:bg-white/90"
+          className="bg-ink hover:bg-ink/85 inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold text-white transition"
         >
           Download for Mac
         </Link>

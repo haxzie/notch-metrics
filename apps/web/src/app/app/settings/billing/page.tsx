@@ -141,7 +141,7 @@ function Option({
       }`}
     >
       {badge && (
-        <span className="brand-gradient absolute -top-2.5 right-4 rounded-full px-2 py-0.5 text-xs font-semibold text-black">
+        <span className="brand-gradient absolute -top-2.5 right-4 rounded-full px-2 py-0.5 text-xs font-semibold text-white">
           {badge}
         </span>
       )}
@@ -152,7 +152,7 @@ function Option({
         onClick={onChoose}
         disabled={disabled}
         className={`mt-4 w-full rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
-          highlighted ? "brand-gradient text-black" : "border border-white/15 hover:bg-white/5"
+          highlighted ? "brand-gradient text-white" : "border border-white/15 hover:bg-white/5"
         }`}
       >
         {busy ? "Opening checkout…" : "Choose"}

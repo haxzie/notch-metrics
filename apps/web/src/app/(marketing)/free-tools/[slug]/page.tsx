@@ -86,18 +86,17 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
   return (
     <main className="relative isolate mx-auto max-w-3xl px-6 pb-16 pt-36">
       <JsonLd data={jsonLd} />
-      <div className="hero-glow" />
 
-      <nav aria-label="Breadcrumb" className="font-mono text-[11px] tracking-wide text-white/40">
+      <nav aria-label="Breadcrumb" className="text-ink/40 font-mono text-[11px] tracking-wide">
         <ol className="flex flex-wrap items-center gap-2">
           <li>
-            <Link href="/" className="transition hover:text-white">
+            <Link href="/" className="hover:text-ink transition">
               Home
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
-            <Link href="/free-tools" className="transition hover:text-white">
+            <Link href="/free-tools" className="hover:text-ink transition">
               Free tools
             </Link>
           </li>
@@ -108,7 +107,7 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
       <h1 className="mt-3 text-balance text-[2.125rem] font-semibold leading-[1.1] tracking-tight sm:text-[2.75rem]">
         {tool.heading}
       </h1>
-      <p className="mt-5 text-pretty text-[17px] leading-relaxed text-white/60">{tool.lede}</p>
+      <p className="text-ink/60 mt-5 text-pretty text-[17px] leading-relaxed">{tool.lede}</p>
 
       <Calculator slug={tool.slug} />
 
@@ -120,7 +119,7 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
           <section key={section.heading}>
             <h2 className="text-xl font-semibold tracking-tight">{section.heading}</h2>
             {section.paragraphs.map((paragraph) => (
-              <p key={paragraph} className="mt-4 text-[15px] leading-relaxed text-white/60">
+              <p key={paragraph} className="text-ink/60 mt-4 text-[15px] leading-relaxed">
                 {paragraph}
               </p>
             ))}
@@ -131,14 +130,14 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
       <FaqSection entries={tool.faq} />
 
       {tool.related.length > 0 && (
-        <section className="mt-16 border-t border-white/[0.06] pt-10">
+        <section className="border-ink/[0.06] mt-16 border-t pt-10">
           <h2 className="text-xl font-semibold tracking-tight">Related</h2>
           <ul className="mt-5 flex flex-col gap-2.5">
             {tool.related.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className="text-[15px] text-white/70 underline-offset-4 transition hover:text-white hover:underline"
+                  className="text-ink/70 hover:text-ink text-[15px] underline-offset-4 transition hover:underline"
                 >
                   {item.label}
                 </Link>
@@ -150,14 +149,14 @@ export default async function ToolPage({ params }: { params: Promise<{ slug: str
 
       <aside className="panel mt-16 flex flex-col items-start gap-4 p-7">
         <h2 className="text-lg font-semibold tracking-tight">Or never calculate it again</h2>
-        <p className="text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 text-[15px] leading-relaxed">
           {SITE_NAME} reads these numbers from{" "}
           <Link href="/sources">Stripe, Polar, Shopify and eleven more</Link>, and keeps them in the
           MacBook notch. Seven days of everything, with no card.
         </p>
         <Link
           href="/download"
-          className="inline-flex h-10 items-center rounded-full bg-white px-5 text-sm font-semibold text-black transition hover:bg-white/90"
+          className="bg-ink hover:bg-ink/85 inline-flex h-10 items-center rounded-full px-5 text-sm font-semibold text-white transition"
         >
           Download for Mac
         </Link>

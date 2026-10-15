@@ -76,7 +76,7 @@ export default function DesktopAuth() {
   }, []);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
+    <main className="dark-surface mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="" width={36} height={36} />
 
@@ -90,7 +90,7 @@ export default function DesktopAuth() {
           </p>
           <a
             href={loginUrl()}
-            className="brand-gradient rounded-full px-5 py-2.5 text-sm font-semibold text-black"
+            className="brand-gradient rounded-full px-5 py-2.5 text-sm font-semibold text-white"
           >
             Continue
           </a>

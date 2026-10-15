@@ -47,6 +47,8 @@ export function PlanPicker() {
           price={formatPrice(PLANS.pro.amount, "USD")}
           cadence="per month"
           note="Cancel whenever you like."
+          aside="One coffee a month."
+          asideIcon={<CoffeeGlyph />}
           busy={busy === "pro"}
           disabled={busy !== null}
           onChoose={() => void choose("pro")}
@@ -57,7 +59,9 @@ export function PlanPicker() {
           cadence="per year"
           was={formatPrice(PLANS.pro.amount * 12, "USD")}
           note={`${formatPrice(Math.round(PLANS.pro_annual.amount / 12), "USD")} a month, billed once.`}
-          badge={`Best value · Save ${annualSavingPercent()}%`}
+          aside="Best value for money."
+          asideIcon={<TagGlyph />}
+          badge={`Save ${annualSavingPercent()}%`}
           highlighted
           busy={busy === "pro_annual"}
           disabled={busy !== null}
@@ -66,7 +70,7 @@ export function PlanPicker() {
       </div>
 
       {problem && (
-        <p className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+        <p className="mt-6 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-center text-sm text-red-700">
           {problem}
         </p>
       )}
@@ -80,6 +84,8 @@ function PlanCard({
   cadence,
   was,
   note,
+  aside,
+  asideIcon,
   badge,
   highlighted,
   busy,
@@ -92,6 +98,9 @@ function PlanCard({
   /** What twelve months would have cost, shown struck through beside the price. */
   was?: string;
   note: string;
+  /** The price in something the reader already buys. */
+  aside?: string;
+  asideIcon?: React.ReactNode;
   badge?: string;
   highlighted?: boolean;
   busy: boolean;
@@ -99,41 +108,96 @@ function PlanCard({
   onChoose: () => void;
 }) {
   return (
+    /* The yearly card is the brand's amber, flat. The site has one accent
+       and this is the one place it is worth spending it: the card a reader
+       is meant to pick should not be the same white as the one beside it. */
     <section
-      className={`relative flex flex-col rounded-[28px] border p-7 ${
+      className={`relative flex flex-col rounded-[28px] p-7 ${
         highlighted
-          ? "border-white/20 bg-white/[0.06] shadow-[0_30px_80px_-30px_rgba(216,25,194,0.45)]"
-          : "border-white/[0.08] bg-white/[0.025]"
+          ? "bg-brand shadow-[0_30px_80px_-30px_rgba(255,193,7,0.7)]"
+          : "border-ink/[0.08] border bg-white"
       }`}
     >
       {badge && (
-        <span className="brand-gradient absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold text-black shadow-[0_6px_20px_-6px_rgba(216,25,194,0.7)]">
+        <span className="bg-ink absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold text-white">
           {badge}
         </span>
       )}
-      <h2 className="text-sm font-medium text-white/60">{title}</h2>
+      <h2 className={`text-sm font-medium ${highlighted ? "text-ink/70" : "text-ink/60"}`}>
+        {title}
+      </h2>
       <p className="mt-3 flex items-baseline gap-2">
         {was && (
-          <span className="text-2xl font-medium tracking-tight text-white/35 line-through decoration-white/40 decoration-2">
+          <span
+            className={`text-2xl font-medium tracking-tight line-through decoration-2 ${
+              highlighted ? "text-ink/40 decoration-ink/45" : "text-ink/35 decoration-ink/40"
+            }`}
+          >
             {was}
           </span>
         )}
         <span className="text-5xl font-semibold tracking-tight">{price}</span>
-        <span className="text-sm text-white/50">{cadence}</span>
+        <span className={`text-sm ${highlighted ? "text-ink/60" : "text-ink/50"}`}>{cadence}</span>
       </p>
-      <p className="mt-2 text-sm text-white/45">{note}</p>
+      <p className={`mt-2 pb-8 text-sm ${highlighted ? "text-ink/60" : "text-ink/45"}`}>{note}</p>
+      {aside && (
+        <p
+          className={`-mt-4 mb-8 flex w-fit items-center gap-2 rounded-full py-1.5 pl-2.5 pr-3.5 text-[13px] font-medium ${
+            highlighted ? "bg-ink/10 text-ink/75" : "bg-ink/[0.05] text-ink/60"
+          }`}
+        >
+          {asideIcon}
+          {aside}
+        </p>
+      )}
       <button
         type="button"
         onClick={onChoose}
         disabled={disabled}
-        className={`mt-8 h-11 w-full rounded-full text-sm font-semibold transition disabled:opacity-50 ${
+        className={`mt-auto h-11 w-full shrink-0 rounded-full text-sm font-semibold transition disabled:opacity-50 ${
           highlighted
-            ? "bg-white text-black hover:bg-white/90"
-            : "border border-white/15 text-white hover:bg-white/5"
+            ? "bg-ink hover:bg-ink/85 text-white"
+            : "border-ink/15 text-ink hover:bg-ink/5 border"
         }`}
       >
         {busy ? "Opening checkout…" : "Start free trial"}
       </button>
     </section>
+  );
+}
+
+/**
+ * The cup beside the monthly price. Ink, with the steam in the one accent
+ * the site has, so it reads as a drawing rather than as a second brand.
+ */
+function CoffeeGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" aria-hidden>
+      <path
+        d="M8 2.5c-.6 1 -.6 1.8 0 2.8M12 2c-.7 1.2 -.7 2.2 0 3.4M16 2.5c-.6 1 -.6 1.8 0 2.8"
+        stroke="#ffc107"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path d="M4.5 9h13v5.5a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5V9Z" fill="currentColor" />
+      <path
+        d="M17.5 10.5h1.25a2.25 2.25 0 0 1 0 4.5H17.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
+/** The tag beside the yearly price, in the one accent the site has. */
+function TagGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" aria-hidden>
+      <path
+        d="M11.6 2.8 3.2 11.2a2 2 0 0 0 0 2.8l6.8 6.8a2 2 0 0 0 2.8 0l8.4-8.4V2.8h-9.6Z"
+        fill="currentColor"
+      />
+      <circle cx="17" cy="7" r="1.9" fill="#fff" />
+    </svg>
   );
 }

@@ -40,21 +40,21 @@ const COLUMNS: { title: string; links: { href: string; label: string; external?:
 
 export function SiteFooter() {
   return (
-    <footer className="relative mt-32 overflow-hidden border-t border-white/[0.06]">
+    <footer className="border-ink/[0.06] relative mt-32 overflow-hidden border-t">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 pb-10 pt-16 sm:grid-cols-[1.4fr_repeat(4,1fr)]">
         <div className="flex flex-col gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Notch Metrics" width={28} height={28} />
-          <p className="max-w-[16rem] text-sm leading-relaxed text-white/40">
+          <p className="text-ink/40 max-w-[16rem] text-sm leading-relaxed">
             Your business metrics, in the MacBook notch. Built for Apple silicon, macOS 14 and
             later.
           </p>
-          <p className="text-xs text-white/30">© {new Date().getFullYear()} Notch Metrics</p>
+          <p className="text-ink/30 text-xs">© {new Date().getFullYear()} Notch Metrics</p>
         </div>
 
         {COLUMNS.map((column) => (
           <div key={column.title}>
-            <h3 className="text-sm font-medium text-white/70">{column.title}</h3>
+            <h3 className="text-ink/70 text-sm font-medium">{column.title}</h3>
             <ul className="mt-4 flex flex-col gap-2.5">
               {column.links.map((link) => (
                 <li key={link.href}>
@@ -62,7 +62,7 @@ export function SiteFooter() {
                     href={link.href}
                     target={link.external ? "_blank" : undefined}
                     rel={link.external ? "noreferrer" : undefined}
-                    className="text-sm text-white/45 transition hover:text-white"
+                    className="text-ink/45 hover:text-ink text-sm transition"
                   >
                     {link.label}
                     {link.external && <span aria-hidden> ↗</span>}

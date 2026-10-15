@@ -82,18 +82,17 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
   return (
     <main className="relative isolate mx-auto max-w-3xl px-6 pb-16 pt-36">
       <JsonLd data={jsonLd} />
-      <div className="hero-glow" />
 
-      <nav aria-label="Breadcrumb" className="font-mono text-[11px] tracking-wide text-white/40">
+      <nav aria-label="Breadcrumb" className="text-ink/40 font-mono text-[11px] tracking-wide">
         <ol className="flex items-center gap-2">
           <li>
-            <Link href="/" className="transition hover:text-white">
+            <Link href="/" className="hover:text-ink transition">
               Home
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
-            <Link href="/sources" className="transition hover:text-white">
+            <Link href="/sources" className="hover:text-ink transition">
               Sources
             </Link>
           </li>
@@ -112,15 +111,15 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
           <h1 className="text-balance text-[2rem] font-semibold leading-[1.1] tracking-tight sm:text-[2.5rem]">
             {manifest.name} in the MacBook notch
           </h1>
-          <p className="mt-4 text-pretty text-[17px] leading-relaxed text-white/60">
+          <p className="text-ink/60 mt-4 text-pretty text-[17px] leading-relaxed">
             {copy?.lede ?? manifest.tagline}
           </p>
         </div>
       </header>
 
       {note && (
-        <p className="panel mt-8 p-4 text-sm leading-relaxed text-white/55">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-white/40">Beta</span>
+        <p className="panel text-ink/55 mt-8 p-4 text-sm leading-relaxed">
+          <span className="text-ink/40 font-mono text-[10px] uppercase tracking-wide">Beta</span>
           <br />
           {note}
         </p>
@@ -139,16 +138,16 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
             <li key={metric.id}>
               <Link
                 href={`${path}/${metricSlug(metric.id)}`}
-                className="panel flex flex-col gap-2 p-5 transition hover:bg-white/[0.05]"
+                className="panel hover:bg-ink/[0.05] flex flex-col gap-2 p-5 transition"
               >
                 <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <span className="text-[15px] font-medium">{metric.label}</span>
-                  <span className="font-mono text-[11px] tracking-wide text-white/30">
+                  <span className="text-ink/30 font-mono text-[11px] tracking-wide">
                     {granularityPhrase(metric)}
                     {metric.supportsSeries ? " · sparkline" : " · snapshot"}
                   </span>
                 </span>
-                <span className="text-sm leading-relaxed text-white/50">
+                <span className="text-ink/50 text-sm leading-relaxed">
                   <Ticks>{metric.methodology}</Ticks>
                 </span>
               </Link>
@@ -161,17 +160,17 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
         <h2 className="text-xl font-semibold tracking-tight">
           Connecting {manifest.name}, once, on the web
         </h2>
-        <p className="mt-4 text-[15px] leading-relaxed text-white/55">{authPhrase(manifest)}</p>
+        <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">{authPhrase(manifest)}</p>
 
         {manifest.authMode === "oauth2" && manifest.oauth ? (
           <>
-            <p className="mt-4 text-[15px] leading-relaxed text-white/55">
+            <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">
               The prompt asks for exactly this much:
             </p>
             <ul className="mt-3 flex flex-col gap-2">
               {manifest.oauth.scopeSummary.map((scope) => (
-                <li key={scope} className="text-[15px] leading-relaxed text-white/70">
-                  <span aria-hidden className="mr-2 text-white/30">
+                <li key={scope} className="text-ink/70 text-[15px] leading-relaxed">
+                  <span aria-hidden className="text-ink/30 mr-2">
                     ·
                   </span>
                   {scope}
@@ -179,7 +178,7 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
               ))}
             </ul>
             {manifest.oauth.requiresSelection && manifest.oauth.selectionLabel && (
-              <p className="mt-4 text-[15px] leading-relaxed text-white/55">
+              <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">
                 After authorising, you pick {manifest.oauth.selectionLabel.toLowerCase()}.
               </p>
             )}
@@ -188,36 +187,34 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
           <dl className="mt-5 flex flex-col gap-5">
             {manifest.fields.map((field) => (
               <div key={field.key}>
-                <dt className="text-[15px] font-medium text-white/90">
+                <dt className="text-ink/90 text-[15px] font-medium">
                   {field.label}
                   {!field.required && (
-                    <span className="ml-2 font-mono text-[10px] uppercase tracking-wide text-white/30">
+                    <span className="text-ink/30 ml-2 font-mono text-[10px] uppercase tracking-wide">
                       optional
                     </span>
                   )}
                 </dt>
                 {field.help && (
-                  <dd className="mt-1.5 text-[15px] leading-relaxed text-white/55">
+                  <dd className="text-ink/55 mt-1.5 text-[15px] leading-relaxed">
                     <Ticks>{field.help}</Ticks>
                   </dd>
                 )}
                 {field.placeholder && (
-                  <dd className="mt-1.5 font-mono text-[12px] text-white/35">
-                    {field.placeholder}
-                  </dd>
+                  <dd className="text-ink/35 mt-1.5 font-mono text-[12px]">{field.placeholder}</dd>
                 )}
               </div>
             ))}
           </dl>
         )}
 
-        <p className="mt-6 text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 mt-6 text-[15px] leading-relaxed">
           Your {manifest.name} credential is encrypted with its own key, bound to your account and
           the provider. Our server calls {manifest.name} and hands your Mac a normalised number, so
           the Mac app never holds the credential. Remove the integration and the encrypted key is
           deleted with it.
         </p>
-        <p className="mt-4 text-[13px] text-white/40">
+        <p className="text-ink/40 mt-4 text-[13px]">
           <a href={manifest.docsUrl} target="_blank" rel="noopener noreferrer">
             Where to find this in {manifest.name} ↗
           </a>
@@ -231,7 +228,7 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
             {manifest.keywords!.map((keyword) => (
               <li
                 key={keyword}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px] tracking-wide text-white/50"
+                className="border-ink/10 bg-ink/[0.04] text-ink/50 rounded-full border px-3 py-1 font-mono text-[11px] tracking-wide"
               >
                 {keyword}
               </li>
@@ -244,7 +241,7 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
 
       <aside className="panel mt-16 flex flex-col items-start gap-4 p-7">
         <h2 className="text-lg font-semibold tracking-tight">Put {manifest.name} in your notch</h2>
-        <p className="text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 text-[15px] leading-relaxed">
           Seven days of everything, with no card. Apple silicon, macOS 14 and later.
         </p>
         <DownloadButton />

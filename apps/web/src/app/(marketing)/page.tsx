@@ -1,25 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ConnectorGrid } from "@/components/marketing/ConnectorGrid";
+import { ConnectorMarquee } from "@/components/marketing/ConnectorMarquee";
 import { DownloadButton } from "@/components/marketing/DownloadButton";
-import { NotchMockup } from "@/components/marketing/NotchMockup";
+import { HeroGlyphs } from "@/components/marketing/HeroGlyphs";
+import { NotchBento } from "@/components/marketing/NotchBento";
 import { NotchShowcase } from "@/components/marketing/NotchShowcase";
 import { PricingSection } from "@/components/marketing/PricingSection";
-import { Feature, Pillar, Section, SecurityCard } from "@/components/marketing/primitives";
+import { SecuritySection } from "@/components/marketing/SecuritySection";
+import { Section } from "@/components/marketing/primitives";
 import { SiliconChip } from "@/components/marketing/SiliconChip";
-import {
-  ArrowRight,
-  ChipIcon,
-  CursorIcon,
-  GridIcon,
-  KeyIcon,
-  LinkIcon,
-  ListIcon,
-  NotchIcon,
-  RefreshIcon,
-  ShieldIcon,
-  TerminalIcon,
-} from "@/components/marketing/icons";
+import { AppleMark, ArrowRight } from "@/components/marketing/icons";
 import { connectable } from "@notch/integrations";
 import { JsonLd } from "@/components/JsonLd";
 import { graph, organizationJsonLd, softwareApplicationJsonLd, websiteJsonLd } from "@/lib/jsonld";
@@ -75,219 +65,96 @@ export default async function Home() {
 
       {/* Hero */}
       <section className="relative isolate px-6 pb-16 pt-32 sm:pt-40">
-        <div className="hero-glow" />
+        {/* The headline block is the positioning context for the scattered
+            marks, so they are placed against the text they have to miss
+            rather than against the whole section, which grows by the height
+            of the showcase below. */}
+        <div className="relative mx-auto max-w-3xl">
+          <HeroGlyphs />
 
-        <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
-          <Link
-            href="#integrations"
-            className="group flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-1 pr-3 text-[13px] text-white/70 transition hover:bg-white/[0.07] hover:text-white"
-          >
-            <span className="brand-gradient rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-black">
-              New
-            </span>
-            Polar, Paddle and RevenueCat
-            <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-          </Link>
+          <div className="relative flex flex-col items-center text-center">
+            <Link
+              href="#integrations"
+              className="border-ink/10 text-ink/70 hover:text-ink group flex items-center gap-2 rounded-full border bg-white/70 py-1 pl-1 pr-3 text-[13px] shadow-[0_6px_20px_-12px_rgba(11,10,14,0.4)] backdrop-blur-sm transition hover:bg-white"
+            >
+              <span className="brand-gradient rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                New
+              </span>
+              Polar, Paddle and RevenueCat
+              <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+            </Link>
 
-          <h1 className="mt-8 text-balance text-[2.75rem] font-semibold leading-[1.02] tracking-tight sm:text-6xl">
-            The dashboard you
-            <br />
-            never have to <span className="accent">open</span>
-          </h1>
+            <h1 className="mt-8 text-balance text-[3rem] font-bold leading-[0.95] tracking-[-0.035em] sm:text-[4.75rem]">
+              Put your <ChartGlyph /> metrics
+              <br />
+              in the notch <NotchGlyph />
+            </h1>
 
-          <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-white/60">
-            Revenue, MRR and subscribers from Stripe, Polar, Paddle and more, living in your
-            MacBook&rsquo;s notch. Hover to look. Move away and it&rsquo;s gone.
-          </p>
-
-          <div className="mt-9 flex flex-col items-center gap-4">
-            <DownloadButton size="lg" />
-            <p className="font-mono text-[11px] tracking-wide text-white/40">
-              {version ? `v${version} · ` : ""}Apple silicon · macOS 14+ · 7-day free trial
+            <p className="text-ink/60 mt-7 max-w-lg text-pretty text-lg leading-relaxed">
+              Notch Metrics puts your revenue, MRR and subscribers in your MacBook&rsquo;s notch.
+              Look up, and the number is already there.
             </p>
+
+            <div className="mt-9 flex flex-col items-center gap-4">
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <DownloadButton size="lg" />
+                <Link
+                  href="#integrations"
+                  className="border-ink/10 text-ink hover:border-ink/20 inline-flex h-12 items-center rounded-full border bg-white px-6 text-[15px] font-semibold shadow-[0_8px_24px_-14px_rgba(11,10,14,0.5)] transition"
+                >
+                  See what it shows
+                </Link>
+              </div>
+              <p className="text-ink/40 font-mono text-[11px] tracking-wide">
+                {version ? `v${version} · ` : ""}Apple silicon · macOS 14+ · 7-day free trial
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="mx-auto mt-16 max-w-4xl sm:mt-20">
+        <div className="mx-auto mt-16 max-w-5xl sm:mt-20">
           <NotchShowcase />
         </div>
       </section>
 
-      {/* Three promises */}
-      <section className="mx-auto grid max-w-4xl gap-10 px-6 py-16 sm:grid-cols-3 sm:py-20">
-        <Pillar icon={<NotchIcon />}>
-          No dock icon.
-          <br />
-          No menu bar clutter.
-        </Pillar>
-        <Pillar icon={<CursorIcon />}>
-          Hover to look.
-          <br />
-          Move away, it&rsquo;s gone.
-        </Pillar>
-        <Pillar icon={<KeyIcon />}>
-          Your API keys
-          <br />
-          never touch your Mac.
-        </Pillar>
-      </section>
+      <NotchBento />
 
-      {/* Lives in the notch */}
-      <Section
-        icon={<NotchIcon />}
-        title={
-          <>
-            Lives where you&rsquo;re <span className="accent">already</span> looking
-          </>
-        }
-        lede="The notch is a few hundred pixels of glass that every Mac app pretends is not there. Notch Metrics makes it the one place your numbers wait for you."
-      >
-        <div className="panel overflow-hidden">
-          <div className="p-3 sm:p-4">
-            <NotchMockup variant="collapsed" />
-          </div>
-          <div className="grid gap-8 px-8 pb-10 pt-6 sm:grid-cols-3">
-            <Feature icon={<CursorIcon />} title="Opens on hover">
-              Rest the pointer on the camera housing and the notch expands over whatever you are
-              doing. Leave, and it folds back to the shape it had.
-            </Feature>
-            <Feature icon={<GridIcon />} title="Four tile sizes">
-              Widgets go from a single square up to the full width. Drag to arrange them and resize
-              them in place, in the notch itself.
-            </Feature>
-            <Feature icon={<ListIcon />} title="Lists, not only numbers">
-              A recent-payments feed sits beside the headline figures, so you see who just paid
-              without opening a dashboard.
-            </Feature>
-          </div>
-        </div>
-      </Section>
-
-      {/* Connect once */}
+      {/* What the notch can hold */}
       <Section
         id="integrations"
-        icon={<LinkIcon />}
-        title={
-          <>
-            Connect once, <span className="accent">on the web</span>
-          </>
-        }
-        lede={`Sign in, paste a key or approve an OAuth prompt, and every Mac you own picks it up. ${connectable().length} connectors today, with more arriving without an app update.`}
+        title={<>Payments, analytics and code, side by side</>}
+        lede={`Stripe beside Plausible beside GitHub, on the same strip of glass. ${connectable().length} sources today, and a new one arrives without an app update.`}
       >
-        <div className="panel px-6 py-10 sm:px-10">
-          <ConnectorGrid />
-        </div>
-
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <SecurityCard icon={<ShieldIcon />} title="Encrypted per integration">
-            Each key is sealed with its own key, bound to your account and the provider. A row
-            copied anywhere else does not decrypt.
-          </SecurityCard>
-          <SecurityCard icon={<KeyIcon />} title="The app sees a number">
-            Our server talks to Stripe and hands your Mac a normalised series. The Mac app never
-            holds a provider key.
-          </SecurityCard>
-          <SecurityCard icon={<RefreshIcon />} title="Disconnect means gone">
-            Remove an integration and its encrypted key is deleted with it. There is no copy
-            anywhere else to clean up.
-          </SecurityCard>
-        </div>
+        <ConnectorMarquee />
       </Section>
 
-      {/* Custom metrics */}
-      <Section
-        icon={<TerminalIcon />}
-        title={
-          <>
-            Your agent can <span className="accent">add</span> metrics
-          </>
-        }
-        lede="A number we do not have a connector for is one prompt away. The MCP server lets Claude Code, or any MCP client, write a custom metric against any API."
-      >
-        <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
-          <div className="panel overflow-hidden">
-            <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-4 py-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-              <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-              <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-              <span className="ml-3 font-mono text-[11px] text-white/35">claude</span>
-            </div>
-            <div className="flex flex-col gap-5 p-5 font-mono text-[12.5px] leading-relaxed sm:p-6">
-              <p className="text-white/45">
-                <span className="text-white/25">$ </span>claude mcp add notch-metrics -- npx -y
-                notch-metrics-mcp
-              </p>
-              <p className="rounded-xl bg-white/[0.05] px-4 py-3 font-sans text-[14px] text-white/85">
-                Add a widget with the number of open issues on acme/app. Refresh it every ten
-                minutes.
-              </p>
-              <div className="flex flex-col gap-1.5 text-white/55">
-                <p>
-                  <span className="text-emerald-400">✓</span> describe_runtime
-                </p>
-                <p>
-                  <span className="text-emerald-400">✓</span> set_metric_secret{" "}
-                  <span className="text-white/35">GITHUB_TOKEN → Keychain</span>
-                </p>
-                <p>
-                  <span className="text-emerald-400">✓</span> test_metric{" "}
-                  <span className="text-white/35">→ 14 · 412 ms · 1 request to api.github.com</span>
-                </p>
-                <p>
-                  <span className="text-emerald-400">✓</span> create_metric{" "}
-                  <span className="text-white/35">open_issues</span>
-                </p>
-              </div>
-              <p className="text-white/85">
-                Done. Enable &ldquo;Open issues&rdquo; from the widget gallery to show it in the
-                notch.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <SecurityCard icon={<ChipIcon />} title="Runs on your Mac">
-              A metric is one file in Application Support, run by a runner built into the app. No
-              Node install, nothing uploaded.
-            </SecurityCard>
-            <SecurityCard icon={<KeyIcon />} title="Keys stay in the Keychain">
-              Secrets are declared, stored by macOS and handed to the runner over stdin. A metric
-              with a key written into it is refused.
-            </SecurityCard>
-            <SecurityCard icon={<ShieldIcon />} title="Contained, not sandboxed">
-              Each metric names the hosts it may call, and nothing else is reachable. It still runs
-              as you, like a script you wrote. Read what your agent writes.
-            </SecurityCard>
-          </div>
-        </div>
-      </Section>
+      <SecuritySection />
 
       <PricingSection />
 
-      {/* Designed for the Mac */}
+      {/* Designed for the Mac. The one dark card on a light page: it holds
+          the silicon chip, which is drawn as a chip and reads as a sticker
+          on paper. */}
       <section className="mx-auto max-w-5xl px-6 pt-28">
-        <div className="relative overflow-hidden rounded-[32px] border border-white/[0.08]">
-          <div
-            aria-hidden
-            className="absolute inset-0 -z-10"
-            style={{
-              background:
-                "radial-gradient(60% 80% at 15% 110%, rgba(216,25,194,0.32), transparent 70%), radial-gradient(50% 60% at 95% 0%, rgba(255,193,7,0.16), transparent 70%), #0b0a0e",
-            }}
-          />
+        <div className="bg-ink overflow-hidden rounded-[32px] shadow-[0_30px_80px_-40px_rgba(11,10,14,0.5)]">
           <div className="grid items-center gap-10 px-8 py-12 sm:px-12 lg:grid-cols-[1.1fr_1fr] lg:gap-6 lg:py-16">
             <div className="text-center lg:text-left">
-              <p className="eyebrow">Built for macOS 14 and later</p>
+              <p className="eyebrow !text-white/40">Built for macOS 14 and later</p>
               <h2 className="mt-2 text-5xl text-white sm:text-6xl">
                 Native to <span className="accent">Mac</span>
               </h2>
               <p className="mx-auto mt-5 max-w-md text-pretty text-white/60 lg:mx-0">
-                Native Swift, built for Apple silicon. Signed, notarised, and updated in place.
-                Every update is checked against both its hash and its Developer ID signature before
-                it is installed. No Electron, no browser engine, no dock icon.
+                Built for Apple silicon. It opens the moment you look up, keeps out of your way
+                while you work, and is light on memory and on your battery.
               </p>
               <div className="mt-8 flex justify-center lg:justify-start">
-                <DownloadButton size="lg" />
+                <Link
+                  href="/download"
+                  className="text-ink inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-[15px] font-semibold transition hover:bg-white/90"
+                >
+                  <AppleMark className="h-4 w-4" />
+                  Download for Mac
+                </Link>
               </div>
             </div>
             <div className="flex justify-center lg:justify-end">
@@ -296,6 +163,60 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      {/* The closing line the whole page is for. */}
+      <section className="relative isolate mx-auto max-w-3xl px-6 pb-8 pt-32 text-center">
+        <h2 className="text-balance text-[2.75rem] font-bold leading-[0.98] tracking-[-0.03em] sm:text-6xl">
+          Never miss
+          <br />a <span className="accent">number</span>.
+        </h2>
+        <p className="text-ink/60 mx-auto mt-6 max-w-md text-pretty text-lg leading-relaxed">
+          Seven days free, no card. Connect a source on the web, and every Mac you own picks it up.
+        </p>
+        <div className="mt-9 flex flex-col items-center gap-4">
+          <DownloadButton size="lg" />
+          <p className="text-ink/40 font-mono text-[11px] tracking-wide">
+            Apple silicon · macOS 14 or later
+          </p>
+        </div>
+      </section>
     </main>
+  );
+}
+
+/**
+ * The two drawings set into the headline.
+ *
+ * Drawn rather than typed as emoji: an emoji is a different face at a
+ * different weight on every machine, and on a Mac it would arrive full
+ * colour in the middle of a black headline. These are sized in `em`, so they
+ * ride the type down to the mobile size with it.
+ */
+function ChartGlyph() {
+  return (
+    <span className="bg-ink inline-flex h-[0.88em] w-[0.88em] translate-y-[0.04em] -rotate-6 items-center justify-center rounded-[0.24em] align-middle">
+      {/* The file, not the inline path: the mark's own colours are a
+          gradient defined inside it, and this is the one place on the page
+          that wants them rather than a flat fill. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.svg" alt="" className="h-[0.58em] w-[0.58em]" />
+      <span className="sr-only">(the Notch Metrics mark)</span>
+    </span>
+  );
+}
+
+/**
+ * The top of a MacBook display with the notch in it: black glass, a light
+ * desktop, and the notch hanging into it. The light screen is what makes the
+ * shape a notch; drawn as a black tab alone it read as a dash.
+ */
+function NotchGlyph() {
+  return (
+    <span className="bg-ink inline-block h-[0.72em] w-[1.3em] translate-y-[-0.04em] rounded-[0.2em] p-[0.07em] align-middle">
+      <span className="relative block h-full w-full overflow-hidden rounded-[0.13em] bg-[#f1ecf5]">
+        <span className="bg-ink absolute left-1/2 top-0 h-[36%] w-[40%] -translate-x-1/2 rounded-b-[0.07em]" />
+      </span>
+      <span className="sr-only">(the notch)</span>
+    </span>
   );
 }

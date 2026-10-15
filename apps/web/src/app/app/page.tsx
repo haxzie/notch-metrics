@@ -82,7 +82,7 @@ export default function Overview() {
         </p>
         <a
           href="/download"
-          className="brand-gradient mt-3 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-black"
+          className="brand-gradient mt-3 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white"
         >
           Download for macOS
         </a>

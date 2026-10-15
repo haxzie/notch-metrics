@@ -68,7 +68,7 @@ function LoginForm() {
 
 export default function Login() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-3 px-6 text-center">
+    <main className="dark-surface mx-auto flex min-h-screen max-w-sm flex-col items-center justify-center gap-3 px-6 text-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="" width={40} height={40} />
       <Suspense fallback={<p className="text-white/60">Loading…</p>}>

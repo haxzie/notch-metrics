@@ -31,15 +31,15 @@ export function FaqSection({
   if (entries.length === 0) return null;
 
   return (
-    <section className="mt-16 border-t border-white/[0.06] pt-10">
+    <section className="border-ink/[0.06] mt-16 border-t pt-10">
       <h2 id={id} className="text-xl font-semibold tracking-tight">
         {heading}
       </h2>
       <dl className="mt-6 flex flex-col gap-6">
         {entries.map((entry) => (
           <div key={entry.question}>
-            <dt className="text-[15px] font-medium text-white/90">{entry.question}</dt>
-            <dd className="mt-2 text-[15px] leading-relaxed text-white/55">{entry.answer}</dd>
+            <dt className="text-ink/90 text-[15px] font-medium">{entry.question}</dt>
+            <dd className="text-ink/55 mt-2 text-[15px] leading-relaxed">{entry.answer}</dd>
           </div>
         ))}
       </dl>

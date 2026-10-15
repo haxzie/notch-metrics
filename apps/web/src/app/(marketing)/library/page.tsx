@@ -63,32 +63,31 @@ export default function LibraryIndex() {
   return (
     <main className="relative isolate mx-auto max-w-3xl px-6 pb-16 pt-36">
       <JsonLd data={jsonLd} />
-      <div className="hero-glow" />
 
       <p className="eyebrow">Library</p>
       <h1 className="mt-4 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
         The reference <span className="accent">shelf</span>
       </h1>
-      <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-white/60">{LEDE}</p>
+      <p className="text-ink/60 mt-5 max-w-xl text-pretty text-lg leading-relaxed">{LEDE}</p>
 
       {entries.length === 0 ? (
-        <p className="mt-16 text-white/40">Nothing here yet.</p>
+        <p className="text-ink/40 mt-16">Nothing here yet.</p>
       ) : (
         <div className="mt-14 flex flex-col gap-12">
           {groups.map((group) => (
             <section key={group.kind}>
-              <h2 className="text-sm font-medium text-white/70">{group.label}</h2>
+              <h2 className="text-ink/70 text-sm font-medium">{group.label}</h2>
               <ul className="mt-5 flex flex-col gap-3">
                 {group.entries.map((entry) => (
                   <li key={entry.slug}>
                     <Link
                       href={`/library/${entry.slug}`}
-                      className="panel group block p-5 transition hover:border-white/15 hover:bg-white/[0.05]"
+                      className="panel hover:border-ink/15 hover:bg-ink/[0.05] group block p-5 transition"
                     >
-                      <h3 className="text-pretty text-[17px] font-semibold tracking-tight transition group-hover:text-white">
+                      <h3 className="group-hover:text-ink text-pretty text-[17px] font-semibold tracking-tight transition">
                         {entry.title}
                       </h3>
-                      <p className="mt-2 text-pretty text-[15px] leading-relaxed text-white/55">
+                      <p className="text-ink/55 mt-2 text-pretty text-[15px] leading-relaxed">
                         {entry.description}
                       </p>
                     </Link>

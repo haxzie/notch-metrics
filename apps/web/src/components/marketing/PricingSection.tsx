@@ -64,10 +64,10 @@ export function PricingSection() {
     <section id="pricing" className="mx-auto max-w-5xl scroll-mt-28 px-6 pt-28">
       <header className="mx-auto max-w-2xl text-center">
         <p className="eyebrow">Pricing</p>
-        <h2 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-[2.75rem]">
+        <h2 className="mt-4 text-balance text-[2.5rem] font-bold leading-[1.02] tracking-[-0.03em] sm:text-[3.25rem]">
           Every connector. One <span className="accent">price</span>.
         </h2>
-        <p className="mx-auto mt-5 max-w-xl text-pretty text-[17px] leading-relaxed text-white/55">
+        <p className="text-ink/55 mx-auto mt-5 max-w-xl text-pretty text-[17px] leading-relaxed">
           Try it for a week with your real numbers, no card. Then{" "}
           {formatPrice(PLANS.pro.amount, "USD")} a month, or{" "}
           {formatPrice(PLANS.pro_annual.amount, "USD")} a year and keep {annualSavingPercent()}% of
@@ -83,13 +83,13 @@ export function PricingSection() {
         <p className="eyebrow text-center">Every plan includes</p>
         <ul className="mt-6 grid gap-x-10 gap-y-3 sm:grid-cols-2">
           {INCLUDED.map((item) => (
-            <li key={item} className="flex items-start gap-3 text-[15px] text-white/75">
+            <li key={item} className="text-ink/75 flex items-start gap-3 text-[15px]">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
               {item}
             </li>
           ))}
         </ul>
-        <p className="mt-8 text-center text-xs text-white/35">
+        <p className="text-ink/35 mt-8 text-center text-xs">
           Prices in USD. Tax may apply at checkout. Payment handled by Dodo Payments.
         </p>
       </div>
@@ -101,14 +101,14 @@ export function PricingSection() {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
         />
         <h3 className="text-center text-2xl font-semibold tracking-tight">Questions</h3>
-        <div className="mt-6 divide-y divide-white/[0.07] border-y border-white/[0.07]">
+        <div className="divide-ink/[0.07] border-ink/[0.07] mt-6 divide-y border-y">
           {FAQ.map((item) => (
             <details key={item.q} className="group">
-              <summary className="flex cursor-pointer items-center justify-between gap-6 py-5 text-[15px] font-medium text-white/85 transition hover:text-white">
+              <summary className="text-ink/85 hover:text-ink flex cursor-pointer items-center justify-between gap-6 py-5 text-[15px] font-medium transition">
                 {item.q}
-                <Plus className="h-4 w-4 shrink-0 text-white/40 transition group-open:rotate-45" />
+                <Plus className="text-ink/40 h-4 w-4 shrink-0 transition group-open:rotate-45" />
               </summary>
-              <p className="text-pretty pb-6 text-[15px] leading-relaxed text-white/55">{item.a}</p>
+              <p className="text-ink/55 text-pretty pb-6 text-[15px] leading-relaxed">{item.a}</p>
             </details>
           ))}
         </div>

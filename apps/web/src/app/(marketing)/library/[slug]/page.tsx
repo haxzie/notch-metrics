@@ -92,18 +92,17 @@ export default async function LibraryPage({ params }: { params: Promise<{ slug: 
   return (
     <main className="relative isolate mx-auto max-w-2xl px-6 pb-16 pt-36">
       <JsonLd data={jsonLd} />
-      <div className="hero-glow" />
 
-      <nav aria-label="Breadcrumb" className="font-mono text-[11px] tracking-wide text-white/40">
+      <nav aria-label="Breadcrumb" className="text-ink/40 font-mono text-[11px] tracking-wide">
         <ol className="flex items-center gap-2">
           <li>
-            <Link href="/" className="transition hover:text-white">
+            <Link href="/" className="hover:text-ink transition">
               Home
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
-            <Link href="/library" className="transition hover:text-white">
+            <Link href="/library" className="hover:text-ink transition">
               Library
             </Link>
           </li>
@@ -116,7 +115,7 @@ export default async function LibraryPage({ params }: { params: Promise<{ slug: 
           {entry.title}
         </h1>
 
-        <div className="mt-5 flex flex-wrap items-center gap-x-2.5 font-mono text-[11px] tracking-wide text-white/40">
+        <div className="text-ink/40 mt-5 flex flex-wrap items-center gap-x-2.5 font-mono text-[11px] tracking-wide">
           <time dateTime={entry.date}>{formatDate(entry.date)}</time>
           <span aria-hidden>·</span>
           <span>{entry.readingMinutes} min read</span>
@@ -136,7 +135,7 @@ export default async function LibraryPage({ params }: { params: Promise<{ slug: 
                 <li key={heading.id}>
                   <a
                     href={`#${heading.id}`}
-                    className="text-[14px] text-white/55 transition hover:text-white"
+                    className="text-ink/55 hover:text-ink text-[14px] transition"
                   >
                     {heading.text}
                   </a>
@@ -158,7 +157,7 @@ export default async function LibraryPage({ params }: { params: Promise<{ slug: 
 
       <aside className="panel mt-16 flex flex-col items-start gap-4 p-7">
         <h2 className="text-lg font-semibold tracking-tight">Your numbers, in the notch</h2>
-        <p className="text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 text-[15px] leading-relaxed">
           Notch Metrics puts revenue, MRR and subscribers in the MacBook notch. Hover to look, move
           away and it is gone. Seven days of everything, with no card.
         </p>

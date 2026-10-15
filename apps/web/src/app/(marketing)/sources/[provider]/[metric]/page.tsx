@@ -97,24 +97,23 @@ export default async function MetricPage({
   return (
     <main className="relative isolate mx-auto max-w-3xl px-6 pb-16 pt-36">
       <JsonLd data={jsonLd} />
-      <div className="hero-glow" />
 
-      <nav aria-label="Breadcrumb" className="font-mono text-[11px] tracking-wide text-white/40">
+      <nav aria-label="Breadcrumb" className="text-ink/40 font-mono text-[11px] tracking-wide">
         <ol className="flex flex-wrap items-center gap-2">
           <li>
-            <Link href="/" className="transition hover:text-white">
+            <Link href="/" className="hover:text-ink transition">
               Home
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
-            <Link href="/sources" className="transition hover:text-white">
+            <Link href="/sources" className="hover:text-ink transition">
               Sources
             </Link>
           </li>
           <li aria-hidden>/</li>
           <li>
-            <Link href={`/sources/${manifest.id}`} className="transition hover:text-white">
+            <Link href={`/sources/${manifest.id}`} className="hover:text-ink transition">
               {manifest.name}
             </Link>
           </li>
@@ -134,9 +133,7 @@ export default async function MetricPage({
             {title} in the MacBook notch
           </h1>
           {copy?.lede && (
-            <p className="mt-4 text-pretty text-[17px] leading-relaxed text-white/60">
-              {copy.lede}
-            </p>
+            <p className="text-ink/60 mt-4 text-pretty text-[17px] leading-relaxed">{copy.lede}</p>
           )}
         </div>
       </header>
@@ -151,10 +148,10 @@ export default async function MetricPage({
             descriptor, it is specific, and it is the one thing on this page
             that nobody else on the web has written. Paraphrasing it would
             cost the page the only sentence worth ranking. */}
-        <p className="mt-4 text-[17px] leading-relaxed text-white/70">
+        <p className="text-ink/70 mt-4 text-[17px] leading-relaxed">
           <Ticks>{metric.methodology}</Ticks>
         </p>
-        <p className="mt-4 text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">
           {unitDescription(metric.unit)}
         </p>
       </section>
@@ -164,11 +161,11 @@ export default async function MetricPage({
         <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
           <div>
             <dt className="eyebrow">Buckets</dt>
-            <dd className="mt-1.5 text-[15px] text-white/70">{granularityPhrase(metric)}</dd>
+            <dd className="text-ink/70 mt-1.5 text-[15px]">{granularityPhrase(metric)}</dd>
           </div>
           <div>
             <dt className="eyebrow">Shape</dt>
-            <dd className="mt-1.5 text-[15px] text-white/70">
+            <dd className="text-ink/70 mt-1.5 text-[15px]">
               {isList
                 ? "A feed of the ten most recent rows, with their total as the headline"
                 : metric.supportsSeries
@@ -178,13 +175,13 @@ export default async function MetricPage({
           </div>
           <div>
             <dt className="eyebrow">Against last period</dt>
-            <dd className="mt-1.5 text-[15px] text-white/70">
+            <dd className="text-ink/70 mt-1.5 text-[15px]">
               {metric.supportsCompare ? "Yes" : "No"}
             </dd>
           </div>
           <div>
             <dt className="eyebrow">Fetched from</dt>
-            <dd className="mt-1.5 font-mono text-[13px] text-white/60">
+            <dd className="text-ink/60 mt-1.5 font-mono text-[13px]">
               {manifest.allowedHosts.join(", ")}
             </dd>
           </div>
@@ -196,14 +193,12 @@ export default async function MetricPage({
             <dl className="mt-3 flex flex-col gap-4">
               {metric.params.map((param) => (
                 <div key={param.key}>
-                  <dt className="text-[15px] text-white/90">{param.label}</dt>
+                  <dt className="text-ink/90 text-[15px]">{param.label}</dt>
                   {param.help && (
-                    <dd className="mt-1 text-[15px] leading-relaxed text-white/55">{param.help}</dd>
+                    <dd className="text-ink/55 mt-1 text-[15px] leading-relaxed">{param.help}</dd>
                   )}
                   {param.placeholder && (
-                    <dd className="mt-1 font-mono text-[12px] text-white/35">
-                      {param.placeholder}
-                    </dd>
+                    <dd className="text-ink/35 mt-1 font-mono text-[12px]">{param.placeholder}</dd>
                   )}
                 </div>
               ))}
@@ -211,7 +206,7 @@ export default async function MetricPage({
           </div>
         )}
 
-        {note && <p className="mt-8 text-[15px] leading-relaxed text-white/55">{note}</p>}
+        {note && <p className="text-ink/55 mt-8 text-[15px] leading-relaxed">{note}</p>}
       </section>
 
       {others.length > 0 && (
@@ -219,7 +214,7 @@ export default async function MetricPage({
           <h2 className="text-xl font-semibold tracking-tight">
             {metric.label} from other sources
           </h2>
-          <p className="mt-4 text-[15px] leading-relaxed text-white/55">
+          <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">
             Notch Metrics reports {metric.label.toLowerCase()} from {others.length} other{" "}
             {others.length === 1 ? "source" : "sources"}. Each defines it its own way, so the
             widgets stay separate rather than being added together.
@@ -229,7 +224,7 @@ export default async function MetricPage({
               <li key={other.manifest.id}>
                 <Link
                   href={other.path}
-                  className="panel flex items-start gap-4 p-5 transition hover:bg-white/[0.05]"
+                  className="panel hover:bg-ink/[0.05] flex items-start gap-4 p-5 transition"
                 >
                   <ConnectorMark
                     id={other.manifest.id}
@@ -241,7 +236,7 @@ export default async function MetricPage({
                     <span className="text-[15px] font-medium">
                       {other.manifest.name} {other.metric.label.toLowerCase()}
                     </span>
-                    <span className="text-sm leading-relaxed text-white/50">
+                    <span className="text-ink/50 text-sm leading-relaxed">
                       <Ticks>{other.metric.methodology}</Ticks>
                     </span>
                   </span>
@@ -256,7 +251,7 @@ export default async function MetricPage({
 
       <aside className="panel mt-16 flex flex-col items-start gap-4 p-7">
         <h2 className="text-lg font-semibold tracking-tight">Put {title} in your notch</h2>
-        <p className="text-[15px] leading-relaxed text-white/55">
+        <p className="text-ink/55 text-[15px] leading-relaxed">
           Connect {manifest.name} on the web, place the widget, and the number is there every time
           you glance up. Seven days of everything, with no card.
         </p>

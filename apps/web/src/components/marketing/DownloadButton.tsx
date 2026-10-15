@@ -11,7 +11,7 @@ export function DownloadButton({
   return (
     <Link
       href="/download"
-      className={`inline-flex items-center gap-2 rounded-full bg-white font-semibold text-black shadow-[0_0_0_1px_rgba(255,255,255,0.4),0_10px_30px_-10px_rgba(255,255,255,0.45)] transition hover:bg-white/90 ${
+      className={`bg-ink hover:bg-ink/85 inline-flex items-center gap-2 rounded-full font-semibold text-white shadow-[0_10px_30px_-10px_rgba(11,10,14,0.5)] transition ${
         size === "lg" ? "h-12 px-6 text-[15px]" : "h-10 px-5 text-sm"
       } ${className}`}
     >

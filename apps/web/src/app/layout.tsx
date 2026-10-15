@@ -12,15 +12,15 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: SITE_NAME,
   title: {
-    default: "Notch Metrics: the dashboard you never have to open",
+    default: "Notch Metrics: put your metrics in the notch",
     template: "%s · Notch Metrics",
   },
   description:
-    "Revenue, MRR and subscribers from Stripe, Polar, Paddle, Dodo Payments and more, in the MacBook notch. Hover to see them; move away and it is gone.",
+    "Notch Metrics puts your revenue, MRR and subscribers in your MacBook notch. Look up, and the number is already there.",
   openGraph: {
     siteName: "Notch Metrics",
-    title: "Notch Metrics: the dashboard you never have to open",
-    description: "Your business metrics, in the MacBook notch.",
+    title: "Notch Metrics: put your metrics in the notch",
+    description: "Put your metrics in the notch. Look up, and the number is already there.",
     type: "website",
   },
   twitter: { card: "summary_large_image" },

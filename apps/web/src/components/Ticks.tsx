@@ -26,7 +26,7 @@ export function Ticks({ children }: { children: string }) {
         index % 2 === 1 ? (
           <code
             key={index}
-            className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[0.9em] text-white/80"
+            className="bg-ink/[0.06] text-ink/80 rounded px-1 py-0.5 font-mono text-[0.9em]"
           >
             {part}
           </code>

@@ -66,10 +66,10 @@ export function Calculator({ slug }: { slug: string }) {
               value={currency}
               onChange={(event) => setCurrency(event.target.value)}
               aria-label="Currency"
-              className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 font-mono text-[12px] text-white/70 outline-none transition focus:border-white/25"
+              className="border-ink/10 bg-ink/[0.04] text-ink/70 focus:border-ink/25 rounded-lg border px-2.5 py-1.5 font-mono text-[12px] outline-none transition"
             >
               {CURRENCIES.map((code) => (
-                <option key={code} value={code} className="bg-[#111013]">
+                <option key={code} value={code} className="bg-white">
                   {code}
                 </option>
               ))}
@@ -80,12 +80,12 @@ export function Calculator({ slug }: { slug: string }) {
         <div className="grid gap-5 sm:grid-cols-2">
           {tool.fields.map((field) => (
             <div key={field.key} className="flex flex-col gap-1.5">
-              <label htmlFor={`${tool.slug}-${field.key}`} className="text-[14px] text-white/80">
+              <label htmlFor={`${tool.slug}-${field.key}`} className="text-ink/80 text-[14px]">
                 {field.label}
               </label>
-              <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.04] transition focus-within:border-white/25">
+              <div className="border-ink/10 bg-ink/[0.04] focus-within:border-ink/25 flex items-center rounded-xl border transition">
                 {field.unit === "money" && (
-                  <span className="pl-3 font-mono text-[13px] text-white/40">{symbol}</span>
+                  <span className="text-ink/40 pl-3 font-mono text-[13px]">{symbol}</span>
                 )}
                 <input
                   id={`${tool.slug}-${field.key}`}
@@ -99,14 +99,14 @@ export function Calculator({ slug }: { slug: string }) {
                   onChange={(event) =>
                     setRaw((current) => ({ ...current, [field.key]: event.target.value }))
                   }
-                  className="w-full bg-transparent px-3 py-2.5 font-mono text-[15px] text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  className="text-ink w-full bg-transparent px-3 py-2.5 font-mono text-[15px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 {field.unit === "percent" && (
-                  <span className="pr-3 font-mono text-[13px] text-white/40">%</span>
+                  <span className="text-ink/40 pr-3 font-mono text-[13px]">%</span>
                 )}
               </div>
               {field.help && (
-                <p className="text-[13px] leading-relaxed text-white/40">{field.help}</p>
+                <p className="text-ink/40 text-[13px] leading-relaxed">{field.help}</p>
               )}
             </div>
           ))}
@@ -115,7 +115,7 @@ export function Calculator({ slug }: { slug: string }) {
 
       {/* `aria-live` so a screen reader hears the answer change rather than
           only finding it if the user goes looking for it. */}
-      <div aria-live="polite" className="border-t border-white/[0.07] bg-white/[0.02] p-6 sm:p-7">
+      <div aria-live="polite" className="border-ink/[0.07] bg-ink/[0.02] border-t p-6 sm:p-7">
         <p className="eyebrow">{primary?.label}</p>
         <p className="brand-text mt-1.5 text-4xl font-semibold tracking-tight sm:text-5xl">
           {formatUnit(results[primary?.key ?? ""] ?? null, primary?.unit ?? "count", currency)}
@@ -125,19 +125,19 @@ export function Calculator({ slug }: { slug: string }) {
           <dl className="mt-7 grid gap-x-8 gap-y-5 sm:grid-cols-2">
             {secondary.map((output) => (
               <div key={output.key}>
-                <dt className="text-[13px] text-white/45">{output.label}</dt>
-                <dd className="mt-1 font-mono text-[17px] text-white/90">
+                <dt className="text-ink/45 text-[13px]">{output.label}</dt>
+                <dd className="text-ink/90 mt-1 font-mono text-[17px]">
                   {formatUnit(results[output.key] ?? null, output.unit, currency)}
                 </dd>
                 {output.help && (
-                  <dd className="mt-1 text-[12px] leading-relaxed text-white/35">{output.help}</dd>
+                  <dd className="text-ink/35 mt-1 text-[12px] leading-relaxed">{output.help}</dd>
                 )}
               </div>
             ))}
           </dl>
         )}
 
-        <p className="mt-7 border-t border-white/[0.06] pt-5 font-mono text-[12px] leading-relaxed text-white/35">
+        <p className="border-ink/[0.06] text-ink/35 mt-7 border-t pt-5 font-mono text-[12px] leading-relaxed">
           {tool.formula}
         </p>
       </div>

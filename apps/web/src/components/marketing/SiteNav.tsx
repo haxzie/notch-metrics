@@ -17,7 +17,7 @@ export function SiteNav() {
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-5">
-      <nav className="pointer-events-auto relative flex h-14 w-full max-w-3xl items-center justify-between rounded-full border border-white/[0.08] bg-[#141216]/80 pl-5 pr-2 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+      <nav className="border-ink/[0.07] bg-paper/75 pointer-events-auto relative flex h-14 w-full max-w-3xl items-center justify-between rounded-full border pl-5 pr-2 shadow-[0_8px_30px_-12px_rgba(11,10,14,0.18)] backdrop-blur-xl">
         <Link href="/" className="flex w-fit items-center gap-2.5 text-[15px] font-semibold">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" width={24} height={24} />
@@ -35,7 +35,7 @@ export function SiteNav() {
                 <Link
                   href={link.href}
                   className={`rounded-full px-3.5 py-2 text-[14px] transition ${
-                    active ? "text-white" : "text-white/55 hover:text-white"
+                    active ? "text-ink" : "text-ink/55 hover:text-ink"
                   }`}
                 >
                   {link.label}
@@ -47,7 +47,7 @@ export function SiteNav() {
 
         <Link
           href="/download"
-          className="flex h-10 w-fit items-center gap-2 rounded-full bg-white px-4 text-[14px] font-semibold text-black transition hover:bg-white/90"
+          className="bg-ink hover:bg-ink/85 flex h-10 w-fit items-center gap-2 rounded-full px-4 text-[14px] font-semibold text-white transition"
         >
           <AppleMark className="h-4 w-4" />
           Download

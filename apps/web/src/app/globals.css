@@ -1,52 +1,83 @@
 @import "tailwindcss";
 
 @theme {
-  /* The brand gradient, from the app icon. */
-  --color-brand-start: #d819c2;
-  --color-brand-end: #ffc107;
-  --color-ink: #070608;
-  --color-ink-soft: #111013;
+  /* Amber, off the app icon, and the only colour on the site that is not
+     ink or paper. One accent means a coloured thing is always the same
+     thing; the magenta that used to sit beside it took every heading it
+     touched away from the headline. */
+  --color-brand: #ffc107;
+  /* Ink is the text colour and, at low alpha, every border and quiet
+     surface on the page. Not pure black: #000 on paper white is a harder
+     edge than any Mac UI draws. */
+  --color-ink: #0b0a0e;
+  --color-ink-soft: #141217;
+  /* The page itself. Warm rather than #fff so a white card can sit on it
+     and still read as a card. */
+  --color-paper: #fbfafc;
   --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  /* The one italic word in a headline. New York on a Mac, which is the
-     machine this site is selling to; Georgia everywhere else. */
-  --font-serif: "New York", "Iowan Old Style", Palatino, Georgia, serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  background: var(--color-ink);
-  color: #f5f3f7;
-  /* The guard for `.hero-glow`'s full-bleed breakout below. On a platform
-     with a classic scrollbar, `100vw` is wider than the visible viewport, so
-     a viewport-wide decoration would add a horizontal scrollbar to every
-     page. `clip` rather than `hidden` because `hidden` on the body makes it
-     a scroll container, which breaks `position: sticky` anywhere inside. */
+  background: var(--color-paper);
+  color: var(--color-ink);
+  /* The guard for the hero's full-bleed mark field. On a platform with a
+     classic scrollbar, `100vw` is wider than the visible viewport, so a
+     viewport-wide decoration would add a horizontal scrollbar to every page.
+     `clip` rather than `hidden` because `hidden` on the body makes it a
+     scroll container, which breaks `position: sticky` anywhere inside. */
   overflow-x: clip;
 }
 
+/**
+ * The few screens that stay dark on a light site: the signed-in dashboard,
+ * sign-in, the connect flow and the desktop handoff.
+ *
+ * They are chrome around a product, not marketing, and they are written in
+ * `text-white/…` throughout. Without this they would inherit the paper
+ * background and render white text on white. `color-scheme` comes with it so
+ * form controls and scrollbars inside match.
+ */
+.dark-surface {
+  color: #f5f3f7;
+  color-scheme: dark;
+}
+/* Fixed and full-viewport rather than a background on the element itself.
+   Three of the four screens are a `max-w-sm` centred column, so painting
+   their own box would leave a dark strip down the middle of a white page.
+   `fixed` also takes it out of flow, so it never becomes a flex item of the
+   dashboard shell it sits inside. */
+.dark-surface::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--color-ink);
+}
+
+/* A filled badge or tile. Ink, because it has to carry white text at the
+   size of the word "New", and amber at that size does not. The class name
+   is kept because the signed-in app uses it too. */
 .brand-gradient {
-  background-image: linear-gradient(60deg, var(--color-brand-start), var(--color-brand-end));
+  background-color: var(--color-ink);
+  color: #fff;
 }
 
 .brand-text {
-  background-image: linear-gradient(60deg, var(--color-brand-start), var(--color-brand-end));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--color-ink);
 }
 
-/* The serif-italic word inside a headline. Slightly larger than the sans
-   around it because an italic at the same size reads a step smaller. */
+/* The emphasised word inside a headline.
+   Deliberately not a colour: a heading on this site is one weight, one face
+   and one ink, and the emphasis comes from what the sentence says. Kept as a
+   class because a dozen headings mark a word with it, and they are the hook
+   for whatever emphasis comes next. */
 .accent {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 1.08em;
-  letter-spacing: -0.01em;
+  color: inherit;
 }
 
 /* A small uppercase label above a group, set in mono so it reads as a
@@ -56,88 +87,19 @@ body {
   font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgb(255 255 255 / 0.4);
+  color: rgb(11 10 14 / 0.45);
 }
 
-/* The surface every mockup and feature block sits on. */
+/* The surface every mockup and feature block sits on. White, lifted off the
+   paper by a shadow rather than by a border: on a light page a 1px grey box
+   reads as a table cell, and the shadow is what makes it read as a card. */
 .panel {
-  background: rgb(255 255 255 / 0.03);
-  border: 1px solid rgb(255 255 255 / 0.07);
+  background: #fff;
+  border: 1px solid rgb(11 10 14 / 0.06);
   border-radius: 1.75rem;
-}
-
-/* The soft colour behind the hero. Two blobs of the brand gradient's ends,
-   blurred until they are weather rather than shapes. Kept to the hero
-   because the same wash behind every section stops reading as light. */
-/**
- * The brand glow behind the top of a page.
- *
- * Full-bleed on purpose. It is absolutely positioned, so without the
- * breakout it would size itself to the nearest positioned ancestor, and on
- * every page except the home page that ancestor is a `max-w-*` column. The
- * `overflow: hidden` then clipped the blurs to the text column and drew two
- * hard vertical edges down the page, which is what this fixes.
- *
- * `left: 50%` with a `-50vw` margin is the full-bleed breakout: it spans the
- * viewport from inside a centred column without needing a transform, which
- * would create a containing block for anything positioned inside it.
- *
- * `inset-block: 0` keeps the previous behaviour on the vertical axis: the
- * box is as tall as its parent, and the blurs sit near its top.
- */
-.hero-glow {
-  position: absolute;
-  inset-block: 0;
-  left: 50%;
-  width: 100vw;
-  margin-left: -50vw;
-  /* Clips at the viewport edge now rather than at the text column, so the
-     cut is off-screen and invisible. */
-  overflow: hidden;
-  pointer-events: none;
-  z-index: -1;
-}
-.hero-glow::before,
-.hero-glow::after {
-  content: "";
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(110px);
-}
-.hero-glow::before {
-  width: 56rem;
-  height: 34rem;
-  left: 50%;
-  top: -6rem;
-  transform: translateX(-72%) rotate(-12deg);
-  background: radial-gradient(closest-side, rgb(216 25 194 / 0.34), transparent 70%);
-}
-.hero-glow::after {
-  width: 52rem;
-  height: 30rem;
-  left: 50%;
-  top: 2rem;
-  transform: translateX(-18%) rotate(10deg);
-  background: radial-gradient(closest-side, rgb(255 193 7 / 0.26), transparent 70%);
-}
-
-/* The glow under a section's icon. */
-.icon-glow {
-  position: relative;
-}
-.icon-glow::before {
-  content: "";
-  position: absolute;
-  inset: -3rem;
-  z-index: -1;
-  border-radius: 9999px;
-  background: radial-gradient(
-    closest-side,
-    rgb(216 25 194 / 0.28),
-    rgb(255 193 7 / 0.1),
-    transparent
-  );
-  filter: blur(24px);
+  box-shadow:
+    0 1px 2px rgb(11 10 14 / 0.04),
+    0 18px 40px -24px rgb(11 10 14 / 0.18);
 }
 
 /* The wordmark that closes the page, cut off by the bottom edge. */
@@ -145,11 +107,60 @@ body {
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 0.78;
-  background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: rgb(11 10 14 / 0.07);
   user-select: none;
+}
+
+/**
+ * The hero's scattered marks drift. Two keyframes, long and offset per mark
+ * by an inline delay, so twenty of them never beat in time with each other.
+ *
+ * Honours Reduce Motion: on a page whose first impression is a field of
+ * floating icons, "subtle" is not an opinion the visitor has to accept.
+ */
+@keyframes hero-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--tilt, 0deg));
+  }
+  50% {
+    transform: translate3d(0, -14px, 0) rotate(calc(var(--tilt, 0deg) + 4deg));
+  }
+}
+.hero-drift {
+  animation: hero-drift 9s ease-in-out infinite;
+  transform: rotate(var(--tilt, 0deg));
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-drift {
+    animation: none;
+  }
+}
+
+/**
+ * The source rows that drift across the connectors section.
+ *
+ * The track holds two copies of its row and travels half its own width, so
+ * the loop is seamless. Duration is set per row inline, because three rows
+ * at one speed read as a single sliding block.
+ */
+@keyframes marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.marquee-track {
+  animation-name: marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
 }
 
 /* An iOS-style squircle, as a mask so it scales with the element. A mask
@@ -173,10 +184,9 @@ details > summary::-webkit-details-marker {
 /* The rendered body of a blog post.
    Hand-written rather than @tailwindcss/typography: the markdown comes from
    `marked`, so there are no utility classes to attach to the elements, and
-   the plugin's defaults are light-mode prose that would need overriding
-   element by element anyway. */
+   the plugin's defaults would need overriding element by element anyway. */
 .prose {
-  color: rgb(255 255 255 / 0.68);
+  color: rgb(11 10 14 / 0.72);
   font-size: 1.0625rem;
   line-height: 1.75;
 }
@@ -185,7 +195,7 @@ details > summary::-webkit-details-marker {
 }
 .prose h2,
 .prose h3 {
-  color: #f5f3f7;
+  color: var(--color-ink);
   font-weight: 600;
   letter-spacing: -0.01em;
   /* Lands the heading clear of the fixed nav when arriving on its anchor. */
@@ -208,21 +218,21 @@ details > summary::-webkit-details-marker {
 }
 .prose :is(h2, h3) > a:hover {
   text-decoration: underline;
-  text-decoration-color: rgb(255 255 255 / 0.25);
+  text-decoration-color: rgb(11 10 14 / 0.25);
   text-underline-offset: 0.25em;
 }
 .prose strong {
-  color: rgb(255 255 255 / 0.92);
-  font-weight: 500;
+  color: rgb(11 10 14 / 0.92);
+  font-weight: 600;
 }
 .prose a:not(:is(h2, h3) > a) {
-  color: #fff;
+  color: var(--color-ink);
   text-decoration: underline;
-  text-decoration-color: rgb(255 255 255 / 0.3);
+  text-decoration-color: rgb(11 10 14 / 0.3);
   text-underline-offset: 2px;
 }
 .prose a:not(:is(h2, h3) > a):hover {
-  text-decoration-color: #fff;
+  text-decoration-color: var(--color-ink);
 }
 .prose :is(ul, ol) {
   display: flex;
@@ -237,26 +247,29 @@ details > summary::-webkit-details-marker {
   list-style: decimal;
 }
 .prose li::marker {
-  color: rgb(255 255 255 / 0.3);
+  color: rgb(11 10 14 / 0.3);
 }
 .prose blockquote {
-  border-left: 2px solid rgb(216 25 194 / 0.5);
+  border-left: 2px solid rgb(11 10 14 / 0.2);
   padding-left: 1.125rem;
-  color: rgb(255 255 255 / 0.55);
+  color: rgb(11 10 14 / 0.55);
   font-style: italic;
 }
 .prose :not(pre) > code {
-  background: rgb(255 255 255 / 0.07);
-  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(11 10 14 / 0.05);
+  border: 1px solid rgb(11 10 14 / 0.08);
   border-radius: 0.375rem;
   padding: 0.1em 0.35em;
   font-family: var(--font-mono);
   font-size: 0.875em;
-  color: rgb(255 255 255 / 0.85);
+  color: rgb(11 10 14 / 0.85);
 }
+/* A code block stays dark. It is the one element on the page a reader
+   expects to look like a terminal, and inverting it is also what separates
+   it from the quiet grey cards around it. */
 .prose pre {
-  background: var(--color-ink-soft);
-  border: 1px solid rgb(255 255 255 / 0.07);
+  background: var(--color-ink);
+  border: 1px solid rgb(11 10 14 / 0.08);
   border-radius: 1rem;
   padding: 1.125rem 1.25rem;
   overflow-x: auto;
@@ -265,16 +278,16 @@ details > summary::-webkit-details-marker {
 }
 .prose pre code {
   font-family: var(--font-mono);
-  color: rgb(255 255 255 / 0.8);
+  color: rgb(255 255 255 / 0.85);
 }
 .prose hr {
   border: 0;
-  border-top: 1px solid rgb(255 255 255 / 0.08);
+  border-top: 1px solid rgb(11 10 14 / 0.1);
   margin-block: 2.5em;
 }
 .prose img {
   border-radius: 1rem;
-  border: 1px solid rgb(255 255 255 / 0.07);
+  border: 1px solid rgb(11 10 14 / 0.08);
 }
 .prose table {
   width: 100%;
@@ -282,11 +295,11 @@ details > summary::-webkit-details-marker {
   font-size: 0.9375rem;
 }
 .prose :is(th, td) {
-  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  border-bottom: 1px solid rgb(11 10 14 / 0.1);
   padding: 0.6rem 0.75rem;
   text-align: left;
 }
 .prose th {
-  color: rgb(255 255 255 / 0.9);
-  font-weight: 500;
+  color: var(--color-ink);
+  font-weight: 600;
 }

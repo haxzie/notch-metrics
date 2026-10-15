@@ -38,7 +38,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const displayName = user?.name?.trim() || user?.email || "Account";
 
   return (
-    <div className="flex min-h-screen">
+    <div className="dark-surface flex min-h-screen">
       {open && (
         <button
           type="button"
