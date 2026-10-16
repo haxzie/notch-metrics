@@ -95,13 +95,23 @@ export default function Billing() {
   );
 }
 
+/** Whether the trial date on the account is still in the future. */
+function trialLive(state: BillingState): boolean {
+  return state.trialEndsAt !== null && new Date(state.trialEndsAt) > new Date();
+}
+
 function planLabel(state: BillingState): string {
   if (state.plan === "pro") return state.status === "active" ? "Pro" : `Pro (${state.status})`;
-  if (state.plan === "trial") return "Free trial";
+  // `plan` stays "trial" after the trial runs out, because nothing downgrades
+  // the row. The date is what decides, here and on the server.
+  if (state.plan === "trial") return trialLive(state) ? "Free trial" : "Trial ended";
   return "No active plan";
 }
 
 function detail(state: BillingState): string {
+  if (state.trialEndsAt && !trialLive(state) && state.plan !== "pro") {
+    return `Your trial ended on ${new Date(state.trialEndsAt).toLocaleDateString()}.`;
+  }
   if (state.status === "trialing" && state.trialEndsAt) {
     return `Your trial runs until ${new Date(state.trialEndsAt).toLocaleDateString()}.`;
   }

@@ -27,7 +27,16 @@ export async function billingState(db: Database, userId: string): Promise<Billin
     .limit(1);
 
   const trialEndsAt = u?.trialEndsAt ?? null;
-  const status = (sub?.status ?? (trialEndsAt ? "trialing" : "expired")) as SubscriptionStatus;
+  // A trial that has run out is `expired`, not `trialing`.
+  //
+  // Any non-null `trialEndsAt` used to read as `trialing` whatever the date
+  // said, so an account whose trial had lapsed reported itself as still on
+  // one. `hasAccess` was right either way — it compares the date — but every
+  // consumer of these facts was being told the opposite of the verdict, and
+  // the billing page rendered it literally: "Your trial runs until", past
+  // tense date, next to an API answering 402.
+  const trialing = trialEndsAt !== null && trialEndsAt.getTime() > Date.now();
+  const status = (sub?.status ?? (trialing ? "trialing" : "expired")) as SubscriptionStatus;
 
   return {
     plan: (u?.plan ?? "expired") as Plan,
