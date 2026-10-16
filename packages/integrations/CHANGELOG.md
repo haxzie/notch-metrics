@@ -1,5 +1,37 @@
 # @notch/integrations
 
+## 0.3.0
+
+### Minor Changes
+
+- [`1becc46`](https://github.com/haxzie/notch-metrics/commit/1becc460c6350b16764bef88616c5f1ab429a723) Thanks [@haxzie](https://github.com/haxzie)! - Read private repositories on a GitHub connection.
+
+  GitHub has no read-only scope for private repositories on an OAuth app. The
+  only scope that reaches one is `repo`, which carries read and write on code
+  for every repository the signed-in account can see. That is the grant now
+  asked for, and the connect page says so in those terms rather than in terms
+  of what the connector uses.
+
+  A connection made before this keeps working for public repositories. GitHub
+  returns the scopes it granted on every response, so a private repository on
+  an older connection now says to reconnect instead of leaving a correct
+  repository name looking wrong.
+
+### Patch Changes
+
+- [`0a7fc50`](https://github.com/haxzie/notch-metrics/commit/0a7fc50250b9f100e9b1958eb2a58d3919014217) Thanks [@haxzie](https://github.com/haxzie)! - Stop a single rejected request from marking a whole connection broken.
+
+  A GitHub repository that has been renamed, mistyped or made private answers
+  404, and that was being reported as an authentication failure — which marked
+  the connection dead, asked for a reconnect that could not fix a repository
+  name, and stopped the connection's token being refreshed from then on. It is
+  now reported against the widget's repository, where the problem actually is.
+
+  Google's connectors had the same shape of fault from the other direction.
+  YouTube, Search Console and Analytics all answer 403 when a daily quota is
+  spent, and that was being read as a rejected credential rather than as a wait.
+  A spent quota is now a rate limit, and clears on its own.
+
 ## 0.2.0
 
 ### Minor Changes
