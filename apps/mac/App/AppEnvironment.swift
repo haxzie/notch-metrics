@@ -122,6 +122,9 @@ final class AppEnvironment {
         didSet { notch.needsUpgrade = needsUpgrade }
     }
 
+    /// The short recheck started by the Upgrade button. See `watchForUpgrade`.
+    private var upgradeWatch: Task<Void, Never>?
+
     private(set) var isSignedIn = false {
         // The notch shows the sign-in panel in place of the grid, so it has
         // to hear about this the moment it changes rather than on the next
@@ -459,6 +462,29 @@ final class AppEnvironment {
                     await self.refresh()
                     try? await Task.sleep(for: interval)
                 }
+            }
+        }
+    }
+
+    /// Looks for the plan going live, for a few minutes after Upgrade is pressed.
+    ///
+    /// The ordinary poll is five minutes and deliberately sparse, which is
+    /// the right cadence for numbers and the wrong one for the thirty seconds
+    /// after somebody has paid: a notch still saying "Your trial has ended"
+    /// reads as the payment not having worked. The refresh button is hidden
+    /// in this state, so there is nothing to press either.
+    ///
+    /// Bounded on purpose — twelve checks at fifteen seconds, stopping the
+    /// moment the plan is live. It only ever runs just after an explicit
+    /// press, which is the one moment polling harder is worth the requests.
+    func watchForUpgrade() {
+        upgradeWatch?.cancel()
+        upgradeWatch = Task { [weak self] in
+            for _ in 0..<12 {
+                try? await Task.sleep(for: .seconds(15))
+                guard let self, !Task.isCancelled, self.needsUpgrade else { return }
+                await self.refresh()
+                if !self.needsUpgrade { return }
             }
         }
     }

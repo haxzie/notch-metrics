@@ -73,12 +73,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.env.notch.beginBrowsing()
         }
 
-        env.notch.onUpgrade = {
+        env.notch.onUpgrade = { [weak self] in
+            // Out of the way first. The notch is a hover panel pinned above
+            // everything, so leaving it up in front of the checkout tab it
+            // just opened is both in the way and confusing about which window
+            // wants input.
+            //
+            // `collapse` rather than `suspendForExternalFlow`, which is what
+            // signing in and connecting use: those come back through a deep
+            // link that calls `resumeAfterExternalFlow`, and billing has no
+            // such callback. Suspending here would leave a pane parked
+            // indefinitely, for the *next* connect flow to reopen by
+            // surprise.
+            self?.env.notch.collapse(animated: true)
+
             // The same page the Settings pane opens. Checkout is `sessionOnly`
             // on the server, so a device token cannot start one — the browser
             // is where this has to happen.
             NSWorkspace.shared.open(
                 AppEnvironment.appURL.appendingPathComponent("app/settings/billing"))
+
+            self?.env.watchForUpgrade()
         }
         env.notch.onSignIn = { [weak self] in
             self?.env.beginSignIn()
