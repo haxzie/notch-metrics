@@ -55,11 +55,20 @@ const SECRET_KEYS = [
   "authorization",
   "apikey",
   "api_key",
-  "code",
-  "state",
   "signature",
   "key",
 ];
+
+/**
+ * `code` and `state` are deliberately *not* on that list.
+ *
+ * They are OAuth secrets, and the instinct is to add them — but every error
+ * body in this API has a `code` (`SUBSCRIPTION_REQUIRED`, `RATE_LIMITED`),
+ * and redacting it blanks the single most useful field in a failure capture
+ * to protect a value that never reaches here: every OAuth route is on
+ * `NO_BODY_ROUTES`, so its body is not read at all. Listing them bought
+ * nothing and cost the diagnosis.
+ */
 
 function isSecretKey(key: string): boolean {
   const lower = key.toLowerCase();

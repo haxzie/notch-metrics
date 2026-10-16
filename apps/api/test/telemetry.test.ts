@@ -310,3 +310,23 @@ describe("request and response bodies", () => {
     expect(JSON.stringify(http)).not.toContain("sk_live_secret");
   });
 });
+
+describe("the error code survives the scrub", () => {
+  /**
+   * `code` looks like an OAuth secret and is not one here: every error body
+   * in this API carries one, and redacting it blanks the most useful field
+   * in the capture. The OAuth routes that *do* carry a real `code` never
+   * have a body read at all.
+   */
+  it("keeps the reason readable inside the captured body", async () => {
+    const { lines } = captureLines();
+    await get("/no-such-endpoint");
+
+    const http = scalar(
+      lines.find((l) => l.scope === "http"),
+      "http line",
+    );
+    expect(http.errorCode).toBe("NOT_FOUND");
+    expect((http.responseBody as { code: string }).code).toBe("NOT_FOUND");
+  });
+});
