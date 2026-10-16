@@ -60,14 +60,26 @@ export default function Billing() {
         <p className="mt-1 text-sm text-white/45">{state === null ? "Loading…" : detail(state)}</p>
 
         {state?.hasCustomer && (
-          <button
-            type="button"
-            onClick={() => void go("/v1/billing/portal", "portal")}
-            disabled={busy !== null}
-            className="mt-4 rounded-lg border border-white/15 px-4 py-2 text-sm transition hover:bg-white/5 disabled:opacity-50"
-          >
-            {busy === "portal" ? "Opening…" : "Manage payment and invoices"}
-          </button>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => void go("/v1/billing/portal", "portal")}
+              disabled={busy !== null}
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm transition hover:bg-white/5 disabled:opacity-50"
+            >
+              {busy === "portal" ? "Opening…" : "Manage subscription"}
+            </button>
+            <p className="mt-2 text-xs text-white/40">
+              Update your card, download invoices, or cancel.
+            </p>
+          </div>
+        )}
+
+        {/* A paid plan with no customer behind it. Only a plan set by hand
+            reaches this, and silently showing nothing leaves somebody with
+            no way to cancel and no idea why. */}
+        {state?.plan === "pro" && !state.hasCustomer && (
+          <p className="mt-4 text-xs text-white/40">Manage this plan where you bought it.</p>
         )}
       </section>
 
@@ -118,9 +130,17 @@ function detail(state: BillingState): string {
   if (state.graceUntil && new Date(state.graceUntil) > new Date()) {
     return `A payment failed. Access continues until ${new Date(state.graceUntil).toLocaleDateString()}.`;
   }
+  // Both of these come before the renewal line, and the status check is not
+  // redundant. Dodo sets `cancel_at_next_billing_date` on some cancellations
+  // and not others, so a cancelled plan could reach the line below and tell
+  // somebody who had just cancelled that they would be charged again.
+  if (state.status === "cancelled" && state.currentPeriodEnd) {
+    return `Your plan ends on ${new Date(state.currentPeriodEnd).toLocaleDateString()}.`;
+  }
   if (state.cancelAtPeriodEnd && state.currentPeriodEnd) {
     return `Cancels on ${new Date(state.currentPeriodEnd).toLocaleDateString()}.`;
   }
+  if (state.status === "cancelled") return "Your plan is cancelled.";
   if (state.currentPeriodEnd) {
     return `Renews on ${new Date(state.currentPeriodEnd).toLocaleDateString()}.`;
   }
