@@ -127,6 +127,38 @@ the request logged nothing — it is the only trace of a tick killed by
 `exceededCpu`, which would otherwise be indistinguishable from a tick that
 never ran.
 
+### Both Workers, one shipper
+
+`notch-api-production` and `notch-web-production` both name the shipper under
+`tail_consumers`. Filter on `worker` to tell them apart.
+
+The site needs no Next.js instrumentation to be covered — no
+`@axiomhq/nextjs`, no SDK on the request path, nothing in the client bundle.
+Once OpenNext has built it, it is a Worker like any other and its trace events
+arrive the same way. For a site whose source calls `console` once, the HTTP log
+_is_ the observability: `method`, `path`, `status` and `outcome` per request.
+
+**Paths are masked, and that is load-bearing.** `safePath` drops the query
+string entirely and replaces any path segment that is not plainly a route
+word. A connect link is `/connect/<randomToken(32)>` — a single-use credential
+that completes somebody's OAuth flow — and Axiom keeps events for thirty days,
+far longer than that token is meant to live. An OAuth callback carries `code`
+and `state` in the query for the same reason. What survives is what you
+actually want: `/blog/how-to-track-stripe-mrr`, `/pricing`, `/llms.txt`.
+
+```kusto
+['notch-api']
+| where worker == "notch-web-production" and kind == "invocation"
+| summarize requests = count() by path, status
+| order by requests desc
+```
+
+**What this does not give you is Web Vitals.** Those are measured in the
+browser, so no server-side trace event carries them; they need something in
+the client bundle. `@axiomhq/react` would do it, at the cost of four packages
+and a request-path dependency. Worth it only if nothing else is measuring
+them — this site currently has no analytics at all.
+
 ### Setting it up
 
 ```bash

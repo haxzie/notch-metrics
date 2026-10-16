@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldsFromMessage, ingestUrl, toAxiomEvents } from "../src/index.ts";
+import { fieldsFromMessage, ingestUrl, safePath, toAxiomEvents } from "../src/index.ts";
 
 const TRACE_TIME = Date.UTC(2026, 9, 16, 2, 49, 3);
 
@@ -151,5 +151,80 @@ describe("the ingest endpoint", () => {
     expect(ingestUrl({ AXIOM_DATASET: "d", AXIOM_API_URL: "https://api.axiom.co/" })).toBe(
       "https://api.axiom.co/v1/datasets/d/ingest",
     );
+  });
+});
+
+describe("the HTTP log, and what must never reach it", () => {
+  /**
+   * A connect link is `/connect/<randomToken(32)>` — a single-use credential
+   * that completes somebody's OAuth flow. Axiom keeps events for thirty
+   * days, which is far longer than the token is meant to live, so this is
+   * the one thing in a path that absolutely cannot be shipped.
+   */
+  it("masks a connect token out of the path", () => {
+    const token = "s1Ft-9xQmA_bC3dEfGhIjKlMnOpQrStUvWxYz012345";
+    expect(safePath(`https://notchmetrics.com/connect/${token}`)).toBe("/connect/:x");
+  });
+
+  it("masks one of our own ids", () => {
+    expect(safePath("https://api.notchmetrics.com/v1/integrations/int_k36otynw2pmm7gzz")).toBe(
+      "/v1/integrations/:x",
+    );
+  });
+
+  /** An OAuth callback carries `code` and `state`; the query goes entirely. */
+  it("drops the query string", () => {
+    expect(safePath("https://api.notchmetrics.com/v1/link/callback?code=abc&state=xyz")).toBe(
+      "/v1/link/callback",
+    );
+  });
+
+  /** The reason to want paths at all: which marketing pages are being read. */
+  it("keeps a blog slug and a static file", () => {
+    expect(safePath("https://notchmetrics.com/blog/how-to-track-stripe-mrr")).toBe(
+      "/blog/how-to-track-stripe-mrr",
+    );
+    expect(safePath("https://notchmetrics.com/llms.txt")).toBe("/llms.txt");
+  });
+
+  it("masks anything with uppercase or unusual length, and survives a bad url", () => {
+    expect(safePath("https://notchmetrics.com/AbCdEf")).toBe("/:x");
+    expect(safePath(`https://notchmetrics.com/${"a".repeat(40)}`)).toBe("/:x");
+    expect(safePath("not a url")).toBeNull();
+    expect(safePath(undefined)).toBeNull();
+  });
+
+  it("puts method, path and status on the invocation row", () => {
+    const events = toAxiomEvents([
+      {
+        scriptName: "notch-web-production",
+        outcome: "ok",
+        eventTimestamp: TRACE_TIME,
+        event: {
+          request: { url: "https://notchmetrics.com/pricing?utm_source=x", method: "GET" },
+          response: { status: 200 },
+        },
+      },
+    ]);
+    expect(events[0]).toMatchObject({
+      kind: "invocation",
+      method: "GET",
+      path: "/pricing",
+      status: 200,
+      worker: "notch-web-production",
+    });
+  });
+
+  it("leaves the HTTP fields off a cron tick, which has no request", () => {
+    const events = toAxiomEvents([
+      {
+        scriptName: "notch-api-production",
+        outcome: "ok",
+        eventTimestamp: TRACE_TIME,
+        event: null,
+      },
+    ]);
+    expect(events[0]).not.toHaveProperty("method");
+    expect(events[0]).not.toHaveProperty("path");
   });
 });

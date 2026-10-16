@@ -37,11 +37,17 @@ interface TailException {
   message: unknown;
 }
 
+/** `FetchEventInfo` for a fetch, and null for a cron or an alarm. */
+interface TailEventInfo {
+  request?: { url?: string; method?: string };
+  response?: { status?: number };
+}
+
 interface TailItem {
   scriptName?: string | null;
   outcome?: string;
   eventTimestamp?: number | null;
-  event?: unknown;
+  event?: TailEventInfo | null;
   logs?: TailLog[];
   exceptions?: TailException[];
 }
@@ -161,11 +167,60 @@ export function toAxiomEvents(items: TailItem[]): AxiomEvent[] {
 
     // Always, even for a clean invocation that logged nothing: this is the
     // row that makes "how many cron ticks ran today" answerable, and the only
-    // trace of an invocation killed before it could log.
-    events.push({ _time: invocationTime, ...base, kind: "invocation" });
+    // trace of an invocation killed before it could log. For a fetch it is
+    // also the HTTP log — which is the entire value of this for `notch-web`,
+    // a Next.js site that barely calls `console` at all.
+    const request = item.event?.request;
+    const path = safePath(request?.url);
+    events.push({
+      _time: invocationTime,
+      ...base,
+      kind: "invocation",
+      ...(request?.method ? { method: request.method } : {}),
+      ...(path ? { path } : {}),
+      ...(typeof item.event?.response?.status === "number"
+        ? { status: item.event.response.status }
+        : {}),
+    });
   }
 
   return events;
+}
+
+/**
+ * A request path with everything secret taken out of it.
+ *
+ * The query string goes entirely — an OAuth callback carries `code` and
+ * `state` there — and every path segment that is not plainly a route word is
+ * replaced. That rule is not cosmetic: a connect link is
+ * `/connect/<randomToken(32)>`, a single-use credential that completes
+ * somebody's OAuth flow, and shipping it to a log with thirty-day retention
+ * would put live secrets somewhere they outlive their own expiry.
+ *
+ * Route words are lowercase and short — `connect`, `integrations`,
+ * `llms.txt`, and the blog slugs that are the whole reason to want paths at
+ * all. Our ids carry an underscore (`int_a1b2…`) and `randomToken` is
+ * base64url, so both fail the test on character class as well as on length.
+ */
+export function safePath(url: string | undefined): string | null {
+  if (!url) return null;
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    return null;
+  }
+
+  return (
+    pathname
+      .split("/")
+      .map((segment) =>
+        segment === "" || (/^[a-z0-9][a-z0-9.-]*$/.test(segment) && segment.length <= 32)
+          ? segment
+          : ":x",
+      )
+      .join("/") || "/"
+  );
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
