@@ -13,12 +13,21 @@ export function adapterContext(options: {
   timeZone: string;
   preferredCurrency: string;
   signal: AbortSignal;
+  /**
+   * Told about every provider request this context makes. The caller keeps
+   * them so a failure can be recorded with the status that caused it rather
+   * than only our own name for it — "404 on api.github.com" against
+   * "auth_failed" is the whole difference when reading back why a connection
+   * broke.
+   */
+  onCall?: (call: { host: string; method: string; status: number | null; ms: number }) => void;
 }): AdapterContext {
   const adapter = getAdapter(options.provider);
   return {
     http: createHttp({
       allowedHosts: adapter.manifest.allowedHosts,
       signal: options.signal,
+      onCall: options.onCall,
     }),
     now: () => new Date(),
     timeZone: options.timeZone,

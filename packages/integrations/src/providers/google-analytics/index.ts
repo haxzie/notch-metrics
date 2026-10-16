@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { MetricId, ProviderManifest } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { googleHeaders, googleOAuth } from "../../google-oauth.ts";
+import {
+  googleErrorReason,
+  googleHeaders,
+  googleOAuth,
+  isGoogleQuotaReason,
+} from "../../google-oauth.ts";
 import { bucketSum, dayAt, ymd } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -113,8 +118,15 @@ const METRICS: Partial<Record<MetricId, string>> = {
  * scope. All need a human; none is a rate limit. The message names the
  * first because it is the one a fresh deployment hits.
  */
-function errorFor(response: HttpResponse): ProviderError {
+async function errorFor(response: HttpResponse): Promise<ProviderError> {
   if (response.status === 403) {
+    // Read Google's own reason before deciding. A spent quota and a missing
+    // permission share this status, and only one of them is worth telling
+    // somebody their connection is broken over.
+    const reason = await googleErrorReason(response);
+    if (isGoogleQuotaReason(reason)) {
+      return new ProviderError("rate_limited", "Google's analytics quota is spent", 900);
+    }
     return new ProviderError(
       "auth_failed",
       "Google refused the request. Check the Google Analytics Data API is enabled and this account can see the property.",
@@ -138,7 +150,7 @@ async function runReport(
     headers: { ...googleHeaders(creds.access_token), "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw errorFor(response);
+  if (!response.ok) throw await errorFor(response);
   return response.json<RunReportResponse>();
 }
 

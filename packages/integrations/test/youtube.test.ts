@@ -234,6 +234,21 @@ describe("youtube", () => {
     });
   });
 
+  // The 10,000-unit daily budget, spent. YouTube answers 403 for this, not
+  // 429, and it clears at midnight Pacific — so it is a wait, not a reason to
+  // tell somebody their connection is broken and make them reconnect daily.
+  it("reads a spent quota as a rate limit, not a dead connection", async () => {
+    const ctx = stubContext({
+      "/v2/reports": {
+        __status: 403,
+        __body: { error: { errors: [{ reason: "quotaExceeded" }], code: 403 } },
+      },
+    });
+    await expect(youtube.fetchMetric(ctx, creds, request)).rejects.toMatchObject({
+      code: "rate_limited",
+    });
+  });
+
   it("rejects a report with no day column rather than charting zeroes", async () => {
     const ctx = stubContext({ "/v2/reports": { columnHeaders: [{ name: "views" }], rows: [[1]] } });
     await expect(youtube.fetchMetric(ctx, creds, request)).rejects.toMatchObject({

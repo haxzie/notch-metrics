@@ -5,8 +5,9 @@ import { createDb, type Database } from "./lib/db.ts";
 import { queryMetric, sweepCache } from "./lib/metrics.ts";
 import { sweep as sweepRateLimits } from "./lib/rate-limit.ts";
 import { getAdapter } from "@notch/integrations";
-import { logError } from "./lib/redact.ts";
+import { logError, logInfo } from "./lib/redact.ts";
 import { sweepTokenRefresh } from "./lib/token-refresh.ts";
+import { sweepEvents } from "./lib/events.ts";
 import {
   dueIntegrationIds,
   enabledSubscriptions,
@@ -29,11 +30,17 @@ export async function scheduled(env: Env): Promise<void> {
   const db = createDb(env);
   // Tokens before metrics, so the poll that follows runs on the new ones
   // rather than on a token with minutes left.
-  await sweepTokenRefresh(db, env).catch((e) => logError("cron.tokenRefresh", e));
+  // The counts, every tick. "Is refresh keeping up" was previously a question
+  // you could only answer by querying the database and doing arithmetic on
+  // timestamps; as a line per tick it is a graph.
+  await sweepTokenRefresh(db, env)
+    .then((counts) => logInfo("cron.tokenRefresh", counts))
+    .catch((e) => logError("cron.tokenRefresh", e));
   await refreshMetrics(db, env).catch((e) => logError("cron.refresh", e));
   await expireGrace(db).catch((e) => logError("cron.grace", e));
   await sweepNotifications(db).catch((e) => logError("cron.sweepNotifications", e));
   await sweepCache(db).catch((e) => logError("cron.sweepCache", e));
+  await sweepEvents(db).catch((e) => logError("cron.sweepEvents", e));
   await sweepRateLimits(db).catch((e) => logError("cron.sweepRateLimits", e));
 }
 

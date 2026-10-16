@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { Granularity, MetricId, ProviderManifest } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { googleHeaders, googleOAuth } from "../../google-oauth.ts";
+import {
+  googleErrorReason,
+  googleHeaders,
+  googleOAuth,
+  isGoogleQuotaReason,
+} from "../../google-oauth.ts";
 import { bucketStart, dayAt, ymd } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -256,8 +261,20 @@ function toMinorUnits(amount: number): number {
  * Partner Program, which is most channels. That is a metric this account
  * cannot have, not a credential to go and fix.
  */
-function errorFor(host: string, response: HttpResponse, monetary = false): ProviderError {
+async function errorFor(
+  host: string,
+  response: HttpResponse,
+  monetary = false,
+): Promise<ProviderError> {
   if (response.status === 403) {
+    // Quota first, and before the revenue carve-out: the YouTube Data API
+    // spends a 10,000-unit daily budget and then answers 403 `quotaExceeded`
+    // until midnight Pacific. That is a wait of some hours, not a broken
+    // connection, and it is the single most likely 403 this adapter sees.
+    const reason = await googleErrorReason(response);
+    if (isGoogleQuotaReason(reason)) {
+      return new ProviderError("rate_limited", "YouTube's daily API quota is spent", 3600);
+    }
     return monetary
       ? new ProviderError(
           "unsupported",
@@ -343,7 +360,7 @@ async function channel(
     `${DATA}/channels?part=snippet,statistics&id=${encodeURIComponent(creds.channel_id)}`,
     { headers: googleHeaders(creds.access_token) },
   );
-  if (!response.ok) throw errorFor("www.googleapis.com", response);
+  if (!response.ok) throw await errorFor("www.googleapis.com", response);
   const body = await response.json<{ items?: ChannelEntry[] }>();
   return body.items?.[0] ?? null;
 }
@@ -398,7 +415,7 @@ async function report(
   const response = await ctx.http(url.toString(), {
     headers: googleHeaders(creds.access_token),
   });
-  if (!response.ok) throw errorFor("youtubeanalytics.googleapis.com", response, monetary);
+  if (!response.ok) throw await errorFor("youtubeanalytics.googleapis.com", response, monetary);
   const body = await response.json<ReportResponse>();
 
   // Columns are read by name from `columnHeaders` rather than by the index

@@ -7,6 +7,7 @@ import { authenticate, rateLimited, sessionOnly, type AppContext } from "../midd
 import { seedSubscriptions } from "../lib/notifications.ts";
 import { fingerprint, sealCredentials } from "../lib/crypto.ts";
 import { openFreshCredentials } from "../lib/token-refresh.ts";
+import { callRecorder, recordEvent } from "../lib/events.ts";
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id } from "../lib/ids.ts";
 import { loadUser } from "../lib/identity.ts";
@@ -243,6 +244,10 @@ integrations.patch("/:id", async (c) => {
       credentialFingerprint: sealed.fingerprint,
       status: "ok",
       failureCount: 0,
+      authFailures: 0,
+      // A new credential is a new grant. Leaving this set would keep the
+      // row out of the refresh sweep for the lifetime of the connection.
+      reauthRequiredAt: null,
       disabledUntil: 0,
       lastErrorCode: null,
     });
@@ -283,6 +288,8 @@ integrations.post("/:id/verify", sessionOnly, async (c) => {
 
   const adapter = getAdapter(row.provider);
   const { credentials } = await openFreshCredentials(c.env, db, row);
+  const recorder = callRecorder();
+  const startedAt = Date.now();
 
   try {
     const verified = await adapter.verify(
@@ -291,6 +298,7 @@ integrations.post("/:id/verify", sessionOnly, async (c) => {
         timeZone: user.timezone,
         preferredCurrency: user.preferredCurrency,
         signal: AbortSignal.timeout(15_000),
+        onCall: recorder.onCall,
       }),
       credentials,
     );
@@ -299,6 +307,8 @@ integrations.post("/:id/verify", sessionOnly, async (c) => {
       .set({
         status: "ok",
         failureCount: 0,
+        authFailures: 0,
+        reauthRequiredAt: null,
         disabledUntil: 0,
         lastErrorCode: null,
         accountLabel: verified.accountLabel,
@@ -307,10 +317,31 @@ integrations.post("/:id/verify", sessionOnly, async (c) => {
       })
       .where(eq(integrationTable.id, row.id));
 
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "verify",
+      outcome: "ok",
+      durationMs: Date.now() - startedAt,
+      calls: recorder.calls,
+      httpStatus: recorder.lastStatus(),
+    });
+
     return c.json({ ok: true, ...verified, code: null, message: null });
   } catch (error) {
-    logError("integrations.reverify", error);
+    logError(`integrations.reverify.${row.id}`, error);
     const mapped = toMetricError(error);
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "verify",
+      outcome: "error",
+      code: mapped.code,
+      httpStatus: recorder.lastStatus(),
+      durationMs: Date.now() - startedAt,
+      calls: recorder.calls,
+      detail: error instanceof Error ? error.message : String(error),
+    });
     await db
       .update(integrationTable)
       .set({

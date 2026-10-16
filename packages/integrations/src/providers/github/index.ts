@@ -229,9 +229,16 @@ function errorFor(response: HttpResponse): ProviderError {
     // A repository that does not exist and one the token cannot see are the
     // same 404 — GitHub will not confirm a private repository to a caller
     // without access. The message has to cover both, because we cannot tell.
+    //
+    // `unsupported`, not `auth_failed`. This is a statement about one
+    // widget's repository, not about the connection: the same token is
+    // answering for every other tile in the notch. Calling it an auth
+    // failure marked the whole integration broken and asked the user to
+    // reconnect, which cannot fix a repository that was renamed — and it
+    // locked the row out of token refresh on the way past.
     return new ProviderError(
-      "auth_failed",
-      "That repository could not be read. Check the name, and that the token can see it.",
+      "unsupported",
+      "That repository could not be read. Check the name, and that it is public.",
     );
   }
   return errorForStatus("api.github.com", response);

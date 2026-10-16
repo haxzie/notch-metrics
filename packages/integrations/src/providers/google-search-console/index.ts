@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { Granularity, MetricId, ProviderManifest } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { googleHeaders, googleOAuth } from "../../google-oauth.ts";
+import {
+  googleErrorReason,
+  googleHeaders,
+  googleOAuth,
+  isGoogleQuotaReason,
+} from "../../google-oauth.ts";
 import { bucketStart, dayAt, ymd } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -94,8 +99,14 @@ const API = "https://www.googleapis.com/webmasters/v3";
 /** Search Console data is never final for the newest days. Said once, on every series. */
 const LAG_NOTE = "Search Console data runs two to three days behind.";
 
-function errorFor(response: HttpResponse): ProviderError {
+async function errorFor(response: HttpResponse): Promise<ProviderError> {
   if (response.status === 403) {
+    // See the Google Analytics adapter: 403 is quota as often as permission,
+    // and only the body says which.
+    const reason = await googleErrorReason(response);
+    if (isGoogleQuotaReason(reason)) {
+      return new ProviderError("rate_limited", "Search Console's quota is spent", 900);
+    }
     return new ProviderError(
       "auth_failed",
       "Google refused the request. Check the Search Console API is enabled and this account can see the property.",
@@ -157,7 +168,7 @@ async function query(
       }),
     },
   );
-  if (!response.ok) throw errorFor(response);
+  if (!response.ok) throw await errorFor(response);
   const body = await response.json<{ rows?: QueryRow[] }>();
   return body.rows ?? [];
 }

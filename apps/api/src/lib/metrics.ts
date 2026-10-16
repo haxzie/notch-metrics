@@ -18,6 +18,7 @@ import { percentChange } from "@notch/integrations";
 import { logError } from "./redact.ts";
 import { notifyBroken } from "./slack.ts";
 import { emitConnectionBroken } from "./notifications.ts";
+import { callRecorder, recordEvent } from "./events.ts";
 
 /**
  * How long a computed envelope stays fresh.
@@ -233,6 +234,9 @@ export async function queryMetric(
   const to = new Date();
   const from = new Date(to.getTime() - RANGE_DURATION_MS[query.range]);
 
+  const recorder = callRecorder();
+  const startedAt = Date.now();
+
   try {
     const adapter = getAdapter(row.provider);
     // Refreshed first when the connector says the token is about to lapse,
@@ -245,6 +249,7 @@ export async function queryMetric(
         timeZone: options.timeZone,
         preferredCurrency: options.preferredCurrency,
         signal: AbortSignal.timeout(20_000),
+        onCall: recorder.onCall,
       }),
       credentials,
       {
@@ -317,6 +322,10 @@ export async function queryMetric(
       .set({
         lastSyncedAt: new Date(),
         failureCount: 0,
+        // A success is the only thing that clears the auth strikes. Anything
+        // weaker and a connection alternating between a rejection and a
+        // timeout would never reach the limit, nor ever be declared healthy.
+        authFailures: 0,
         disabledUntil: 0,
         lastErrorCode: null,
         status: "ok",
@@ -324,10 +333,35 @@ export async function queryMetric(
       })
       .where(eq(integrationTable.id, row.id));
 
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "fetch",
+      outcome: "ok",
+      metric: query.metric,
+      durationMs: Date.now() - startedAt,
+      calls: recorder.calls,
+      httpStatus: recorder.lastStatus(),
+    });
+
     return result;
   } catch (error) {
-    logError("metrics.fetch", error);
+    // The integration id in the scope, so a line in the console can be tied
+    // to a connection without inferring it from what else happened nearby.
+    logError(`metrics.fetch.${row.id}`, error);
     const mapped = toMetricError(error);
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "fetch",
+      outcome: "error",
+      metric: query.metric,
+      code: mapped.code,
+      httpStatus: recorder.lastStatus(),
+      durationMs: Date.now() - startedAt,
+      calls: recorder.calls,
+      detail: error instanceof Error ? error.message : String(error),
+    });
     await recordFailure(options.env, db, row, mapped);
     return (
       staleFallback() ?? {
@@ -342,6 +376,19 @@ export async function queryMetric(
   }
 }
 
+/**
+ * Consecutive `auth_failed` results from the data path before the whole
+ * connection is declared broken.
+ *
+ * Three, to match `REFRESH_STRIKE_LIMIT` — the two paths are answering the
+ * same question and a user cannot see which one asked it. Acting on the
+ * first rejection is what killed a GitHub connection nine seconds after it
+ * was made, on a token that had eight hours left: a 404 for a renamed
+ * repository, a spent quota and a WAF all arrive as one rejected request,
+ * and none of them means the credential is gone.
+ */
+export const AUTH_STRIKE_LIMIT = 3;
+
 async function recordFailure(
   env: Env,
   db: Database,
@@ -349,6 +396,8 @@ async function recordFailure(
   mapped: { code: string; retryAfterSeconds: number | null },
 ): Promise<void> {
   const failures = row.failureCount + 1;
+  const authFailures = mapped.code === "auth_failed" ? row.authFailures + 1 : row.authFailures;
+  const broken = mapped.code === "auth_failed" && authFailures >= AUTH_STRIKE_LIMIT;
 
   // A provider that told us exactly how long to wait is obeyed literally.
   // Otherwise: exponential backoff from a minute, capped at six hours, and only
@@ -363,15 +412,24 @@ async function recordFailure(
     .update(integrationTable)
     .set({
       failureCount: failures,
+      authFailures,
       disabledUntil: backoffMs > 0 ? Date.now() + backoffMs : 0,
       lastErrorCode: mapped.code,
       lastErrorAt: new Date(),
-      status: mapped.code === "auth_failed" ? "auth_failed" : row.status,
+      status: broken ? "auth_failed" : row.status,
       nextAllowedAt: Date.now() + MIN_CALL_SPACING_MS,
     })
     .where(eq(integrationTable.id, row.id));
 
-  if (mapped.code === "auth_failed") {
+  if (broken) {
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "status",
+      outcome: "error",
+      code: "auth_failed",
+      detail: `${authFailures} consecutive rejected requests`,
+    });
     // The user's notification first, then ours. The Slack ping is gated on a
     // webhook secret being configured; the user's is not.
     await emitConnectionBroken(db, row.status, row);

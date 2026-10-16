@@ -139,6 +139,28 @@ export const integration = sqliteTable(
     failureCount: integer("failure_count").notNull().default(0),
     disabledUntil: integer("disabled_until").notNull().default(0),
     /**
+     * Consecutive `auth_failed` results from the *data* path. Reset on any
+     * success.
+     *
+     * Separate from `failureCount` because they answer different questions:
+     * `failureCount` drives the backoff and counts every kind of failure,
+     * while this one decides whether to declare the whole connection broken.
+     * A single rejected request is not evidence of that — a renamed
+     * repository, a spent quota and a WAF all arrive looking like one — and
+     * acting on the first one is how a working connection gets marked dead.
+     */
+    authFailures: integer("auth_failures").notNull().default(0),
+    /**
+     * When the provider said the *grant itself* is gone — revoked, expired
+     * through disuse, app uninstalled. Only a human can fix it.
+     *
+     * The refresh sweep keys off this rather than off `status`. A row can be
+     * `auth_failed` because one request was rejected while its refresh token
+     * is still perfectly good; excluding those from refresh is what lets a
+     * recoverable connection quietly die instead.
+     */
+    reauthRequiredAt: timestamp("reauth_required_at"),
+    /**
      * 0..299, assigned at random on creation.
      *
      * The five-minute cron would otherwise try every integration in the account
@@ -271,6 +293,71 @@ export const metricCache = sqliteTable(
     index("metric_cache_user_idx").on(t.userId),
     index("metric_cache_expiry_idx").on(t.expiresAt),
     index("metric_cache_integration_idx").on(t.integrationId),
+  ],
+);
+
+/**
+ * What actually happened to one integration, one row per attempt.
+ *
+ * The columns on `integration` are single-slot: `lastErrorCode` tells you the
+ * class of the most recent failure and nothing about the one before it, or
+ * which request produced it. That is enough to show a tile an error and not
+ * nearly enough to answer "why did this connection die", which until now
+ * meant inferring it from timestamp arithmetic against a row that had already
+ * been overwritten.
+ *
+ * Deliberately not a general application log. One row per *attempt* — a
+ * metric fetch, a token refresh, a status change — not one per provider HTTP
+ * call, because a metric that walks four pages would otherwise write four
+ * rows for one answer. The individual calls ride along in `calls`.
+ */
+export const integrationEvent = sqliteTable(
+  "integration_event",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integration.id, { onDelete: "cascade" }),
+    /** Unix seconds. Plain integer rather than a Date, so the sweep is an index scan. */
+    at: integer("at").notNull(),
+    /** `fetch` | `refresh` | `status` | `verify`. */
+    kind: text("kind").notNull(),
+    /** `ok` | `error` | `skipped`. */
+    outcome: text("outcome").notNull(),
+    /** Which metric this was about, when it was about one. */
+    metric: text("metric"),
+    /**
+     * Our taxonomy — a `MetricErrorCode`, or the status a `status` row moved
+     * to. The thing you filter on when asking what has been going wrong.
+     */
+    code: text("code"),
+    /**
+     * The provider's own reason, verbatim: `quotaExceeded`,
+     * `bad_refresh_token`. This is the field that distinguishes a spent quota
+     * from a revoked token, which our own taxonomy flattens together.
+     */
+    reason: text("reason"),
+    /** Final HTTP status of the call that decided the outcome, when there was one. */
+    httpStatus: integer("http_status"),
+    durationMs: integer("duration_ms"),
+    /**
+     * Every provider request the attempt made: `{ host, method, status, ms }`.
+     * This is what `createHttp`'s `onCall` hook has always reported and
+     * nothing ever collected.
+     */
+    calls: json<{ host: string; method: string; status: number | null; ms: number }[]>("calls"),
+    /** Redacted and bounded. Never a credential; see `redact`. */
+    detail: text("detail"),
+  },
+  (t) => [
+    // The read path is always "this integration, newest first", so the index
+    // carries `at` descending rather than making every lookup sort.
+    index("integration_event_integration_idx").on(t.integrationId, t.at),
+    index("integration_event_at_idx").on(t.at),
+    index("integration_event_user_idx").on(t.userId),
   ],
 );
 

@@ -93,6 +93,18 @@ describe("google analytics", () => {
     expect(seen[0]).toContain("/properties/123456:runReport");
   });
 
+  it("reads a quota 403 as a rate limit rather than a broken connection", async () => {
+    const ctx = stubContext({
+      "analyticsdata.googleapis.com": {
+        __status: 403,
+        __body: { error: { errors: [{ reason: "rateLimitExceeded" }], code: 403 } },
+      },
+    });
+    await expect(googleAnalytics.fetchMetric(ctx, creds, request)).rejects.toMatchObject({
+      code: "rate_limited",
+    });
+  });
+
   it("explains a 403 rather than calling the token bad", async () => {
     const ctx = stubContext({ "analyticsdata.googleapis.com": { __status: 403 } });
     await expect(googleAnalytics.fetchMetric(ctx, creds, request)).rejects.toMatchObject({

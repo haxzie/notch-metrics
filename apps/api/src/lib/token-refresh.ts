@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lte, ne, or } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
 import {
   credentialExpiry,
   getAdapter,
@@ -14,6 +14,7 @@ import { oauthClient } from "./oauth-client.ts";
 import { logError } from "./redact.ts";
 import { notifyBroken } from "./slack.ts";
 import { emitConnectionBroken } from "./notifications.ts";
+import { recordEvent } from "./events.ts";
 
 type Row = typeof integrationTable.$inferSelect;
 
@@ -67,10 +68,19 @@ export async function openFreshCredentials(
       `oauth.refresh.${row.id}`,
       new Error(`no OAuth client configured for ${row.provider}`),
     );
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "refresh",
+      outcome: "skipped",
+      reason: "no_oauth_client",
+      detail: `no OAuth client configured for ${row.provider}`,
+    });
     return { credentials, refreshed: false };
   }
 
   const now = new Date();
+  const startedAt = Date.now();
   try {
     const next = await adapter.oauth.refreshCredentials({
       credentials,
@@ -85,12 +95,29 @@ export async function openFreshCredentials(
         .update(integrationTable)
         .set({ lastRefreshAttemptAt: now, refreshFailures: 0 })
         .where(eq(integrationTable.id, row.id));
+      await recordEvent(db, {
+        userId: row.userId,
+        integrationId: row.id,
+        kind: "refresh",
+        outcome: "skipped",
+        reason: "nothing_to_rotate",
+        durationMs: Date.now() - startedAt,
+      });
       return { credentials, refreshed: false };
     }
 
     const parsed = adapter.credentialSchema.parse(next) as Record<string, string>;
     const sealed = await sealCredentials(env, scope, parsed);
     const nextExpiry = credentialExpiry(parsed);
+
+    // A refresh that *succeeded* proves the grant is alive, so a row sitting
+    // in `auth_failed` because the data path rejected some request is now
+    // demonstrably recoverable and is let back in. Without this the only way
+    // out of `auth_failed` is a human, which is how a connection broken by a
+    // renamed repository stayed broken. A genuinely dead grant cannot reach
+    // this line — it throws `OAuthReauthRequiredError` below.
+    const recovering = row.status === "auth_failed" && row.reauthRequiredAt === null;
+
     await db
       .update(integrationTable)
       .set({
@@ -103,13 +130,40 @@ export async function openFreshCredentials(
         tokenExpiresAt: nextExpiry === null ? null : new Date(nextExpiry),
         lastRefreshAttemptAt: now,
         refreshFailures: 0,
+        ...(recovering
+          ? { status: "ok", lastErrorCode: null, authFailures: 0, failureCount: 0 }
+          : {}),
       })
       .where(eq(integrationTable.id, row.id));
+
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "refresh",
+      outcome: "ok",
+      durationMs: Date.now() - startedAt,
+      detail:
+        nextExpiry === null
+          ? "no expiry reported"
+          : `expires ${new Date(nextExpiry).toISOString()}`,
+    });
+    if (recovering) {
+      await recordEvent(db, {
+        userId: row.userId,
+        integrationId: row.id,
+        kind: "status",
+        outcome: "ok",
+        code: "ok",
+        detail: "recovered: refresh succeeded while marked auth_failed",
+      });
+    }
     return { credentials: parsed, refreshed: true };
   } catch (error) {
     if (error instanceof OAuthReauthRequiredError) {
       // The grant is gone. Retrying is how a client id gets throttled, and
-      // the only fix is the person who granted it.
+      // the only fix is the person who granted it. `reauthRequiredAt` is
+      // what the sweep excludes on — this is the one case where there is
+      // genuinely nothing left to refresh.
       await db
         .update(integrationTable)
         .set({
@@ -117,8 +171,19 @@ export async function openFreshCredentials(
           lastErrorCode: "auth_failed",
           lastErrorAt: now,
           lastRefreshAttemptAt: now,
+          reauthRequiredAt: now,
         })
         .where(eq(integrationTable.id, row.id));
+      await recordEvent(db, {
+        userId: row.userId,
+        integrationId: row.id,
+        kind: "refresh",
+        outcome: "error",
+        code: "auth_failed",
+        reason: "reauth_required",
+        durationMs: Date.now() - startedAt,
+        detail: error.message,
+      });
       // The user's notification first, then ours. The Slack ping is gated on a
       // webhook secret being configured; the user's is not.
       await emitConnectionBroken(db, row.status, row);
@@ -140,6 +205,16 @@ export async function openFreshCredentials(
           : {}),
       })
       .where(eq(integrationTable.id, row.id));
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "refresh",
+      outcome: "error",
+      code: giveUp ? "auth_failed" : null,
+      reason: `strike_${failures}_of_${REFRESH_STRIKE_LIMIT}`,
+      durationMs: Date.now() - startedAt,
+      detail: error instanceof Error ? error.message : String(error),
+    });
     if (giveUp) {
       await emitConnectionBroken(db, row.status, row);
       await notifyBroken(env, db, row.status, row);
@@ -177,8 +252,13 @@ export async function sweepTokenRefresh(
       .where(
         and(
           eq(integrationTable.provider, providerId),
-          // A dead grant is never retried here either.
-          ne(integrationTable.status, "auth_failed"),
+          // A dead grant is never retried — but *only* a dead grant. This
+          // used to exclude every `auth_failed` row, which meant one
+          // rejected data request stopped the token being refreshed ever
+          // again: the row kept a valid refresh token, nothing used it, and
+          // the access token lapsed hours later with the refresh machinery
+          // looking broken when it had simply never been asked.
+          isNull(integrationTable.reauthRequiredAt),
           or(
             isNull(integrationTable.tokenExpiresAt),
             lte(integrationTable.tokenExpiresAt, new Date(now + policy.leadTimeMs)),

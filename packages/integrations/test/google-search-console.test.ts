@@ -104,4 +104,30 @@ describe("google search console", () => {
     ]);
     expect(series.previousValue).toBe(5);
   });
+
+  it("reads a quota 403 as a rate limit rather than a broken connection", async () => {
+    const ctx = stubContext({
+      "/searchAnalytics/query": {
+        __status: 403,
+        __body: { error: { errors: [{ reason: "userRateLimitExceeded" }], code: 403 } },
+      },
+    });
+    await expect(googleSearchConsole.fetchMetric(ctx, creds, request)).rejects.toMatchObject({
+      code: "rate_limited",
+    });
+  });
+
+  // The other half of the same status, preserved: a missing permission or a
+  // disabled API really does need a human, and must keep saying so.
+  it("still calls a permission 403 an auth failure", async () => {
+    const ctx = stubContext({
+      "/searchAnalytics/query": {
+        __status: 403,
+        __body: { error: { errors: [{ reason: "forbidden" }], code: 403 } },
+      },
+    });
+    await expect(googleSearchConsole.fetchMetric(ctx, creds, request)).rejects.toMatchObject({
+      code: "auth_failed",
+    });
+  });
 });

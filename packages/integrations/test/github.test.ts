@@ -314,11 +314,16 @@ describe("github", () => {
     expect((error as ProviderError).code).toBe("auth_failed");
   });
 
-  it("explains a 404 as a repository it cannot read", async () => {
+  // The code matters more than the message. `auth_failed` marks the whole
+  // connection broken and asks for a reconnect that cannot fix a renamed
+  // repository, and it locks the row out of the token-refresh sweep on the
+  // way past — which is how a working GitHub connection died nine seconds
+  // after it was made.
+  it("blames the repository, not the connection, for a 404", async () => {
     const ctx = stubContext({ "/repos/": { __status: 404 } });
     const error = await github.fetchMetric(ctx, creds, request).catch((e: unknown) => e);
-    expect((error as ProviderError).code).toBe("auth_failed");
-    expect((error as ProviderError).message).toMatch(/token can see it/);
+    expect((error as ProviderError).code).toBe("unsupported");
+    expect((error as ProviderError).message).toMatch(/repository/i);
   });
 
   it("refuses a metric it does not provide", async () => {

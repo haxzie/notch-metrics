@@ -40,12 +40,17 @@ export function stubContext(
           : entry;
       if (body && typeof body === "object" && "__status" in body) {
         const status = (body as { __status: number }).__status;
+        // `__body` is the provider's error payload, for the adapters that
+        // read one. Google says whether a 403 is a spent quota or a missing
+        // permission only in the body, so a stub that always returns `{}`
+        // cannot exercise the branch that tells them apart.
+        const errorBody = (body as { __body?: unknown }).__body ?? {};
         return {
           ok: false,
           status,
           headers: new Headers((body as { __headers?: Record<string, string> }).__headers ?? {}),
-          json: <T>() => Promise.resolve({} as T),
-          text: () => Promise.resolve(""),
+          json: <T>() => Promise.resolve(errorBody as T),
+          text: () => Promise.resolve(JSON.stringify(errorBody)),
         };
       }
       return {

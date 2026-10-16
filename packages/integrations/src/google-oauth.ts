@@ -156,3 +156,56 @@ function tokens(body: TokenResponse & { access_token: string }): GoogleTokens {
 export function googleHeaders(accessToken: string): Record<string, string> {
   return { authorization: `Bearer ${accessToken}`, accept: "application/json" };
 }
+
+/**
+ * The reasons Google uses for "you have asked too often", across the three
+ * generations of API vocabulary this app touches.
+ *
+ * They all arrive as **403**, not 429 — the older googleapis endpoints
+ * (Search Console, the YouTube Data API) never adopted 429 for quota. The
+ * YouTube Data API in particular spends a 10,000-unit daily budget and then
+ * answers 403 `quotaExceeded` until midnight Pacific, which is a wait, not a
+ * credential problem. Treating it as one marked the connection broken and
+ * asked the user to reconnect, every single day they went over.
+ */
+const QUOTA_REASONS = new Set([
+  "quotaExceeded",
+  "rateLimitExceeded",
+  "userRateLimitExceeded",
+  "dailyLimitExceeded",
+  "RESOURCE_EXHAUSTED",
+]);
+
+/** `{ error: { errors: [{ reason }], status } }` — Google's two ways of saying the same thing. */
+interface GoogleErrorBody {
+  error?: { errors?: { reason?: unknown }[]; status?: unknown; message?: unknown };
+}
+
+/**
+ * Google's own reason for a rejection, or null when the body is not the
+ * shape we know.
+ *
+ * Reading it is what separates a spent quota from a revoked scope, which
+ * share a status code and need opposite handling: one is a wait of some
+ * hours, the other needs a human.
+ */
+export async function googleErrorReason(response: {
+  json<T>(): Promise<T>;
+}): Promise<string | null> {
+  try {
+    const body = await response.json<GoogleErrorBody>();
+    const reason = body.error?.errors?.find((e) => typeof e.reason === "string")?.reason;
+    if (typeof reason === "string") return reason;
+    return typeof body.error?.status === "string" ? body.error.status : null;
+  } catch {
+    // An HTML error page from a proxy in front of Google, or a truncated
+    // body. Unknown is the honest answer and the caller falls back to the
+    // status alone.
+    return null;
+  }
+}
+
+/** Whether Google's reason for a 403 is a quota rather than a permission. */
+export function isGoogleQuotaReason(reason: string | null): boolean {
+  return reason !== null && QUOTA_REASONS.has(reason);
+}

@@ -196,12 +196,67 @@ describe("token refresh sweep", () => {
     expect((await row(expired.integrationId)).status).toBe("auth_failed");
   });
 
-  it("skips a connection already marked as needing reconnection", async () => {
+  it("skips a connection whose grant is actually gone", async () => {
     const { integrationId } = await seedGitHub({ expiresInMs: -1000, refreshToken: "ghr_x" });
     await db()
       .update(integration)
-      .set({ status: "auth_failed" })
+      .set({ status: "auth_failed", reauthRequiredAt: new Date() })
       .where(eq(integration.id, integrationId));
+    const calls = stubGitHubToken({ access_token: "never" });
+    expect((await sweepTokenRefresh(db(), env)).candidates).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  /**
+   * The regression that cost a production connection. A rejected *data*
+   * request marked the row `auth_failed`, the sweep excluded every such row,
+   * and the refresh token — still perfectly good — was never used again. The
+   * token lapsed hours later and the refresh machinery looked broken when it
+   * had simply never been asked.
+   */
+  it("still refreshes a row marked auth_failed that was never told to reauthorise", async () => {
+    const { integrationId } = await seedGitHub({
+      expiresInMs: 30 * 60 * 1000,
+      refreshToken: "ghr_stillgood",
+    });
+    await db()
+      .update(integration)
+      .set({ status: "auth_failed", lastErrorCode: "auth_failed", authFailures: 3 })
+      .where(eq(integration.id, integrationId));
+    const calls = stubGitHubToken({
+      access_token: "gho_newnewnewnewnew",
+      refresh_token: "ghr_rotated",
+      expires_in: 28800,
+    });
+
+    expect(await sweepTokenRefresh(db(), env)).toEqual({
+      candidates: 1,
+      refreshed: 1,
+      failed: 0,
+    });
+    expect(calls).toHaveLength(1);
+
+    // And a refresh that succeeded proves the grant is alive, so the
+    // connection comes back on its own rather than waiting for a human.
+    const after = await row(integrationId);
+    expect(after.status).toBe("ok");
+    expect(after.lastErrorCode).toBeNull();
+    expect(after.authFailures).toBe(0);
+  });
+
+  it("records a reauth demand so the row is excluded from then on", async () => {
+    const { integrationId } = await seedGitHub({
+      expiresInMs: 30 * 60 * 1000,
+      refreshToken: "ghr_dead",
+    });
+    stubGitHubToken({ error: "bad_refresh_token" });
+
+    await sweepTokenRefresh(db(), env);
+    const after = await row(integrationId);
+    expect(after.status).toBe("auth_failed");
+    expect(after.reauthRequiredAt).not.toBeNull();
+
+    // Second sweep: nothing left to try.
     const calls = stubGitHubToken({ access_token: "never" });
     expect((await sweepTokenRefresh(db(), env)).candidates).toBe(0);
     expect(calls).toHaveLength(0);
