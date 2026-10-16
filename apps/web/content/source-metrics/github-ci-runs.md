@@ -22,17 +22,21 @@ daily figure would, because it is the one number here you read in order to
 decide whether to go and look at something. Being fifteen minutes behind on a
 failing build defeats the point entirely.
 
-## Public repositories only
+## Private repositories
 
-The GitHub connection asks for read access to public repositories and your
-name and avatar, and nothing more. That is deliberate: the alternative is
-asking every user for access to every private repository they can see, in
-order to show a build status.
+Private repositories work here, alongside public ones.
 
-So a private repository returns nothing here. If your work is private, a
-[custom metric](/blog/writing-a-custom-metric) with a token scoped to exactly
-the repository you care about is the better trade, and the token stays in
-your own Keychain.
+GitHub has no read-only permission for private repositories on an OAuth app.
+The only scope that reaches one is `repo`, and GitHub describes it as full
+control. Your consent screen says so.
+
+Notch Metrics only ever reads. It runs no write against your repositories.
+Your token is encrypted per connection, and a token copied between accounts
+does not decrypt.
+
+If that grant is wider than you want, a
+[custom metric](/blog/writing-a-custom-metric) takes a token scoped to one
+repository, and that token stays in your own Keychain.
 
 ## Picking a repository and a branch
 

@@ -180,7 +180,7 @@ describe("link / oauth", () => {
         });
 
       if (url.includes("login/oauth/access_token")) {
-        return json(options.exchange ?? { access_token: "gho_token", scope: "public_repo" });
+        return json(options.exchange ?? { access_token: "gho_token", scope: "repo" });
       }
       // Before the `/repos/` branch: `verify` now reads the account, which is
       // what names the connection since the repository moved onto the widget.
@@ -282,7 +282,7 @@ describe("link / oauth", () => {
       "http://localhost:8787/v1/link/oauth/callback",
     );
     // Least privilege: `repo` would be read *and write* on every repository.
-    expect(location.searchParams.get("scope")).toBe("public_repo read:user");
+    expect(location.searchParams.get("scope")).toBe("repo read:user");
 
     const state = scalar(location.searchParams.get("state") ?? undefined, "state");
     const row = scalar(

@@ -326,6 +326,30 @@ describe("github", () => {
     expect((error as ProviderError).message).toMatch(/repository/i);
   });
 
+  /**
+   * A connection made before this connector asked for `repo` still holds a
+   * `public_repo` token. It keeps working for public repositories, so a
+   * private one 404s with nothing to say why, and the repository name looks
+   * like the fault. GitHub returns the granted scopes on every response.
+   */
+  it("tells an older, narrower connection to reconnect", async () => {
+    const ctx = stubContext({
+      "/repos/": { __status: 404, __headers: { "x-oauth-scopes": "public_repo, read:user" } },
+    });
+    const error = await github.fetchMetric(ctx, creds, request).catch((e: unknown) => e);
+    expect((error as ProviderError).code).toBe("unsupported");
+    expect((error as ProviderError).message).toMatch(/reconnect/i);
+  });
+
+  it("does not blame the scope when the token already has repo", async () => {
+    const ctx = stubContext({
+      "/repos/": { __status: 404, __headers: { "x-oauth-scopes": "repo, read:user" } },
+    });
+    const error = await github.fetchMetric(ctx, creds, request).catch((e: unknown) => e);
+    expect((error as ProviderError).message).not.toMatch(/reconnect/i);
+    expect((error as ProviderError).message).toMatch(/could not be read/i);
+  });
+
   it("refuses a metric it does not provide", async () => {
     const ctx = stubContext({});
     const error = await github

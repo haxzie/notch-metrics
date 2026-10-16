@@ -27,9 +27,10 @@ faq:
       stargazer history on every refresh.
   - question: What GitHub permissions does Notch Metrics ask for?
     answer: >-
-      Read access to public repositories you can see, and your name and avatar.
-      That is the whole grant, and nothing is typed in because GitHub connects
-      over OAuth.
+      Read access to your repositories, public and private, and your name and
+      avatar. GitHub grants that as full repository access, because it has no
+      read-only option for private repositories. Notch Metrics only reads.
+      Nothing is typed in, because GitHub connects over OAuth.
 ---
 
 If you maintain anything open source you know the refresh. Open the

@@ -63,7 +63,11 @@ export const manifest: ProviderManifest = {
   keywords: ["repo", "repository", "open source", "code", "issues"],
   authMode: "oauth2",
   oauth: {
-    scopeSummary: ["Read public repositories you can see", "Read your name and avatar"],
+    scopeSummary: [
+      "Read your repositories, public and private",
+      "GitHub grants this as full repository access. Notch Metrics only reads.",
+      "Read your name and avatar",
+    ],
     // Authorising is the whole connection now. The repository moved onto the
     // widget, so one GitHub account serves a tile per repository instead of
     // needing a connection each — which also means the stars of a repo you
@@ -153,8 +157,8 @@ export const manifest: ProviderManifest = {
       // is never served a cached answer rather than four requests a minute.
       freshnessSeconds: 60,
       methodology:
-        "The ten most recent GitHub Actions runs, newest first. Public repositories only, because " +
-        "this connection is not allowed to read private ones.",
+        "The ten most recent GitHub Actions runs, newest first. Private repositories included, " +
+        "for the account this connection signed in as.",
       params: [REPOSITORY_PARAM, BRANCH_PARAM],
     },
     {
@@ -230,6 +234,25 @@ function errorFor(response: HttpResponse): ProviderError {
     // same 404 — GitHub will not confirm a private repository to a caller
     // without access. The message has to cover both, because we cannot tell.
     //
+    // With `repo` the usual cause is no longer visibility but reach: a
+    // repository in an organisation that has not approved this OAuth app,
+    // or one the signed-in account is simply not a member of.
+    //
+    // Except for one case worth naming outright. A connection made before
+    // this connector asked for `repo` still holds a `public_repo` token, and
+    // it keeps working for public repositories, so nothing announces that it
+    // is the reason a private one 404s. GitHub returns the granted scopes on
+    // every response, so the token can say so itself rather than leaving
+    // somebody to re-check a repository name that was right all along.
+    const granted = response.headers.get("x-oauth-scopes") ?? "";
+    if (granted !== "" && !granted.split(/,\s*/).includes("repo")) {
+      return new ProviderError(
+        "unsupported",
+        "Reconnect GitHub to read private repositories. This connection was " +
+          "authorised for public ones only.",
+      );
+    }
+    //
     // `unsupported`, not `auth_failed`. This is a statement about one
     // widget's repository, not about the connection: the same token is
     // answering for every other tile in the notch. Calling it an auth
@@ -238,7 +261,7 @@ function errorFor(response: HttpResponse): ProviderError {
     // locked the row out of token refresh on the way past.
     return new ProviderError(
       "unsupported",
-      "That repository could not be read. Check the name, and that it is public.",
+      "That repository could not be read. Check the name, and that this account can see it.",
     );
   }
   return errorForStatus("api.github.com", response);
@@ -459,15 +482,39 @@ function tokens(body: TokenResponse & { access_token: string }): {
  * on both.
  */
 const oauth: OAuthConfig<GitHubCredentials> = {
-  // `public_repo`, not `repo`.
+  // `repo`, and it grants more than this connector uses.
   //
-  // An OAuth App has no read-only scope for private repositories — `repo` is
-  // read *and write* on every repository the user can reach, and this server
-  // would then hold a token that can push to all of them to show a star
-  // count. Private repositories need a GitHub App, which is a different
-  // build; until then this asks for what it can actually justify.
-  scopes: ["public_repo", "read:user"],
-  scopeSummary: ["Read public repositories you can see", "Read your name and avatar"],
+  // An OAuth App has no read-only scope for private repositories. GitHub's
+  // repo-related scopes are `repo`, `repo:status`, `repo_deployment`,
+  // `public_repo`, `repo:invite` and `security_events`; none of them is
+  // "read private repositories". `repo` is the only one that reaches a
+  // private repo at all, and it carries read *and write* on code for every
+  // repository the user can see, plus org projects, invitations and
+  // webhooks.
+  //
+  // So this is a deliberate trade, not an oversight: private repositories
+  // were worth more than the narrower token. What it costs is real and
+  // should not be quietly forgotten — the consent screen says "Full control
+  // of private repositories", and a compromise of this server would mean
+  // push access to every connected account rather than a leaked star count.
+  // Nothing here ever issues a write; the AAD-bound envelope in
+  // `lib/crypto.ts` is what keeps one user's token from decrypting for
+  // another.
+  //
+  // A GitHub App is the way to take this back: per-repository installation
+  // with `Actions: Read-only` and `Metadata: Read-only`, narrower than even
+  // `public_repo` is today. It is a different credential shape — installation
+  // tokens minted from a signed JWT, no refresh token — so it is its own
+  // piece of work rather than a scope swap.
+  scopes: ["repo", "read:user"],
+  // Honest about the grant rather than about our intent. GitHub will show
+  // "Full control of private repositories" on the next screen, and a summary
+  // that said "read" would read as a contradiction of it.
+  scopeSummary: [
+    "Read your repositories, public and private",
+    "GitHub grants this as full repository access. Notch Metrics only reads.",
+    "Read your name and avatar",
+  ],
 
   authorizationUrl({ clientId, redirectUri, state }) {
     const url = new URL("https://github.com/login/oauth/authorize");
