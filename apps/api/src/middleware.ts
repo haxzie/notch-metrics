@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import { createAuth } from "./lib/auth.ts";
@@ -5,7 +6,7 @@ import { createDb, type Database } from "./lib/db.ts";
 import { identityFromBearer, type Identity } from "./lib/identity.ts";
 import { billingState, hasAccess } from "./lib/entitlement.ts";
 import { take } from "./lib/rate-limit.ts";
-import { RequestTelemetry, requestIdFrom } from "./lib/telemetry.ts";
+import { BODY_LIMITS, RequestTelemetry, requestIdFrom, safeBody } from "./lib/telemetry.ts";
 import type { Env } from "./env.ts";
 
 export interface Variables {
@@ -43,9 +44,14 @@ export const withTelemetry = createMiddleware<AppContext>(async (c, next) => {
   // exactly the response somebody will be quoting back.
   c.header("x-request-id", telemetry.requestId);
 
+  // Cloned before the route consumes it. A body can only be read once, and
+  // by the time the status is known the handler has already had it.
+  const replay = bodyCapturable(c) ? c.req.raw.clone() : null;
+
   try {
     await next();
   } finally {
+    await describeFailure(c, telemetry, replay);
     const cf = c.req.raw.cf as { colo?: string } | undefined;
     telemetry.finish({
       method: c.req.method,
@@ -57,6 +63,81 @@ export const withTelemetry = createMiddleware<AppContext>(async (c, next) => {
     });
   }
 });
+
+/**
+ * Routes whose bodies never go to a log store, whatever the status.
+ *
+ * Not a precaution — each of these carries a working credential in plain
+ * text. `/v1/integrations` takes somebody's Stripe secret key, the link and
+ * connect legs carry OAuth `code` and the connect token, `/api/auth` carries
+ * passwords and session material, `/v1/desktop` mints bearer tokens, and a
+ * webhook body is signed payload we have no business keeping.
+ *
+ * `scrub` would catch most of it by key name, and this exists because "most"
+ * is the wrong standard for a credential. The two defences are independent
+ * on purpose.
+ */
+const NO_BODY_ROUTES = [
+  "/api/auth",
+  "/v1/integrations",
+  "/v1/link",
+  "/v1/connect",
+  "/v1/desktop",
+  "/v1/webhooks",
+];
+
+function bodyCapturable(c: { req: { path: string; method: string } }): boolean {
+  if (c.req.method === "GET" || c.req.method === "HEAD") return false;
+  return !NO_BODY_ROUTES.some((prefix) => c.req.path.startsWith(prefix));
+}
+
+/**
+ * Attaches the reason a request failed, and on a failure the bodies behind
+ * it.
+ *
+ * Failures only, and that is the whole design. A successful metric batch
+ * returns the customer's revenue — their business data, high volume, no
+ * diagnostic value — and sending it to a third party because it might be
+ * handy is not a trade worth making. A failure is rare, is the thing being
+ * investigated, and the body is what explains it.
+ */
+async function describeFailure(
+  c: Context<AppContext>,
+  telemetry: RequestTelemetry,
+  replay: Request | null,
+): Promise<void> {
+  if (c.res.status < 400) return;
+
+  let code: string | null = null;
+  let responseBody: unknown = undefined;
+  try {
+    const text = await c.res.clone().text();
+    if (text.length <= BODY_LIMITS.MAX_BODY_BYTES) {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && "code" in parsed) {
+        code = String((parsed as { code: unknown }).code);
+      }
+      responseBody = safeBody(text);
+    }
+  } catch {
+    // A non-JSON or already-consumed response. The status still says
+    // enough; losing the body must not lose the line.
+  }
+
+  let requestBody: unknown = undefined;
+  if (replay) {
+    try {
+      const text = await replay.text();
+      if (text.length > 0 && text.length <= BODY_LIMITS.MAX_BODY_BYTES) {
+        requestBody = safeBody(text);
+      }
+    } catch {
+      // Same reasoning.
+    }
+  }
+
+  telemetry.fail(code, requestBody, responseBody);
+}
 
 /**
  * Accepts either a Better Auth session cookie or a device bearer token.

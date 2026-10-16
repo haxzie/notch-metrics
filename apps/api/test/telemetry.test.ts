@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { deviceToken, integration, user } from "@notch/db";
 import worker from "../src/index.ts";
 import { id, randomToken, sha256Base64Url } from "../src/lib/ids.ts";
-import { RequestTelemetry, requestIdFrom } from "../src/lib/telemetry.ts";
+import { RequestTelemetry, requestIdFrom, scrub } from "../src/lib/telemetry.ts";
 import { db, makeUser, migrate, scalar } from "./helpers.ts";
 
 beforeAll(migrate);
@@ -195,5 +195,118 @@ describe("the request line", () => {
       "http line",
     );
     expect(http.userId).toBeUndefined();
+  });
+});
+
+describe("request and response bodies", () => {
+  /**
+   * `POST /v1/integrations` carries somebody's Stripe secret key. A body
+   * capture that shipped it would be a credential export with a thirty-day
+   * retention policy, so the key-based scrub runs at every depth and is
+   * backed by a route denylist that keeps those bodies out entirely.
+   */
+  it("replaces a secret-named branch wholesale, without looking inside it", () => {
+    const scrubbed = scrub({
+      provider: "stripe",
+      credentials: { api_key: "sk_live_abcdefghijklmnop", nested: { refresh_token: "ghr_xyz" } },
+      label: "My Stripe",
+    }) as Record<string, unknown>;
+
+    const json = JSON.stringify(scrubbed);
+    expect(json).not.toContain("sk_live_abcdefghijklmnop");
+    expect(json).not.toContain("ghr_xyz");
+    // `credentials` is itself a secret name, so the whole branch goes rather
+    // than being walked for secrets one key at a time. Anything added inside
+    // it later is covered without anyone remembering to add it here.
+    expect(scrubbed.credentials).toBe("[redacted object]");
+    // Everything around it survives, which is what the capture was for.
+    expect(scrubbed.label).toBe("My Stripe");
+    expect(scrubbed.provider).toBe("stripe");
+  });
+
+  it("redacts a secret nested under ordinary keys, keeping its shape", () => {
+    const scrubbed = scrub({
+      widget: { integrationId: "int_abc", access_token: "gho_zzzzzzzzzzzz" },
+    }) as { widget: Record<string, unknown> };
+
+    expect(scrubbed.widget.access_token).toBe("[redacted 16 chars]");
+    // The surrounding fields are the diagnosis: which integration, which
+    // widget, which metric.
+    expect(scrubbed.widget.integrationId).toBe("int_abc");
+  });
+
+  it("catches a token pasted into a field nobody thought to name", () => {
+    const scrubbed = scrub({ message: "failed with gho_abcdefghijklmnopqrst" });
+    expect(JSON.stringify(scrubbed)).not.toContain("gho_abcdefghijklmnopqrst");
+  });
+
+  it("bounds depth and array length rather than following a hostile shape", () => {
+    let deep: Record<string, unknown> = { end: "value" };
+    for (let i = 0; i < 20; i++) deep = { nest: deep };
+    expect(JSON.stringify(scrub(deep))).toContain("[deep]");
+    expect((scrub(Array.from({ length: 500 }, (_, i) => i)) as unknown[]).length).toBe(20);
+  });
+
+  /**
+   * The field that answers the question this was built for: a 402 on
+   * `/v1/metrics/batch` says `SUBSCRIPTION_REQUIRED` rather than needing a
+   * database query to find out whose trial lapsed.
+   */
+  it("records the machine-readable reason a request failed", async () => {
+    const { lines } = captureLines();
+    await get("/no-such-endpoint");
+
+    const http = scalar(
+      lines.find((l) => l.scope === "http"),
+      "http line",
+    );
+    expect(http.errorCode).toBe("NOT_FOUND");
+  });
+
+  it("keeps bodies off a successful request", async () => {
+    const { lines } = captureLines();
+    await get("/v1/connectors");
+
+    const http = scalar(
+      lines.find((l) => l.scope === "http"),
+      "http line",
+    );
+    // A successful metric batch is the customer's revenue. High volume, no
+    // diagnostic value, and not ours to forward.
+    expect(http.responseBody).toBeUndefined();
+    expect(http.requestBody).toBeUndefined();
+  });
+
+  it("captures the body of a failing request that is safe to keep", async () => {
+    const { lines } = captureLines();
+    await get("/v1/metrics/batch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nonsense: true }),
+    });
+
+    const http = scalar(
+      lines.find((l) => l.scope === "http"),
+      "http line",
+    );
+    expect(http.status).toBe(401);
+    expect(JSON.stringify(http.requestBody)).toContain("nonsense");
+  });
+
+  /** The denylist, independent of the scrub and for the same reason twice. */
+  it("never captures a body from a route that carries a credential", async () => {
+    const { lines } = captureLines();
+    await get("/v1/integrations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "stripe", credentials: { api_key: "sk_live_secret" } }),
+    });
+
+    const http = scalar(
+      lines.find((l) => l.scope === "http"),
+      "http line",
+    );
+    expect(http.requestBody).toBeUndefined();
+    expect(JSON.stringify(http)).not.toContain("sk_live_secret");
   });
 });

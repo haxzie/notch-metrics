@@ -187,6 +187,42 @@ quietly truncating.
 | order by p95 desc
 ```
 
+### Why a request failed
+
+Every non-2xx line carries `errorCode` — the machine-readable reason from the
+response body. `SUBSCRIPTION_REQUIRED`, `RATE_LIMITED`, `NOT_FOUND`,
+`BAD_REQUEST`. One short string, never sensitive, and usually the whole
+answer:
+
+```kusto
+['notch-metrics-api']
+| where scope == "http" and status >= 400
+| summarize n = count() by route, status, errorCode
+| order by n desc
+```
+
+**Bodies are captured on failures only**, as `requestBody` and
+`responseBody`. That line is deliberate. A _successful_ metric batch returns
+the customer's revenue — high volume, no diagnostic value, and not ours to
+forward to a third party because it might one day be handy. A failure is
+rare, is the thing being investigated, and the body is what explains it.
+
+Two independent defences stop a credential going with it:
+
+1. **A route denylist.** `/v1/integrations`, `/v1/link`, `/v1/connect`,
+   `/v1/desktop`, `/api/auth` and `/v1/webhooks` never have a body captured,
+   at any status. Each carries a working credential in plain text — the first
+   takes somebody's Stripe secret key.
+2. **`scrub`**, which walks the parsed body and replaces anything under a
+   secret-looking key at any depth, keeping the shape:
+   `"api_key": "[redacted 18 chars]"`. A key that is itself secret-named
+   (`credentials`) loses its whole branch, so a field added inside it later
+   is covered without anyone remembering to update a list. Strings are also
+   run through the pattern-based `redact`, which catches a token pasted into
+   a field nobody thought to name.
+
+They overlap on purpose. "Most" is the wrong standard for a credential.
+
 ### Two events per request, joined
 
 Each request produces an `http` line (ours) and an `invocation` row (the
