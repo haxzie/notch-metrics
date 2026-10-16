@@ -187,6 +187,18 @@ quietly truncating.
 | order by p95 desc
 ```
 
+### Two events per request, joined
+
+Each request produces an `http` line (ours) and an `invocation` row (the
+runtime's, carrying the HTTP status and the Worker outcome). The shipper
+copies `requestId`, `userId`, `plan` and `route` from the first onto the
+second, so either one answers "whose request was this".
+
+Note that `outcome` is the **Worker's** verdict, not the HTTP one: a 402 or a
+500 is still `outcome: "ok"` as long as the isolate did not throw or get
+killed. Filter on `status` for HTTP failures and `outcome` for
+`exceededCpu`, `canceled` and the like.
+
 ### The request id ties the two stores together
 
 `requestId` is `cf-ray` by preference — Cloudflare already generates one per

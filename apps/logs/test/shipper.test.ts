@@ -228,3 +228,92 @@ describe("the HTTP log, and what must never reach it", () => {
     expect(events[0]).not.toHaveProperty("path");
   });
 });
+
+describe("joining the two halves of one request", () => {
+  /**
+   * The gap this closes: a 402 on `/v1/metrics/batch` showed `method`,
+   * `path`, `status` and nothing else, so "whose request was that?" could
+   * only be answered by guessing from a timestamp. Both events come from the
+   * same invocation, so the id and the caller are already in hand.
+   */
+  it("copies the request id and caller onto the invocation row", () => {
+    const events = toAxiomEvents([
+      {
+        scriptName: "notch-api-production",
+        outcome: "ok",
+        eventTimestamp: TRACE_TIME,
+        event: {
+          request: { url: "https://api.notchmetrics.com/v1/metrics/batch", method: "POST" },
+          response: { status: 402 },
+        },
+        logs: [
+          {
+            timestamp: TRACE_TIME,
+            level: "info",
+            message: [
+              JSON.stringify({
+                scope: "http",
+                requestId: "a4b63-LHR",
+                userId: "usr_abc",
+                plan: "trial",
+                route: "/v1/metrics/batch",
+                status: 402,
+              }),
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const invocation = events.find((e) => e.kind === "invocation");
+    expect(invocation).toMatchObject({
+      requestId: "a4b63-LHR",
+      userId: "usr_abc",
+      plan: "trial",
+      status: 402,
+      method: "POST",
+    });
+  });
+
+  it("copies it onto an exception too, which is where it matters most", () => {
+    const events = toAxiomEvents([
+      {
+        scriptName: "notch-api-production",
+        outcome: "exception",
+        eventTimestamp: TRACE_TIME,
+        logs: [
+          {
+            timestamp: TRACE_TIME,
+            level: "info",
+            message: [JSON.stringify({ scope: "http", requestId: "r-9", userId: "usr_x" })],
+          },
+        ],
+        exceptions: [{ timestamp: TRACE_TIME, name: "TypeError", message: "boom" }],
+      },
+    ]);
+
+    expect(events.find((e) => e.kind === "exception")).toMatchObject({
+      requestId: "r-9",
+      userId: "usr_x",
+      error: "TypeError",
+    });
+  });
+
+  it("adds nothing to a cron tick, which has no request behind it", () => {
+    const events = toAxiomEvents([
+      {
+        scriptName: "notch-api-production",
+        outcome: "ok",
+        eventTimestamp: TRACE_TIME,
+        logs: [
+          {
+            timestamp: TRACE_TIME,
+            level: "info",
+            message: [JSON.stringify({ scope: "cron.tokenRefresh", refreshed: 2 })],
+          },
+        ],
+      },
+    ]);
+    expect(events.find((e) => e.kind === "invocation")).not.toHaveProperty("requestId");
+  });
+});

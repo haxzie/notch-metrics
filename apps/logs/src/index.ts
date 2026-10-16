@@ -138,13 +138,27 @@ export function toAxiomEvents(items: TailItem[]): AxiomEvent[] {
     };
     const invocationTime = isoTime(item.eventTimestamp);
 
+    // Lifted off the request's own line and copied onto every event from the
+    // same invocation.
+    //
+    // Without this the two halves of one request cannot be joined: the API's
+    // `http` line knows the caller and the request id, and the invocation
+    // row knows the HTTP status, and nothing connects them. Looking at a 402
+    // and asking "whose?" meant guessing from a timestamp.
+    const identity: Record<string, unknown> = {};
     for (const log of item.logs ?? []) {
+      const fields = fieldsFromMessage(log.message);
+      for (const key of ["requestId", "userId", "plan", "route"]) {
+        if (identity[key] === undefined && fields[key] !== undefined) {
+          identity[key] = fields[key];
+        }
+      }
       events.push({
         _time: isoTime(log.timestamp),
         ...base,
         kind: "log",
         level: log.level,
-        ...fieldsFromMessage(log.message),
+        ...fields,
       });
     }
 
@@ -152,6 +166,7 @@ export function toAxiomEvents(items: TailItem[]): AxiomEvent[] {
       events.push({
         _time: isoTime(exception.timestamp),
         ...base,
+        ...identity,
         kind: "exception",
         level: "error",
         // The thrown error's own type and text. These are the ones workerd
@@ -175,6 +190,7 @@ export function toAxiomEvents(items: TailItem[]): AxiomEvent[] {
     events.push({
       _time: invocationTime,
       ...base,
+      ...identity,
       kind: "invocation",
       ...(request?.method ? { method: request.method } : {}),
       ...(path ? { path } : {}),
