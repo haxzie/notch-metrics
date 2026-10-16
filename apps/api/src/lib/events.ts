@@ -24,6 +24,8 @@ export interface IntegrationEventInput {
   durationMs?: number | null;
   calls?: ProviderCall[] | null;
   detail?: string | null;
+  /** Ties this row to the request's line in Axiom. Absent from the cron. */
+  requestId?: string | null;
 }
 
 /**
@@ -73,6 +75,7 @@ export async function recordEvent(db: Database, input: IntegrationEventInput): P
       // prose can quote the request that failed, and unlike a console line
       // this one is kept for a week in a table a support query will read.
       detail: input.detail ? redact(input.detail).slice(0, MAX_DETAIL) : null,
+      requestId: input.requestId ?? null,
     });
   } catch (error) {
     logError("events.record", error);

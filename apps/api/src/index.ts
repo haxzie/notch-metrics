@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { createAuth } from "./lib/auth.ts";
-import { withDb, type AppContext } from "./middleware.ts";
+import { withDb, withTelemetry, type AppContext } from "./middleware.ts";
 import { billing } from "./routes/billing.ts";
 import { connect } from "./routes/connect.ts";
 import { connectors } from "./routes/connectors.ts";
@@ -22,6 +22,9 @@ import type { Env } from "./env.ts";
 
 const app = new Hono<AppContext>();
 
+// First, so every request below it is accounted for — including the ones
+// that never reach a route.
+app.use("*", withTelemetry);
 app.use("*", withDb);
 
 app.use(
@@ -36,7 +39,10 @@ app.use(
     },
     credentials: true,
     allowHeaders: ["content-type", "authorization", "if-none-match"],
-    exposeHeaders: ["etag", "retry-after"],
+    // `x-request-id` so the dashboard can quote the id of a request that
+    // failed. A header the browser cannot read is one a bug report cannot
+    // include.
+    exposeHeaders: ["etag", "retry-after", "x-request-id"],
   }),
 );
 
@@ -68,7 +74,9 @@ app.onError((error, c) => {
   if (error instanceof HTTPException) {
     return c.json({ code: "ERROR", message: error.message }, error.status);
   }
-  logError("unhandled", error);
+  // With the request id, so the 500 somebody is complaining about and the
+  // line describing it can be found as one thing.
+  logError(`unhandled.${c.get("telemetry")?.requestId ?? "unknown"}`, error);
   // Generic on purpose. A thrown message here routinely names a missing secret
   // — `required()` is built to do exactly that — and that is for the logs.
   return c.json({ code: "ERROR", message: "Something went wrong." }, 500);

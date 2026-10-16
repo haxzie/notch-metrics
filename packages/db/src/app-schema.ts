@@ -351,6 +351,15 @@ export const integrationEvent = sqliteTable(
     calls: json<{ host: string; method: string; status: number | null; ms: number }[]>("calls"),
     /** Redacted and bounded. Never a credential; see `redact`. */
     detail: text("detail"),
+    /**
+     * The HTTP request this attempt was made for, when it was made for one.
+     * Null from the cron, which has no request.
+     *
+     * The join between the two halves of the logging: an Axiom line for a
+     * slow request names an id, and this is how that id turns into the
+     * provider calls it actually made.
+     */
+    requestId: text("request_id"),
   },
   (t) => [
     // The read path is always "this integration, newest first", so the index
@@ -358,6 +367,7 @@ export const integrationEvent = sqliteTable(
     index("integration_event_integration_idx").on(t.integrationId, t.at),
     index("integration_event_at_idx").on(t.at),
     index("integration_event_user_idx").on(t.userId),
+    index("integration_event_request_idx").on(t.requestId),
   ],
 );
 

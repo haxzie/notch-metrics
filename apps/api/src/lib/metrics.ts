@@ -19,6 +19,7 @@ import { logError } from "./redact.ts";
 import { notifyBroken } from "./slack.ts";
 import { emitConnectionBroken } from "./notifications.ts";
 import { callRecorder, recordEvent } from "./events.ts";
+import type { RequestTelemetry } from "./telemetry.ts";
 
 /**
  * How long a computed envelope stays fresh.
@@ -92,6 +93,11 @@ export interface FetchOptions {
   preferredCurrency: string;
   /** Skip the cache entirely. Used by `/refresh`, which is rate-limited hard. */
   force?: boolean;
+  /**
+   * The request this fetch belongs to, when there is one. Null from the
+   * cron, which has no request and no id to attach anything to.
+   */
+  telemetry?: RequestTelemetry | null;
 }
 
 /**
@@ -241,27 +247,51 @@ export async function queryMetric(
     const adapter = getAdapter(row.provider);
     // Refreshed first when the connector says the token is about to lapse,
     // so a request inside the lead window does not race the cron.
-    const { credentials } = await openFreshCredentials(options.env, db, row);
+    //
+    // Spanned separately from the fetch because the two fail for unrelated
+    // reasons and have unrelated fixes: a slow refresh is our token endpoint
+    // round trip, a slow fetch is the provider's data API.
+    const { credentials } = options.telemetry
+      ? await options.telemetry.span(`credentials.${row.provider}`, () =>
+          openFreshCredentials(options.env, db, row),
+        )
+      : await openFreshCredentials(options.env, db, row);
 
-    const raw = await adapter.fetchMetric(
-      adapterContext({
-        provider: row.provider,
-        timeZone: options.timeZone,
-        preferredCurrency: options.preferredCurrency,
-        signal: AbortSignal.timeout(20_000),
-        onCall: recorder.onCall,
-      }),
-      credentials,
-      {
-        metric: query.metric,
-        granularity,
-        from,
-        to,
-        comparePrevious: true,
-        wantSeries: query.series,
-        params: query.params ?? {},
-      },
-    );
+    const fetchMetric = () =>
+      adapter.fetchMetric(
+        adapterContext({
+          provider: row.provider,
+          timeZone: options.timeZone,
+          preferredCurrency: options.preferredCurrency,
+          signal: AbortSignal.timeout(20_000),
+          onCall: recorder.onCall,
+        }),
+        credentials,
+        {
+          metric: query.metric,
+          granularity,
+          from,
+          to,
+          comparePrevious: true,
+          wantSeries: query.series,
+          params: query.params ?? {},
+        },
+      );
+
+    const raw = options.telemetry
+      ? await options.telemetry.span(`provider.${row.provider}.${query.metric}`, fetchMetric)
+      : await fetchMetric();
+
+    // The individual provider requests, which `onCall` has been collecting
+    // all along. One span each, so a metric that walked six pages looks like
+    // six pages rather than one slow call.
+    for (const call of recorder.calls) {
+      options.telemetry?.record({
+        name: `http.${call.host}`,
+        ms: call.ms,
+        ...(call.status !== null && call.status >= 400 ? { error: String(call.status) } : {}),
+      });
+    }
 
     const series: MetricSeries = {
       integrationId: row.id,
@@ -338,6 +368,7 @@ export async function queryMetric(
       integrationId: row.id,
       kind: "fetch",
       outcome: "ok",
+      requestId: options.telemetry?.requestId ?? null,
       metric: query.metric,
       durationMs: Date.now() - startedAt,
       calls: recorder.calls,
@@ -355,6 +386,7 @@ export async function queryMetric(
       integrationId: row.id,
       kind: "fetch",
       outcome: "error",
+      requestId: options.telemetry?.requestId ?? null,
       metric: query.metric,
       code: mapped.code,
       httpStatus: recorder.lastStatus(),

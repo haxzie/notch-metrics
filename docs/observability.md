@@ -127,37 +127,83 @@ the request logged nothing — it is the only trace of a tick killed by
 `exceededCpu`, which would otherwise be indistinguishable from a tick that
 never ran.
 
-### Both Workers, one shipper
+### The APIs only
 
-`notch-api-production` and `notch-web-production` both name the shipper under
-`tail_consumers`. Filter on `worker` to tell them apart.
+`notch-api-production` names the shipper under `tail_consumers`. The website
+does not, deliberately: it is a near-static marketing site whose source calls
+`console` once, so all it would contribute is request counts already visible
+in Workers Analytics, diluting a dataset meant for diagnosing the API.
 
-The site needs no Next.js instrumentation to be covered — no
-`@axiomhq/nextjs`, no SDK on the request path, nothing in the client bundle.
-Once OpenNext has built it, it is a Worker like any other and its trace events
-arrive the same way. For a site whose source calls `console` once, the HTTP log
-_is_ the observability: `method`, `path`, `status` and `outcome` per request.
+### What one request looks like
 
-**Paths are masked, and that is load-bearing.** `safePath` drops the query
-string entirely and replaces any path segment that is not plainly a route
-word. A connect link is `/connect/<randomToken(32)>` — a single-use credential
-that completes somebody's OAuth flow — and Axiom keeps events for thirty days,
-far longer than that token is meant to live. An OAuth callback carries `code`
-and `state` in the query for the same reason. What survives is what you
-actually want: `/blog/how-to-track-stripe-mrr`, `/pricing`, `/llms.txt`.
+Every request emits exactly one line, whatever happens to it — including a
+500, which is the request most worth having a record of:
+
+```json
+{
+  "level": "info",
+  "scope": "http",
+  "subsystem": "http",
+  "requestId": "9a1b2c3d4e5f6789-LHR",
+  "method": "GET",
+  "route": "/v1/metrics/batch",
+  "status": 200,
+  "ms": 412,
+  "userId": "usr_...",
+  "plan": "pro",
+  "authKind": "device",
+  "colo": "LHR",
+  "spans": [
+    { "name": "credentials.github", "ms": 31 },
+    { "name": "provider.github.stars", "ms": 338 },
+    { "name": "http.api.github.com", "ms": 102 },
+    { "name": "http.api.github.com", "ms": 96, "error": "404" }
+  ]
+}
+```
+
+**`route`, not the path.** Hono knows the pattern that matched, so
+`/v1/integrations/:id` arrives already grouped with no id in it. A raw path
+would need masking — `/v1/link/:token` carries a live single-use credential —
+and would still group badly. An unmatched request logs `(unmatched)`.
+
+**`userId`, never an email address.** An id finds somebody in the database
+when they write in and means nothing to anyone without it. An email address in
+a third-party log store is personal data living somewhere it was never
+collected to be, readable by anyone with a query token, for as long as
+retention says.
+
+**Spans are intra-request timings, not distributed tracing.** There is one
+service here; a span crossing a process boundary would need propagation
+nothing in this system speaks. What they answer is the question that actually
+comes up — this took four seconds, how much of it was the provider. The list
+is capped at 40, and a line that hit the cap says `spansDropped` rather than
+quietly truncating.
 
 ```kusto
 ['notch-metrics-api']
-| where worker == "notch-web-production" and kind == "invocation"
-| summarize requests = count() by path, status
-| order by requests desc
+| where scope == "http"
+| summarize p95 = percentile(ms, 95), n = count() by route
+| order by p95 desc
 ```
 
-**What this does not give you is Web Vitals.** Those are measured in the
-browser, so no server-side trace event carries them; they need something in
-the client bundle. `@axiomhq/react` would do it, at the cost of four packages
-and a request-path dependency. Worth it only if nothing else is measuring
-them — this site currently has no analytics at all.
+### The request id ties the two stores together
+
+`requestId` is `cf-ray` by preference — Cloudflare already generates one per
+request and shows it in their own dashboards, so our logs and theirs name the
+same thing. A caller-supplied `x-request-id` wins over it, bounded and
+stripped, so a client can correlate its own retry. It goes back on every
+response as `x-request-id` and is exposed through CORS, so the dashboard can
+show it and a bug report can quote it.
+
+Every `integration_event` row written while serving a request carries it too:
+
+```sql
+SELECT kind, outcome, code, http_status, duration_ms
+FROM integration_event WHERE request_id = '9a1b2c3d4e5f6789-LHR';
+```
+
+So a slow line in Axiom turns into the exact provider calls behind it.
 
 ### Setting it up
 

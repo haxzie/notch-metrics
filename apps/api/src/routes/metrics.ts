@@ -40,6 +40,7 @@ metrics.get("/query", async (c) => {
       userId: user.id,
       timeZone: user.timezone,
       preferredCurrency: user.preferredCurrency,
+      telemetry: c.get("telemetry"),
     },
     parsed.data,
   );
@@ -69,6 +70,7 @@ metrics.post("/batch", async (c) => {
     userId: user.id,
     timeZone: user.timezone,
     preferredCurrency: user.preferredCurrency,
+    telemetry: c.get("telemetry"),
   };
 
   const results = await queryMetrics(options, parsed.data.requests);

@@ -14,20 +14,7 @@
   "env": {
     "production": {
       "routes": [{ "pattern": "notchmetrics.com", "custom_domain": true }],
-      "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
-
-      // The same shipper the API uses. This site is a Worker like any other
-      // once OpenNext has built it, so its trace events go to Axiom without
-      // a line of Next.js instrumentation — no `@axiomhq/nextjs`, no SDK
-      // making an HTTP call on the request path, nothing in the client
-      // bundle. What arrives is the HTTP log: method, masked path, status
-      // and outcome per request, which is most of what there is to know
-      // about a site that calls `console` once in its whole source.
-      //
-      // `-production` because a named environment deploys as `<name>-<env>`.
-      // Cloudflare accepts a consumer that does not exist and then delivers
-      // nothing, so the only symptom of a typo here is an empty dataset.
-      "tail_consumers": [{ "service": "notch-logs-production" }]
+      "assets": { "directory": ".open-next/assets", "binding": "ASSETS" }
     }
   }
 }
