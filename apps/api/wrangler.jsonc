@@ -87,12 +87,19 @@
       },
       "triggers": { "crons": ["*/5 * * * *"] },
 
-      // Every trace event from this Worker is handed to `notch-logs`, which
-      // forwards it to Axiom. Out of band: the delivery happens after the
-      // response has gone, so a slow or dead Axiom cannot show up as latency
-      // here. Deploy that Worker before this one — naming a tail consumer
-      // that does not exist fails the deploy.
-      "tail_consumers": [{ "service": "notch-logs" }],
+      // Every trace event from this Worker is handed to the log shipper,
+      // which forwards it to Axiom. Out of band: the delivery happens after
+      // the response has gone, so a slow or dead Axiom cannot show up as
+      // latency here.
+      //
+      // `-production`, not `notch-logs`. A named environment deploys as
+      // `<name>-<env>` unless the env block overrides `name`, so the Worker
+      // that exists is `notch-logs-production` — the same reason this one is
+      // `notch-api-production`. Cloudflare accepts a `tail_consumers` entry
+      // naming a service that does not exist, and then silently delivers
+      // nothing, so the only symptom of getting this wrong is an empty
+      // dataset.
+      "tail_consumers": [{ "service": "notch-logs-production" }],
       "routes": [{ "pattern": "api.notchmetrics.com", "custom_domain": true }],
       "d1_databases": [
         {

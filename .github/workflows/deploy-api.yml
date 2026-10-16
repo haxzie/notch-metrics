@@ -41,11 +41,12 @@ jobs:
       - run: pnpm --filter @notch/logs typecheck
       - run: pnpm --filter @notch/logs test
 
-      # Strictly before the API. `apps/api` names this Worker as its
-      # `tail_consumers` service, and a deploy naming a consumer that does
-      # not exist yet is rejected outright. Deploying it on every API run is
-      # also what keeps the shipper from silently lagging the thing it ships
-      # for — it is three kilobytes and has no migrations to worry about.
+      # Before the API, which names this Worker as its `tail_consumers`
+      # service. Cloudflare does not reject a deploy that names a consumer
+      # which does not exist — it accepts it and delivers nothing — so the
+      # ordering is what keeps a first deploy from quietly shipping no logs
+      # at all. Running it every time also stops the shipper lagging the
+      # thing it ships for; it is three kilobytes and has no migrations.
       - run: pnpm --filter @notch/logs run deploy
 
       - name: Apply migrations

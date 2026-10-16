@@ -79,10 +79,17 @@ than this Worker produces.
 
 ### How it is wired
 
-`apps/logs` is a **Tail Worker**: `notch-logs`. `apps/api` names it under
-`tail_consumers`, so the runtime hands it every trace event the API produces —
-each `console` line, each exception workerd caught itself, and the outcome of
-each invocation.
+`apps/logs` is a **Tail Worker**. `apps/api` names it under `tail_consumers`,
+so the runtime hands it every trace event the API produces — each `console`
+line, each exception workerd caught itself, and the outcome of each
+invocation.
+
+**The name carries the environment.** A wrangler named environment deploys as
+`<name>-<env>`, so the Workers that exist are `notch-api-production` and
+`notch-logs-production`, and the `tail_consumers` entry has to say
+`notch-logs-production`. Cloudflare accepts an entry naming a service that
+does not exist, delivers nothing, and reports no error — an empty dataset is
+the only symptom. If logs stop arriving, check this first.
 
 ```
 apps/api ──trace events──▶ notch-logs ──POST /v1/ingest──▶ Axiom
@@ -134,8 +141,9 @@ pnpm --filter @notch/logs run deploy   # must exist before the next line
 pnpm --filter @notch/api run deploy    # names it under tail_consumers
 ```
 
-An API deploy naming a `tail_consumers` service that does not exist is
-rejected outright, which is why `deploy-api.yml` deploys `notch-logs` first.
+`deploy-api.yml` deploys the shipper first for a reason: an API deploy naming
+a consumer that does not exist is **accepted**, and then silently delivers
+nothing.
 
 Without `AXIOM_TOKEN` the Worker accepts events and drops them. That is
 deliberate — it is what a preview deployment or a bare `wrangler dev` should
@@ -150,7 +158,7 @@ returns a 401 that reads exactly like a bad token.
 - **A failed batch is not retried.** A Tail Worker that retries turns a bad
   token into a request amplifier against Axiom, and the events are already a
   minute stale by then. The failure lands in Workers Logs instead:
-  `wrangler tail notch-logs`.
+  `wrangler tail notch-logs-production`.
 - **`notch-logs` does not ship its own logs to Axiom.** A log shipper that
   reports its own outages through itself cannot report the one that matters,
   so its `observability` stays on and its failures stay in Workers Logs.
@@ -173,4 +181,4 @@ run both: the same events would arrive twice.
 | What is this Worker doing right now?           | `wrangler tail notch-api`             |
 | How often has quota-403 fired this month?      | Axiom                                 |
 | What did we do before the row was overwritten? | `integration_event`                   |
-| Why is nothing arriving in Axiom?              | `wrangler tail notch-logs`            |
+| Why is nothing arriving in Axiom?              | `wrangler tail notch-logs-production` |
