@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldsFromMessage, toAxiomEvents } from "../src/index.ts";
+import { fieldsFromMessage, ingestUrl, toAxiomEvents } from "../src/index.ts";
 
 const TRACE_TIME = Date.UTC(2026, 9, 16, 2, 49, 3);
 
@@ -124,5 +124,32 @@ describe("flattening a batch of trace events", () => {
 
   it("handles an empty batch without inventing anything", () => {
     expect(toAxiomEvents([])).toEqual([]);
+  });
+});
+
+describe("the ingest endpoint", () => {
+  /**
+   * This shipped wrong once. `/v1/ingest/<name>` is what an Axiom overview
+   * page shows; the API serves `/v1/datasets/<name>/ingest` and answers the
+   * other with `404 path ... was not found` — which reads like a missing
+   * dataset, not a wrong URL. Nothing else fails: the Worker runs, the
+   * events are built, and the dataset simply stays empty.
+   */
+  it("uses the datasets path Axiom actually serves", () => {
+    expect(ingestUrl({ AXIOM_DATASET: "notch-api" })).toBe(
+      "https://api.axiom.co/v1/datasets/notch-api/ingest",
+    );
+  });
+
+  it("honours an EU host", () => {
+    expect(
+      ingestUrl({ AXIOM_DATASET: "notch-api", AXIOM_API_URL: "https://api.eu.axiom.co" }),
+    ).toBe("https://api.eu.axiom.co/v1/datasets/notch-api/ingest");
+  });
+
+  it("does not produce a double slash from a trailing one", () => {
+    expect(ingestUrl({ AXIOM_DATASET: "d", AXIOM_API_URL: "https://api.axiom.co/" })).toBe(
+      "https://api.axiom.co/v1/datasets/d/ingest",
+    );
   });
 });

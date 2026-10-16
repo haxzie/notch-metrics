@@ -174,6 +174,20 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+/**
+ * Axiom's ingest endpoint for one dataset.
+ *
+ * `/v1/datasets/<name>/ingest`, not `/v1/ingest/<name>` — the latter is what
+ * one of Axiom's own overview pages shows, and it answers
+ * `404 path ... was not found`, which reads like a missing dataset rather
+ * than a wrong URL. Exported so a test pins the shape; getting it wrong is
+ * invisible until somebody notices the dataset is empty.
+ */
+export function ingestUrl(env: Env): string {
+  const base = (env.AXIOM_API_URL ?? "https://api.axiom.co").replace(/\/+$/, "");
+  return `${base}/v1/datasets/${encodeURIComponent(env.AXIOM_DATASET)}/ingest`;
+}
+
 async function ship(env: Env, events: AxiomEvent[]): Promise<void> {
   if (events.length === 0) return;
   if (!env.AXIOM_TOKEN) {
@@ -183,8 +197,7 @@ async function ship(env: Env, events: AxiomEvent[]): Promise<void> {
     return;
   }
 
-  const base = env.AXIOM_API_URL ?? "https://api.axiom.co";
-  const url = `${base}/v1/ingest/${encodeURIComponent(env.AXIOM_DATASET)}`;
+  const url = ingestUrl(env);
 
   for (const batch of chunk(events, MAX_EVENTS_PER_REQUEST)) {
     const response = await fetch(url, {
