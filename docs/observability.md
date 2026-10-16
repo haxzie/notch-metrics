@@ -116,7 +116,7 @@ inside `Logs[].message[]`, leaving the parsing to Axiom.
 So this is queryable directly:
 
 ```kusto
-['notch-api']
+['notch-metrics-api']
 | where subsystem == "oauth" and level == "error"
 | summarize count() by scope, bin(_time, 1h)
 ```
@@ -147,7 +147,7 @@ and `state` in the query for the same reason. What survives is what you
 actually want: `/blog/how-to-track-stripe-mrr`, `/pricing`, `/llms.txt`.
 
 ```kusto
-['notch-api']
+['notch-metrics-api']
 | where worker == "notch-web-production" and kind == "invocation"
 | summarize requests = count() by path, status
 | order by requests desc
@@ -162,7 +162,7 @@ them — this site currently has no analytics at all.
 ### Setting it up
 
 ```bash
-# 1. In Axiom: create a dataset `notch-api` and an API token scoped to
+# 1. In Axiom: create a dataset `notch-metrics-api` and an API token scoped to
 #    ingest into it.
 
 # 2. Give the Worker the token.
@@ -200,7 +200,7 @@ returns a 401 that reads exactly like a bad token.
 ### If you would rather not run a Worker
 
 Set `"logpush": true` on the API and create a Logpush job pointing at
-`https://api.axiom.co/v1/ingest/notch-api`. No code, no second deploy, and
+`https://api.axiom.co/v1/datasets/notch-metrics-api/ingest`. No code, no second deploy, and
 Cloudflare does the batching — at the cost of the field parsing above. Do not
 run both: the same events would arrive twice.
 
@@ -210,7 +210,7 @@ run both: the same events would arrive twice.
 | ---------------------------------------------- | ------------------------------------- |
 | Why did _this_ connection break?               | `integration_event`                   |
 | Is the refresh sweep keeping up?               | Axiom, `scope == "cron.tokenRefresh"` |
-| What is this Worker doing right now?           | `wrangler tail notch-api`             |
+| What is this Worker doing right now?           | `wrangler tail notch-api-production`  |
 | How often has quota-403 fired this month?      | Axiom                                 |
 | What did we do before the row was overwritten? | `integration_event`                   |
 | Why is nothing arriving in Axiom?              | `wrangler tail notch-logs-production` |

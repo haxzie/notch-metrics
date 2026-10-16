@@ -10,18 +10,27 @@
 
   // Its own logs stay in Workers Logs rather than going to Axiom: a log
   // shipper that ships its own failures through itself cannot report the
-  // outage that matters. `wrangler tail notch-logs` is the way in.
+  // outage that matters. `wrangler tail notch-logs-production` is the way in.
   "observability": { "enabled": true },
 
+  // One dataset, used by both environments. There is no dev deployment of
+  // this Worker — `wrangler dev` has no token and drops events — so a second
+  // dataset would only be a name that does not exist.
   "vars": {
-    "AXIOM_DATASET": "notch-api-dev",
+    "AXIOM_DATASET": "notch-metrics-api",
     "AXIOM_API_URL": "https://api.axiom.co"
   },
 
   "env": {
     "production": {
       "vars": {
-        "AXIOM_DATASET": "notch-api",
+        // The dataset's real name in Axiom. Getting this wrong is not an
+        // error you see from here: a name that does not exist answers 404
+        // `dataset not found`, and a token scoped to a different one answers
+        // 403 `not allowed to ingest into dataset` — both of which read like
+        // a bad token, and neither of which reaches anything but this
+        // Worker's own logs.
+        "AXIOM_DATASET": "notch-metrics-api",
         // An EU Axiom organisation uses https://api.eu.axiom.co. Getting this
         // wrong is a 401 that reads like a bad token.
         "AXIOM_API_URL": "https://api.axiom.co"
