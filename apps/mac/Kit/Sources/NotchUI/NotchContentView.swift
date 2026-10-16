@@ -281,6 +281,7 @@ public struct NotchContentView: View {
     /// error reported against `body`, nowhere near the cause.
     private enum BodyKind: Equatable {
         case signedOut
+        case trialEnded
         case browser
         case alerts
         case configure(NotchWidget)
@@ -289,6 +290,12 @@ public struct NotchContentView: View {
 
     private var bodyKind: BodyKind {
         if !view.isSignedIn { return .signedOut }
+        // Second, matching the order the body itself tests in. These two
+        // ladders decide different things — what is drawn, and how tall the
+        // notch is — so a case present in one and missing from the other is
+        // not a compile error. It is a panel the right size inside a window
+        // still sized for the grid it replaced.
+        if view.needsUpgrade { return .trialEnded }
         if view.isBrowsing { return .browser }
         if view.isShowingAlerts { return .alerts }
         if let widget = configuring { return .configure(widget) }
@@ -314,7 +321,7 @@ public struct NotchContentView: View {
                 .frame(height: Self.signedOutBodyHeight + NotchWidgetCanvas.contentTop
                     + Self.configureBottomInset)
                 .transition(.opacity)
-        } else if view.needsUpgrade {
+        } else if bodyKind == .trialEnded {
             // Second only to signed-out, and for the same reason: without an
             // active plan every tile says "Subscription needed", which is the
             // same sentence repeated per widget with no way to act on it. One
@@ -993,7 +1000,8 @@ public struct NotchContentView: View {
         // use and padding the eye could not see.
         let content: CGFloat
         switch bodyKind {
-        case .signedOut:
+        case .signedOut, .trialEnded:
+            // One panel, one button, the same shape — so the same height.
             content =
                 NotchWidgetCanvas.contentTop + Self.signedOutBodyHeight
                 + Self.configureBottomInset

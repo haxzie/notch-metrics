@@ -84,11 +84,19 @@ APP="$BUILD/export/NotchMetrics.app"
 if [ "${NOTCH_ALLOW_LOCAL_URLS:-0}" = "1" ]; then
   echo "==> skipping the development-URL check (NOTCH_ALLOW_LOCAL_URLS=1)"
 else
-  echo "==> checking for development URLs in the binary"
-  if strings -a "$APP/Contents/MacOS/NotchMetrics" \
-    | grep -nE 'https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)' ; then
-    echo "::error::a localhost URL is compiled into the binary."
-    echo "::error::For a local install against a local Worker: NOTCH_ALLOW_LOCAL_URLS=1 pnpm mac:ship"
+  echo "==> checking for development URLs"
+  # Info.plist, not the Mach-O. The URLs arrive as `NMAPIBaseURL` and friends
+  # from Config.xcconfig, which lands in the plist — never as a literal in
+  # the binary. This check used to grep `strings` on the executable, where
+  # the value it was looking for cannot appear, so it passed on every build
+  # and a notch pointed at localhost:8787 was installed to /Applications
+  # looking exactly like one that worked.
+  if grep -aE 'https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)' "$APP/Contents/Info.plist" \
+    || strings -a "$APP/Contents/MacOS/NotchMetrics" \
+      | grep -nE 'https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)'; then
+    echo "::error::a localhost URL is baked into this build."
+    echo "::error::Config.xcconfig comes from .env — set NEXT_PUBLIC_API_URL and friends,"
+    echo "::error::or for a deliberate local install: NOTCH_ALLOW_LOCAL_URLS=1 pnpm mac:ship"
     exit 1
   fi
 fi

@@ -14,7 +14,19 @@
   "env": {
     "production": {
       "routes": [{ "pattern": "notchmetrics.com", "custom_domain": true }],
-      "assets": { "directory": ".open-next/assets", "binding": "ASSETS" }
+      "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+
+      // Empty, not absent. This site fed the Axiom shipper for one afternoon;
+      // deleting the key did not detach it, because a setting wrangler does
+      // not send is one Cloudflare leaves alone. Events kept arriving for
+      // hours after a deploy that looked like it had removed them, so the
+      // empty array is doing real work and must stay.
+      //
+      // The site is also the noisiest thing on the account: it answers a
+      // steady stream of WordPress vulnerability scans (`/xmlrpc.php`,
+      // `/wp-includes/...`), which is a lot of 404s to pay to store in a
+      // dataset meant for diagnosing the API.
+      "tail_consumers": []
     }
   }
 }
