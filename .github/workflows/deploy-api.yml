@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/api/**"
+      - "apps/logs/**"
       - "packages/db/**"
       - "packages/schemas/**"
       - "packages/integrations/**"
@@ -37,6 +38,15 @@ jobs:
 
       - run: pnpm --filter @notch/api typecheck
       - run: pnpm --filter @notch/api test
+      - run: pnpm --filter @notch/logs typecheck
+      - run: pnpm --filter @notch/logs test
+
+      # Strictly before the API. `apps/api` names this Worker as its
+      # `tail_consumers` service, and a deploy naming a consumer that does
+      # not exist yet is rejected outright. Deploying it on every API run is
+      # also what keeps the shipper from silently lagging the thing it ships
+      # for — it is three kilobytes and has no migrations to worry about.
+      - run: pnpm --filter @notch/logs run deploy
 
       - name: Apply migrations
         # Strictly before the deploy. Migrations in this repository only ever

@@ -86,6 +86,13 @@
         "POSTHOG_HOST": "https://us.i.posthog.com"
       },
       "triggers": { "crons": ["*/5 * * * *"] },
+
+      // Every trace event from this Worker is handed to `notch-logs`, which
+      // forwards it to Axiom. Out of band: the delivery happens after the
+      // response has gone, so a slow or dead Axiom cannot show up as latency
+      // here. Deploy that Worker before this one — naming a tail consumer
+      // that does not exist fails the deploy.
+      "tail_consumers": [{ "service": "notch-logs" }],
       "routes": [{ "pattern": "api.notchmetrics.com", "custom_domain": true }],
       "d1_databases": [
         {

@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "notch-logs",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-30",
+
+  // No routes and no triggers on purpose. This Worker is only ever invoked by
+  // the runtime delivering another Worker's trace events, so giving it a
+  // public hostname would be an endpoint with nothing behind it.
+
+  // Its own logs stay in Workers Logs rather than going to Axiom: a log
+  // shipper that ships its own failures through itself cannot report the
+  // outage that matters. `wrangler tail notch-logs` is the way in.
+  "observability": { "enabled": true },
+
+  "vars": {
+    "AXIOM_DATASET": "notch-api-dev",
+    "AXIOM_API_URL": "https://api.axiom.co"
+  },
+
+  "env": {
+    "production": {
+      "vars": {
+        "AXIOM_DATASET": "notch-api",
+        // An EU Axiom organisation uses https://api.eu.axiom.co. Getting this
+        // wrong is a 401 that reads like a bad token.
+        "AXIOM_API_URL": "https://api.axiom.co"
+      }
+      // AXIOM_TOKEN is a secret:
+      //   pnpm --filter @notch/logs exec wrangler secret put AXIOM_TOKEN --env production
+      // Without it this Worker accepts events and drops them, which is what
+      // a preview deployment should do.
+    }
+  }
+}

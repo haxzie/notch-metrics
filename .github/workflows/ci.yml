@@ -33,6 +33,7 @@ jobs:
             ts:
               - 'apps/web/**'
               - 'apps/api/**'
+              - 'apps/logs/**'
               - 'apps/mcp/**'
               - 'packages/**'
               - 'contracts/**'
