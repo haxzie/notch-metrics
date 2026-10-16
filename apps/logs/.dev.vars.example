@@ -1,0 +1,8 @@
+# Ingest-scoped Axiom API token, for `wrangler dev` only. Production reads a
+# secret instead:
+#   pnpm --filter @notch/logs exec wrangler secret put AXIOM_TOKEN --env production
+#
+# This belongs here rather than in apps/api/.dev.vars: the API never reads it,
+# the shipper does. Without it the Worker accepts trace events and drops them,
+# which is what a local run should do.
+AXIOM_TOKEN=""
