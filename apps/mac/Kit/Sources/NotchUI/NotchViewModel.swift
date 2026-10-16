@@ -70,6 +70,14 @@ public final class NotchViewModel {
     /// leaving a button that has visibly done nothing for ten seconds.
     public var isSigningIn = false
 
+    /// Signed in, but without an active plan.
+    ///
+    /// The server's verdict, not ours: it arrives as a 402 from the metrics
+    /// batch rather than being worked out from a trial date held here. Two
+    /// sides computing entitlement independently diverge the first time
+    /// either changes, and the one that decides is the server's.
+    public var needsUpgrade = false
+
     /// True while a gesture owns the pointer — a handle drag, a tile being
     /// moved or resized.
     ///
@@ -231,6 +239,7 @@ public final class NotchViewModel {
     public var onAddWidget: @MainActor () -> Void = {}
     /// Starts the browser sign-in handshake.
     public var onSignIn: @MainActor () -> Void = {}
+    public var onUpgrade: @MainActor () -> Void = {}
     public var onTogglePin: @MainActor () -> Void = {}
     public var onClose: @MainActor () -> Void = {}
 

@@ -73,6 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.env.notch.beginBrowsing()
         }
 
+        env.notch.onUpgrade = {
+            // The same page the Settings pane opens. Checkout is `sessionOnly`
+            // on the server, so a device token cannot start one — the browser
+            // is where this has to happen.
+            NSWorkspace.shared.open(
+                AppEnvironment.appURL.appendingPathComponent("app/settings/billing"))
+        }
         env.notch.onSignIn = { [weak self] in
             self?.env.beginSignIn()
         }

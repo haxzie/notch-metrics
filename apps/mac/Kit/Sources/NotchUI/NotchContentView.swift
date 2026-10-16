@@ -314,6 +314,18 @@ public struct NotchContentView: View {
                 .frame(height: Self.signedOutBodyHeight + NotchWidgetCanvas.contentTop
                     + Self.configureBottomInset)
                 .transition(.opacity)
+        } else if view.needsUpgrade {
+            // Second only to signed-out, and for the same reason: without an
+            // active plan every tile says "Subscription needed", which is the
+            // same sentence repeated per widget with no way to act on it. One
+            // panel, one button.
+            TrialEndedNotch(onUpgrade: view.onUpgrade)
+                .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+                .padding(.top, NotchWidgetCanvas.contentTop)
+                .padding(.bottom, Self.configureBottomInset)
+                .frame(height: Self.signedOutBodyHeight + NotchWidgetCanvas.contentTop
+                    + Self.configureBottomInset)
+                .transition(.opacity)
         } else if view.isBrowsing {
             browser
         } else if view.isShowingAlerts {
@@ -443,9 +455,11 @@ public struct NotchContentView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NotchTheme.secondaryText)
 
-            // Both are about numbers there are none of yet. Settings stays:
-            // it is the way to the account pane and to quitting.
-            if view.isSignedIn {
+            // Both are about numbers there are none of yet, or none to be
+            // had: refreshing a lapsed plan fetches another 402, and alerts
+            // are gated on the same plan. Settings stays either way — it is
+            // the way to the account pane and to quitting.
+            if view.isSignedIn, !view.needsUpgrade {
                 refreshButton
                 alertsButton
             }
@@ -460,9 +474,11 @@ public struct NotchContentView: View {
             // camera housing on a notched display, so the text was half
             // hidden on exactly the machines this app is for — and the
             // selection outline and handles say what to do without words.
-            if !view.isSignedIn {
+            if !view.isSignedIn || view.needsUpgrade {
                 // Nothing to edit, add or finish. The panel's own button is
-                // the only thing to press.
+                // the only thing to press. A lapsed plan is the same shape of
+                // dead end: arranging tiles that cannot load a number is work
+                // thrown away.
                 EmptyView()
             } else if view.isBrowsing {
                 backFromBrowsingButton
@@ -1783,6 +1799,65 @@ private struct SignedOutNotch: View {
         // button says where it is going before it goes.
         .help("Opens your browser to sign in")
         .animation(.easeOut(duration: 0.15), value: isSigningIn)
+    }
+}
+
+/// What the notch says when the trial is over.
+///
+/// Deliberately the same shape as `SignedOutNotch`: both are "you cannot see
+/// your numbers until you do one thing", and the thing is a button that opens
+/// the browser. Making the second case look different would suggest it is a
+/// different kind of problem.
+///
+/// The upgrade itself happens on the web, not here. Checkout is `sessionOnly`
+/// on the server — a device token deliberately cannot start one — so this
+/// opens the billing page rather than pretending to take a payment in a
+/// notch.
+private struct TrialEndedNotch: View {
+    let onUpgrade: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            NotchLogo(size: 26)
+            Text("Your trial has ended")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(NotchTheme.primaryText)
+                .padding(.top, 10)
+            Text("Subscribe to keep your numbers up to date.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(NotchTheme.secondaryText)
+                .padding(.top, 3)
+            upgradeButton
+                .padding(.top, 14)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black.opacity(0.12)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
+    }
+
+    /// The only action available, so it is the largest thing in the panel.
+    private var upgradeButton: some View {
+        Button(action: onUpgrade) {
+            HStack(spacing: 7) {
+                Text("Upgrade")
+                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 12, weight: .bold))
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(NotchTheme.editHighlight))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Opens your browser to subscribe")
     }
 }
 

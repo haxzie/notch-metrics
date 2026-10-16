@@ -90,6 +90,17 @@ final class AppEnvironment {
     /// Plausible numbers, no account, no network. For screenshots.
     static var isDemo: Bool {
         ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" || isSkeletonDemo
+            || isUpgradeDemo
+    }
+
+    /// The lapsed-plan panel, without waiting for a trial to end.
+    ///
+    /// Implies demo mode for the same reason the skeletons do: the state is
+    /// otherwise reachable only by owning an account whose trial has run out,
+    /// which is not a thing anybody can arrange while looking at the panel
+    /// they are changing.
+    static var isUpgradeDemo: Bool {
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_UPGRADE"] == "1"
     }
 
     /// The demo layout with every tile still loading.
@@ -101,6 +112,16 @@ final class AppEnvironment {
     static var isSkeletonDemo: Bool {
         ProcessInfo.processInfo.environment["NOTCH_DEBUG_SKELETON"] == "1"
     }
+    /// Signed in, but the plan has lapsed.
+    ///
+    /// Taken from the server's 402 rather than computed from the trial date
+    /// the app happens to hold: `entitlement.ts` is explicit that the moment
+    /// both sides decide this independently the two answers diverge, and the
+    /// one that matters is whichever the Worker applies.
+    private(set) var needsUpgrade = false {
+        didSet { notch.needsUpgrade = needsUpgrade }
+    }
+
     private(set) var isSignedIn = false {
         // The notch shows the sign-in panel in place of the grid, so it has
         // to hear about this the moment it changes rather than on the next
@@ -265,6 +286,7 @@ final class AppEnvironment {
         // every tile said "Connect Stripe". The empty state in NotchPanel
         // says what to do instead.
         if Self.isDemo {
+            needsUpgrade = Self.isUpgradeDemo
             layoutModel.replace(with: Self.demoLayout())
             // Demo tiles go somewhere too: a click that does nothing in the
             // one mode built for screenshots is how a regression here would
@@ -693,6 +715,9 @@ final class AppEnvironment {
                         : .failed(reason: failure.message)
                 }
             }
+            // The batch answered, so the plan is live again — subscribing
+            // takes effect on the next poll rather than needing a relaunch.
+            needsUpgrade = false
             states = next
             notch.update(states: states)
 
@@ -712,6 +737,10 @@ final class AppEnvironment {
                 await LogFile.shared.write(
                     "metric", "batch of \(widgets.count) failed: \(error)")
             }
+            // A lapsed plan is not a per-tile failure. Painting "Subscription
+            // needed" across eight widgets says the same thing eight times and
+            // leaves nowhere to press; the notch swaps to one panel instead.
+            if Self.isSubscriptionRequired(error) { needsUpgrade = true }
             let state = Self.tileState(for: error)
             for widget in widgets where !isValue(next[widget.id]) {
                 next[widget.id] = state
@@ -727,6 +756,18 @@ final class AppEnvironment {
     /// is only true for one of them. A rejected request, an ended trial and a
     /// signed-out app each send somebody to check their wifi, and the real
     /// cause is on screen nowhere.
+    /// Whether this is the server saying the plan has lapsed.
+    ///
+    /// Takes `any Error` deliberately. Swift narrows a `catch` to the single
+    /// concrete type a `do` block can throw, so an inline cast there reads as
+    /// "always succeeds" today and silently stops matching the moment anything
+    /// in that block throws something else.
+    static func isSubscriptionRequired(_ error: any Error) -> Bool {
+        guard let api = error as? APIError else { return false }
+        if case .subscriptionRequired = api { return true }
+        return false
+    }
+
     static func tileState(for error: any Error) -> TileState {
         guard let api = error as? APIError else {
             return .failed(reason: "Could not reach Notch Metrics")

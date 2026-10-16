@@ -24,6 +24,7 @@ public final class NotchWindowController {
     /// Starts the browser sign-in handshake. Owned by the app target, which
     /// is where the PKCE challenge and the website's URL live.
     public var onSignIn: () -> Void = {}
+    public var onUpgrade: () -> Void = {}
 
     /// Whether there is an account behind the numbers. The notch shows the
     /// sign-in panel in place of the grid when there is not.
@@ -34,6 +35,10 @@ public final class NotchWindowController {
     /// Whether the browser handshake is out. See `NotchViewModel`.
     public var isSigningIn: Bool = false {
         didSet { view?.isSigningIn = isSigningIn }
+    }
+
+    public var needsUpgrade: Bool = false {
+        didSet { view?.needsUpgrade = needsUpgrade }
     }
 
     /// The controls shown in the notch's configure pane. See
@@ -292,8 +297,10 @@ public final class NotchWindowController {
         viewModel.onOpenWidget = { [weak self] url in self?.onOpenWidget(url) }
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
         viewModel.onSignIn = { [weak self] in self?.onSignIn() }
+        viewModel.onUpgrade = { [weak self] in self?.onUpgrade() }
         viewModel.isSignedIn = isSignedIn
         viewModel.isSigningIn = isSigningIn
+        viewModel.needsUpgrade = needsUpgrade
         viewModel.configuratorPanel = configuratorPanel
         viewModel.browserPanel = browserPanel
         viewModel.alertCentrePanel = alertCentrePanel
