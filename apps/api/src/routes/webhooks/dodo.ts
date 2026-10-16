@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { Webhook } from "standardwebhooks";
 import { subscription, user, webhookEvent } from "@notch/db";
-import { required } from "../../env.ts";
+import { required, type Env } from "../../env.ts";
 import type { AppContext } from "../../middleware.ts";
 import { id } from "../../lib/ids.ts";
 import { logError } from "../../lib/redact.ts";
@@ -18,9 +18,36 @@ export const dodoWebhook = new Hono<AppContext>();
 /** A failed renewal keeps access this long before the plan drops. */
 const GRACE_DAYS = 3;
 
+/**
+ * Whether this delivery is about one of our products.
+ *
+ * The Dodo account is shared with other apps, so this endpoint receives their
+ * subscriptions too. They were already harmless — `metadata.userId` is
+ * written by our own checkout and nothing else sets it — but every foreign
+ * delivery still consumed a `webhook_event` row and logged a warning, which
+ * buries ours in somebody else's traffic.
+ *
+ * Deliberately only false when a product id is **present and not ours**. An
+ * event without the field falls through to the `userId` gate rather than
+ * being dropped: a field Dodo renames would otherwise silently discard real
+ * upgrades, which is a far worse failure than the noise this removes.
+ */
+function isOurProduct(env: Env, event: DodoEvent): boolean {
+  const productId = event.data?.product_id;
+  if (!productId) return true;
+
+  const ours = [env.DODOPAYMENT_MONTHLY_PRODUCT_ID, env.DODOPAYMENT_YEARLY_PRODUCT_ID].filter(
+    (value): value is string => Boolean(value),
+  );
+  // Unconfigured means "cannot tell", which must not mean "reject everything".
+  if (ours.length === 0) return true;
+  return ours.includes(productId);
+}
+
 interface DodoEvent {
   type: string;
   data?: {
+    product_id?: string;
     subscription_id?: string;
     customer?: { customer_id?: string; email?: string };
     metadata?: { userId?: string };
@@ -53,6 +80,17 @@ dodoWebhook.post("/", async (c) => {
   }
 
   const event = JSON.parse(raw) as DodoEvent;
+
+  // Before the idempotency insert, so another app's deliveries do not fill
+  // this table with ids we will never look up. Still after verification, for
+  // the reason below: an unsigned POST must not reach any write at all.
+  if (!isOurProduct(c.env, event)) {
+    // 200, not 4xx. A rejected delivery is one Dodo retries and eventually
+    // flags the endpoint unhealthy for, and this one is not a failure: it is
+    // simply not ours.
+    return c.json({ ok: true, ignored: "product" });
+  }
+
   const db = c.get("db");
 
   // The insert *is* the idempotency check. Dodo retries, and

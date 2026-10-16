@@ -61,8 +61,8 @@
     // ones: a named environment inherits nothing, so leaving them out there
     // would point live traffic at products that do not exist.
     "DODOPAYMENT_MODE": "test",
-    "DODOPAYMENT_MONTHLY_PRODUCT_ID": "pdt_0NpLLv7nGeZyq1nAvHVVj",
-    "DODOPAYMENT_YEARLY_PRODUCT_ID": "pdt_0NpLM2d1sI71znxEzvgVl",
+    "DODOPAYMENT_MONTHLY_PRODUCT_ID": "pdt_0Np8sY7zJWmfSbh63jvpr",
+    "DODOPAYMENT_YEARLY_PRODUCT_ID": "pdt_0Np8seyrpXqnEent7l68d",
 
     "POSTHOG_HOST": "https://us.i.posthog.com"
   },

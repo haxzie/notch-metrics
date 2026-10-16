@@ -144,3 +144,60 @@ describe("lifecycle", () => {
     expect(await response.json()).toEqual({ ok: true, ignored: true });
   });
 });
+
+describe("other apps in the same Dodo account", () => {
+  /**
+   * The account is shared, so this endpoint receives subscriptions belonging
+   * to products that are nothing to do with Notch Metrics.
+   */
+  it("acknowledges another product's event without touching anything", async () => {
+    const u = await makeUser({ plan: "trial" });
+    const foreign = {
+      ...activeEvent(u.id),
+      data: { ...activeEvent(u.id).data, product_id: "pdt_someotherapp" },
+    };
+
+    const response = await deliver(foreign);
+    // 200, not 4xx: a rejected delivery is one Dodo retries and eventually
+    // flags the endpoint unhealthy over, and this is not a failure.
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ignored: "product" });
+
+    // Untouched, and no idempotency row consumed on somebody else's behalf.
+    expect(scalar((await db().select().from(user).where(eq(user.id, u.id)))[0], "user").plan).toBe(
+      "trial",
+    );
+    expect(await db().select().from(webhookEvent)).toHaveLength(0);
+    expect(await db().select().from(subscription)).toHaveLength(0);
+  });
+
+  it("applies an event for one of our own products", async () => {
+    const u = await makeUser({ plan: "trial" });
+    const ours = {
+      ...activeEvent(u.id),
+      data: {
+        ...activeEvent(u.id).data,
+        product_id: env.DODOPAYMENT_MONTHLY_PRODUCT_ID,
+      },
+    };
+
+    expect((await deliver(ours)).status).toBe(200);
+    expect(scalar((await db().select().from(user).where(eq(user.id, u.id)))[0], "user").plan).toBe(
+      "pro",
+    );
+  });
+
+  /**
+   * The filter fails open on a missing field on purpose. Dodo renaming or
+   * dropping `product_id` would otherwise discard real upgrades silently,
+   * which is far worse than the noise the filter removes. `metadata.userId`
+   * is still the gate that decides whether anything is applied.
+   */
+  it("still applies an event that carries no product id at all", async () => {
+    const u = await makeUser({ plan: "trial" });
+    expect((await deliver(activeEvent(u.id))).status).toBe(200);
+    expect(scalar((await db().select().from(user).where(eq(user.id, u.id)))[0], "user").plan).toBe(
+      "pro",
+    );
+  });
+});
