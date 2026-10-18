@@ -283,6 +283,12 @@ export const posthog: ProviderAdapter<PosthogCredentials> = {
   manifest,
   credentialSchema,
 
+  // Every number here is a HogQL aggregate over the event table, not a row
+  // read, and a ninety-day one measured five to nine and a half seconds
+  // across this connector's metrics. The default eight was inside that
+  // spread, so the same widget timed out or answered depending on the day.
+  requestTimeoutMs: 15_000,
+
   async verify(ctx, creds): Promise<VerifyResult> {
     // Names the connection and proves `user:read` in one call.
     const identity = await me(ctx, creds);

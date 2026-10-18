@@ -27,6 +27,9 @@ export function adapterContext(options: {
     http: createHttp({
       allowedHosts: adapter.manifest.allowedHosts,
       signal: options.signal,
+      // Left undefined by all but the connectors that have earned a longer
+      // one, so `createHttp` applies its own default.
+      ...(adapter.requestTimeoutMs ? { timeoutMs: adapter.requestTimeoutMs } : {}),
       onCall: options.onCall,
     }),
     now: () => new Date(),

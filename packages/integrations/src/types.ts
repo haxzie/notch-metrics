@@ -162,6 +162,25 @@ export interface ProviderAdapter<C extends Record<string, unknown> = Record<stri
   /** Present only for `authMode: "oauth2"`. */
   readonly oauth?: OAuthConfig<C>;
 
+  /**
+   * How long one request to this provider may take, when eight seconds is
+   * the wrong answer for it.
+   *
+   * Not on the manifest, deliberately: the manifest crosses the wire and the
+   * Mac has no use for this. It is an operational fact about one API.
+   *
+   * The default suits a REST call that reads a row. It does not suit a
+   * provider that runs a query: PostHog bills HogQL against a bytes-read
+   * budget and takes five to nine seconds for a ninety-day aggregate, so the
+   * eight-second ceiling was a coin flip on its slower ranges — a tile that
+   * worked on one refresh and said "timed out" on the next, with nothing
+   * about the widget to explain the difference.
+   *
+   * Whatever this says, the whole metric is still bounded by the 20s signal
+   * the caller passes in, so a slow provider cannot hold a Worker open.
+   */
+  readonly requestTimeoutMs?: number;
+
   /** Proves the credentials work. Called before any row is written. */
   verify(ctx: AdapterContext, credentials: C): Promise<VerifyResult>;
 
