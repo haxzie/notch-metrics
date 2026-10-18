@@ -44,6 +44,18 @@ BACKGROUND="$MAC/Resources/dmg-background.tiff"
 BACKGROUND_ARGS=()
 [ -f "$BACKGROUND" ] && BACKGROUND_ARGS=(--background "$BACKGROUND")
 
+# Where the icons go, written by the same script that drew the arrow pointing
+# between them. Sourced rather than repeated here: the two were duplicate
+# literals held together by a comment, and a background redrawn for a new
+# layout would have left the arrow aimed at empty window.
+#
+# Defaults for a checkout without the generated file — an unstyled window with
+# the icons in the right half is a better failure than no disk image.
+DMG_WINDOW_W=660 DMG_WINDOW_H=420 DMG_ICON_SIZE=128
+DMG_ICON_Y=166 DMG_APP_X=165 DMG_DROP_X=495
+# shellcheck source=/dev/null
+[ -f "$MAC/Resources/dmg-layout.sh" ] && . "$MAC/Resources/dmg-layout.sh"
+
 # create-dmg is the flakiest step in the whole pipeline and it is better to
 # plan for that than to discover it. It drives Finder over AppleScript to place
 # the icons, which on a hosted runner intermittently fails to unmount — and it
@@ -57,10 +69,10 @@ for attempt in 1 2 3; do
     --volname "$VOLUME" \
     "${BACKGROUND_ARGS[@]}" \
     --window-pos 200 120 \
-    --window-size 660 420 \
-    --icon-size 128 \
-    --icon "NotchMetrics.app" 165 250 \
-    --app-drop-link 495 250 \
+    --window-size "$DMG_WINDOW_W" "$DMG_WINDOW_H" \
+    --icon-size "$DMG_ICON_SIZE" \
+    --icon "NotchMetrics.app" "$DMG_APP_X" "$DMG_ICON_Y" \
+    --app-drop-link "$DMG_DROP_X" "$DMG_ICON_Y" \
     --hide-extension "NotchMetrics.app" \
     --no-internet-enable \
     --format UDBZ \
