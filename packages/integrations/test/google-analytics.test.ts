@@ -81,6 +81,53 @@ describe("google analytics", () => {
     expect(series.points.reduce((s, p) => s + p.v, 0)).toBe(3);
   });
 
+  it("reads an empty comparison window as zero, not as a broken provider", async () => {
+    // Google sends `{}` for a date range it found no data at all in, with no
+    // dimension values to match the range name against. A property younger
+    // than the window behind the one being asked for — any 90d or 12m tile on
+    // a site set up three months ago — hits this every time, and reading
+    // `.dimensionValues` off it failed the tile with "could not be reached".
+    const ctx = stubContext({
+      "analyticsdata.googleapis.com": {
+        rows: [row("20261002", 3, "date_range_0")],
+        totals: [
+          {
+            dimensionValues: [{ value: "RESERVED_TOTAL" }, { value: "date_range_0" }],
+            metricValues: [{ value: "3" }],
+          },
+          {},
+        ],
+      },
+    });
+    const series = await googleAnalytics.fetchMetric(ctx, creds, {
+      ...request,
+      comparePrevious: true,
+    });
+    expect(series.value).toBe(3);
+    expect(series.previousValue).toBe(0);
+  });
+
+  it("still reads the headline when it is the current window Google emptied", async () => {
+    const ctx = stubContext({
+      "analyticsdata.googleapis.com": {
+        rows: [],
+        totals: [
+          {},
+          {
+            dimensionValues: [{ value: "RESERVED_TOTAL" }, { value: "date_range_1" }],
+            metricValues: [{ value: "7" }],
+          },
+        ],
+      },
+    });
+    const series = await googleAnalytics.fetchMetric(ctx, creds, {
+      ...request,
+      comparePrevious: true,
+    });
+    expect(series.value).toBe(0);
+    expect(series.previousValue).toBe(7);
+  });
+
   it("asks for the right GA4 metric name", async () => {
     const seen: string[] = [];
     const ctx = stubContext({

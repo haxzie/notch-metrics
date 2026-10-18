@@ -135,9 +135,23 @@ async function errorFor(response: HttpResponse): Promise<ProviderError> {
   return errorForStatus("analyticsdata.googleapis.com", response);
 }
 
+/**
+ * Every field optional, deliberately.
+ *
+ * Google's JSON encoding drops an empty repeated field rather than sending
+ * `[]`, so a date range it found no data at all for arrives as a bare `{}` in
+ * `totals` — no `dimensionValues`, no `metricValues`. Typing those as present
+ * is what let `.dimensionValues.some(...)` throw a `TypeError` on a response
+ * that is entirely well formed.
+ */
+interface ReportRow {
+  dimensionValues?: { value: string }[];
+  metricValues?: { value: string }[];
+}
+
 interface RunReportResponse {
-  rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[];
-  totals?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[];
+  rows?: ReportRow[];
+  totals?: ReportRow[];
 }
 
 async function runReport(
@@ -281,10 +295,10 @@ async function report(
   const events = (body.rows ?? [])
     // With a second range, the last dimension says which. Only the current
     // window feeds the chart.
-    .filter((row) => ranges.length === 1 || row.dimensionValues[1]?.value === "date_range_0")
+    .filter((row) => ranges.length === 1 || row.dimensionValues?.[1]?.value === "date_range_0")
     .map((row) => ({
-      at: dayAt(row.dimensionValues[0]?.value ?? ""),
-      amount: Number(row.metricValues[0]?.value ?? 0),
+      at: dayAt(row.dimensionValues?.[0]?.value ?? ""),
+      amount: Number(row.metricValues?.[0]?.value ?? 0),
     }))
     .filter((e) => !Number.isNaN(e.at.getTime()));
 
@@ -298,13 +312,27 @@ async function report(
   // A totals row carries RESERVED_TOTAL for the date and, with two ranges,
   // the range name as its last dimension — so the range is looked for
   // anywhere in the row rather than at a fixed index.
+  //
+  // Position is the fallback, and it is the case that matters: a range Google
+  // found nothing in comes back as `{}`, with no name to match on, and
+  // `totals` stays aligned with `dateRanges` regardless. That is the whole of
+  // the 90d and 12m bug — a property younger than the comparison window the
+  // tile asks for empties exactly one entry, and the tile answered "that
+  // provider could not be reached" for a report that had arrived intact.
+  //
+  // An entry that is present but empty is a real zero, not a missing answer:
+  // nobody visited in that window. Only a `totals` short enough not to have
+  // the entry at all is unknown.
+  const totals = body.totals ?? [];
   const total = (index: number): number | null => {
-    const row = (body.totals ?? []).find(
-      (t) =>
-        ranges.length === 1 || t.dimensionValues.some((v) => v.value === `date_range_${index}`),
-    );
-    const value = row?.metricValues[0]?.value;
-    return value === undefined ? null : Number(value);
+    const row =
+      (ranges.length === 1
+        ? totals[0]
+        : totals.find((t) => t.dimensionValues?.some((v) => v.value === `date_range_${index}`))) ??
+      totals[index];
+    if (!row) return null;
+    const value = row.metricValues?.[0]?.value;
+    return value === undefined ? 0 : Number(value);
   };
 
   return {
