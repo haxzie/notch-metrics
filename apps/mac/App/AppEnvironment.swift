@@ -418,13 +418,12 @@ final class AppEnvironment {
     /// question.
     ///
     /// Three things, and the order matters. The tile drops to loading
-    /// immediately — `refresh()` then fills it from disk if it has a number
-    /// for the *new* range and shows a skeleton if it does not, which is
-    /// what makes a range switch look like a fetch rather than like nothing
-    /// happening. The previous request is cancelled, because its answer is
-    /// for a window nobody is looking at any more. And the new one waits a
-    /// moment first: arrowing through a picker is four changes in a second,
-    /// and each one is a batch for the whole notch.
+    /// immediately — `refreshOne` then fills it, and shows a skeleton until
+    /// it does, which is what makes a range switch look like a fetch rather
+    /// than like nothing happening. The previous request is cancelled,
+    /// because its answer is for a window nobody is looking at any more. And
+    /// the new one waits a moment first: arrowing through a picker is four
+    /// changes in a second, and each one is a request.
     func widgetConfigurationChanged(_ widgetId: String) {
         states[widgetId] = .loading
         notch.update(states: states)
@@ -433,7 +432,86 @@ final class AppEnvironment {
         pendingRefresh = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            await self?.refresh()
+            await self?.refreshOne(widgetId)
+        }
+    }
+
+    /// Refetches the one widget whose settings changed, not the notch it is in.
+    ///
+    /// The batch is the right shape for a poll and the wrong shape for a
+    /// picker. It is serialised per connection and answers only when its
+    /// slowest group has, so a tile waited on every other integration in the
+    /// layout before it could show the window somebody had just chosen —
+    /// eight to ten seconds with four payment providers, a GitHub account and
+    /// two LLM connectors ahead of it, against under one for the metric
+    /// itself. A skeleton held that long does not read as a slow fetch; it
+    /// reads as a widget that never loads, which is what this was reported as.
+    ///
+    /// Falls back to the whole batch for the cases it cannot answer alone: an
+    /// unbound widget, a transport failure that is everybody's problem, and
+    /// `not_found` — where the widget has to be rebound to an account and
+    /// `refresh()` owns that.
+    private func refreshOne(_ widgetId: String) async {
+        guard !Self.isDemo, isSignedIn,
+            let widget = layoutModel.layout.widgets.first(where: { $0.id == widgetId }),
+            let integrationId = widget.integrationId, !integrationId.isEmpty,
+            let metric = widget.metric, !metric.isEmpty
+        else {
+            await refresh()
+            return
+        }
+
+        // Same `defer` discipline as the batch: every exit clears it, because
+        // a spinner that never stops is worse than no spinner at all.
+        notch.update(refreshing: [widgetId])
+        defer { notch.update(refreshing: []) }
+
+        do {
+            let result = try await api.metric(
+                integrationId: integrationId, metric: metric,
+                granularity: widget.range.defaultGranularity.rawValue,
+                range: widget.range.rawValue,
+                series: widget.chart != .none,
+                params: widget.params)
+            // Superseded while it was in flight: the user has moved the picker
+            // on, and this answer is for the setting before last.
+            guard !Task.isCancelled else { return }
+
+            switch result {
+            case .success(let series):
+                states[widgetId] = .value(series)
+                notch.update(states: states)
+                await cache.store(
+                    series, widgetID: widgetId, range: widget.range, params: widget.params)
+            case .failure(let failure):
+                Task {
+                    await LogFile.shared.write(
+                        "metric",
+                        "\(widget.appId)/\(metric) \(widget.range.rawValue)"
+                            + " [\(widget.range.defaultGranularity.rawValue)] →"
+                            + " \(failure.code.rawValue): \(failure.message)")
+                }
+                // The account is gone. Rebinding lives in `refresh()`, and
+                // doing it here would be a second copy of a thing that is
+                // already subtle.
+                if failure.code == .notFound {
+                    await refresh()
+                    return
+                }
+                // `unsupported` is the server saying the widget is not
+                // finished — no repository picked yet — rather than broken.
+                states[widgetId] =
+                    failure.code == .unsupported
+                    ? .needsSetup(failure.message)
+                    : .failed(reason: failure.message)
+                notch.update(states: states)
+            }
+        } catch {
+            if Task.isCancelled { return }
+            // Signed out, a lapsed plan, no network: none of those are about
+            // this widget, and `refresh()` already says the right thing about
+            // each of them across the whole notch.
+            await refresh()
         }
     }
 

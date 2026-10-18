@@ -246,14 +246,15 @@ extension APIClient {
         return results
     }
 
-    /// One metric, for the widget preview.
+    /// One metric: the widget preview, and the tile whose settings just changed.
     ///
     /// The real number through the real adapter — a preview built from
     /// invented data cannot show that a connection returns nothing, or that
     /// the account is in a different currency, which is exactly what somebody
     /// is checking before they commit a tile to the notch.
     public func metric(
-        integrationId: String, metric: String, granularity: String, range: String
+        integrationId: String, metric: String, granularity: String, range: String,
+        series: Bool = true, params: [String: String] = [:]
     ) async throws(APIError) -> MetricResult {
         try await get(
             "v1/metrics/query",
@@ -262,7 +263,15 @@ extension APIClient {
                 URLQueryItem(name: "metric", value: metric),
                 URLQueryItem(name: "granularity", value: granularity),
                 URLQueryItem(name: "range", value: range),
-            ],
+                URLQueryItem(name: "series", value: series ? "1" : "0"),
+            ]
+                // `p.` prefixed, which is how this route spells a widget's own
+                // arguments. Sorted so the URL is stable, which is the only
+                // thing standing between a repository picker and two cache
+                // entries for the same tile.
+                + params.sorted { $0.key < $1.key }.map {
+                    URLQueryItem(name: "p.\($0.key)", value: $0.value)
+                },
             as: MetricResult.self)
     }
 
