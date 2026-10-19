@@ -9,7 +9,7 @@
  * Bump the date here in the same commit that changes the wording.
  */
 export const LEGAL_UPDATED = {
-  privacy: "2026-10-09",
+  privacy: "2026-10-19",
   terms: "2026-10-09",
   security: "2026-10-11",
 } as const;

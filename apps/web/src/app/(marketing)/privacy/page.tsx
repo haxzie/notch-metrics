@@ -87,11 +87,18 @@ export default function Privacy() {
 
       <LegalSection title="Google user data">
         <p>
-          Connecting Google Analytics or Google Search Console asks for read-only access to those
-          products. We use that access only to read the reports behind the widgets you add, and to
-          list your properties so you can choose one. We do not transfer Google user data to anyone
-          else except as needed to provide the service, and we do not use it for advertising or to
-          train machine-learning models.
+          Connecting Google Analytics, Google Search Console or YouTube asks for read-only access to
+          those products. We use that access for two things only: to list your properties or
+          channels so you can choose which one a connection reads, and to read the reports behind
+          the widgets you add. For YouTube that includes your channel&rsquo;s views, watch time,
+          subscribers and estimated revenue. The revenue figures come from Google&rsquo;s monetary
+          Analytics scope, which is the only one that returns them.
+        </p>
+        <p>
+          We do not transfer Google user data to anyone else except as needed to provide the
+          service, and we do not use it for advertising or to train machine-learning models. No
+          human at Notch Metrics reads it, except where you have asked us to look into a problem
+          with your own account.
         </p>
         <p>
           Notch Metrics&rsquo; use and transfer of information received from Google APIs adheres to
@@ -103,9 +110,28 @@ export default function Privacy() {
           >
             Google API Services User Data Policy
           </a>
-          , including the Limited Use requirements. You can withdraw that access at any time from
-          your Google account&rsquo;s connected apps, or by disconnecting the connection in Notch
-          Metrics.
+          , including the Limited Use requirements.
+        </p>
+        <p>
+          The YouTube connection is built on the YouTube API Services. Using it means you also
+          accept the{" "}
+          <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
+            YouTube Terms of Service
+          </a>
+          , and what Google itself does with your data is covered by the{" "}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+            Google Privacy Policy
+          </a>
+          .
+        </p>
+        <p>
+          You can withdraw this access at any time. Disconnecting the connection in Notch Metrics
+          deletes the stored tokens, and you can revoke it from your{" "}
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">
+            Google account&rsquo;s connected apps
+          </a>{" "}
+          instead. Figures already fetched sit in the short-lived cache described above and are
+          swept with it.
         </p>
       </LegalSection>
 
