@@ -111,6 +111,7 @@ public struct ShareBackground: Identifiable, Hashable, Sendable {
 
     public static let groups: [Group] = [
         Group(id: "aurora", label: "Aurora", backgrounds: aurora),
+        Group(id: "haze", label: "Haze", backgrounds: haze),
         Group(id: "anime", label: "Anime", backgrounds: anime),
     ]
 
@@ -154,6 +155,45 @@ public struct ShareBackground: Identifiable, Hashable, Sendable {
             fill: .asset("share-bg-aurora-sage")),
     ]
 
+    /// The horizon set.
+    ///
+    /// A band of light across a dark field, which is the one shape that puts
+    /// the bright part of the picture *below* the tile rather than behind
+    /// it. The plate lands on the dark half and the signature sits in the
+    /// glow, with no wallpaper needing to be dimmed to make either legible.
+    static let haze: [ShareBackground] = [
+        ShareBackground(
+            id: "haze-amber", name: "Amber", category: "haze",
+            fill: .asset("share-bg-haze-amber")),
+        ShareBackground(
+            id: "haze-amethyst", name: "Amethyst", category: "haze",
+            fill: .asset("share-bg-haze-amethyst")),
+        ShareBackground(
+            id: "haze-citrus", name: "Citrus", category: "haze",
+            fill: .asset("share-bg-haze-citrus")),
+        ShareBackground(
+            id: "haze-fuchsia", name: "Fuchsia", category: "haze",
+            fill: .asset("share-bg-haze-fuchsia")),
+        ShareBackground(
+            id: "haze-harvest", name: "Harvest", category: "haze",
+            fill: .asset("share-bg-haze-harvest")),
+        ShareBackground(
+            id: "haze-heather", name: "Heather", category: "haze",
+            fill: .asset("share-bg-haze-heather")),
+        ShareBackground(
+            id: "haze-marigold", name: "Marigold", category: "haze",
+            fill: .asset("share-bg-haze-marigold")),
+        ShareBackground(
+            id: "haze-nightfall", name: "Nightfall", category: "haze",
+            fill: .asset("share-bg-haze-nightfall")),
+        ShareBackground(
+            id: "haze-smoke", name: "Smoke", category: "haze",
+            fill: .asset("share-bg-haze-smoke")),
+        ShareBackground(
+            id: "haze-solstice", name: "Solstice", category: "haze",
+            fill: .asset("share-bg-haze-solstice")),
+    ]
+
     static let anime: [ShareBackground] = [
         ShareBackground(
             id: "anime-bloom", name: "Bloom", category: "anime",
@@ -179,12 +219,6 @@ public struct ShareBackground: Identifiable, Hashable, Sendable {
         ShareBackground(
             id: "anime-summit", name: "Summit", category: "anime",
             fill: .asset("share-bg-anime-summit")),
-        ShareBackground(
-            id: "anime-sunbeam", name: "Sunbeam", category: "anime",
-            fill: .asset("share-bg-anime-sunbeam")),
-        ShareBackground(
-            id: "anime-twilight", name: "Twilight", category: "anime",
-            fill: .asset("share-bg-anime-twilight")),
     ]
 }
 
@@ -242,23 +276,6 @@ public enum ShareTileMetrics {
             height: CGFloat(widget.rows) * rowHeight + CGFloat(widget.rows - 1) * spacing)
     }
 
-    /// What the size picker offers, widest span last.
-    ///
-    /// A subset of every span the grid allows. A share card has one tile on
-    /// it, so the spans that only matter for packing — 3x1, 5x2 — are noise
-    /// in a picker; these five cover a number, a number with a chart, and a
-    /// banner.
-    public static let large = WidgetSize(cols: 4, rows: 2)
-    public static let presets: [WidgetSize] = [.small, .wide, .square, large, .hero]
-
-    public static func label(for size: WidgetSize) -> String {
-        if size == .small { return "Small" }
-        if size == .wide { return "Wide" }
-        if size == .square { return "Square" }
-        if size == large { return "Large" }
-        if size == .hero { return "Hero" }
-        return size.rawValue
-    }
 }
 
 /// The thing that gets exported: a tile on a background, signed.
@@ -290,6 +307,16 @@ public struct ShareCard: View {
         self.size = size
     }
 
+    /// The one span every card is drawn at.
+    ///
+    /// Fixed rather than offered. A share card holds a single tile with
+    /// nothing to pack around it, so the span is a composition decision, not
+    /// the user's: 2x2 is the only one that fits a figure, a label and a
+    /// chart at a size worth posting. A 1x1 came out a stamp in the middle
+    /// of a 1080px square and a 6x2 left a letterbox of wallpaper above and
+    /// below it.
+    public static let cardSpan: WidgetSize = .square
+
     private var unit: CGFloat { min(size.width, size.height) }
 
     /// What the tile may occupy. The ceiling on height is the lower of the
@@ -314,52 +341,110 @@ public struct ShareCard: View {
     public var body: some View {
         let natural = ShareTileMetrics.size(for: widgetSize)
         let scale = tileScale
+        let plate = CGSize(width: natural.width * scale, height: natural.height * scale)
+        let radius = tileCornerRadius * scale
 
-        // The background goes *behind* the content rather than beside it in
-        // a ZStack. A ZStack takes the size of its largest child, and a
-        // `.fill` image reports a size larger than the card in whichever
-        // axis its aspect ratio overflows — so the stack grew past the card,
-        // the outer frame centred it, and the signature laid out against the
-        // picture ended up below the crop. It only showed on the wallpapers
-        // whose shape overflowed vertically, which is why some backgrounds
-        // pushed the logo down and others did not. A `.background` is sized
-        // by its host and can never move it.
+        // Three layers: the picture, the same picture blurred and showing
+        // only through the plates, then the content.
+        //
+        // The blurred copy is what makes the plates glass. `.ultraThinMaterial`
+        // cannot do it here — a real material samples the *window* behind it,
+        // and `ImageRenderer` does not draw one at all, so the exported card
+        // had flat black rectangles where the frost was supposed to be. A
+        // second copy of the background, blurred and masked to the plates,
+        // is the same effect built out of things the renderer does draw.
+        //
+        // Both copies are given the card's frame and clipped *inside* the
+        // stack. A ZStack takes the size of its largest child, and a `.fill`
+        // image reports a size larger than the card in whichever axis its
+        // aspect ratio overflows — left to itself the stack grew past the
+        // card and pushed the signature below the crop, on those wallpapers
+        // and no others. Clipped to the card first, neither copy can move
+        // anything.
+        ZStack {
+            backdrop
+
+            backdrop
+                .blur(radius: unit * 0.05)
+                .mask(frost(plate: plate, radius: radius))
+
+            layout(
+                tile: WidgetTile(
+                    widget: tileWidget,
+                    app: request.app,
+                    state: request.state,
+                    connectionName: request.connectionName,
+                    showsRange: request.showsRange
+                )
+                .frame(width: natural.width, height: natural.height)
+                .scaleEffect(scale)
+                .frame(width: plate.width, height: plate.height)
+                // The tint sits *behind the tile itself*, at the tile's own
+                // shape, rather than on a second rounded plate around it. It
+                // is not decoration: `WidgetTile` fills itself with 5.5%
+                // white, which is a tile over the notch's smoked glass and an
+                // invisible rectangle over a bright gradient — the figures
+                // would be white on yellow. Over the blurred copy it is the
+                // tint half of the glass, dark enough that a pale wallpaper
+                // cannot wash the figure out.
+                .background(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Color.black.opacity(0.62))
+                )
+                .overlay(
+                    // The lip a real material has. Without it the plate's
+                    // edge disappears wherever the blur behind it happens to
+                    // match the picture around it.
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: max(1, unit * 0.0022))
+                )
+                .shadow(color: .black.opacity(0.38), radius: unit * 0.04, y: unit * 0.014),
+                signature: signature)
+        }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+    }
+
+    /// The picture, sized and cropped to the card.
+    private var backdrop: some View {
+        ShareBackgroundView(background)
+            .frame(width: size.width, height: size.height)
+            .clipped()
+    }
+
+    /// Where the card is glass, in white on nothing.
+    ///
+    /// Built from the same `layout` as the content, so the holes are the
+    /// plates — not a second set of coordinates that has to be kept in step
+    /// with the first. `hidden()` keeps the signature's size and draws none
+    /// of it, which is exactly what a mask wants: the capsule behind it is
+    /// the shape, the words inside it are not.
+    private func frost(plate: CGSize, radius: CGFloat) -> some View {
+        layout(
+            tile: RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(Color.white)
+                .frame(width: plate.width, height: plate.height),
+            signature: signatureContent
+                .hidden()
+                .padding(.horizontal, unit * 0.038)
+                .padding(.vertical, unit * 0.022)
+                .background(Capsule().fill(Color.white)))
+    }
+
+    /// Where the tile and the signature sit on the card.
+    ///
+    /// One function, used by the content and by the mask that frosts it. Two
+    /// copies of this arithmetic is how a blurred patch ends up a few points
+    /// below the plate it belongs to.
+    private func layout(tile: some View, signature: some View) -> some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
-
-            // The dark surface sits *behind the tile itself*, at the
-            // tile's own shape, rather than on a second rounded plate
-            // around it. It is not decoration either way: `WidgetTile`
-            // fills itself with 5.5% white, which is a tile over the
-            // notch's smoked glass and an invisible rectangle over a
-            // bright gradient — the figures would be white on yellow.
-            // This restores the surface the tile was designed against
-            // with one rounded rectangle on the card instead of two
-            // nested ones, which read as a card inside a card.
-            WidgetTile(
-                widget: tileWidget,
-                app: request.app,
-                state: request.state,
-                connectionName: request.connectionName,
-                showsRange: request.showsRange
-            )
-            .frame(width: natural.width, height: natural.height)
-            .scaleEffect(scale)
-            .frame(width: natural.width * scale, height: natural.height * scale)
-            .background(
-                RoundedRectangle(cornerRadius: tileCornerRadius * scale, style: .continuous)
-                    .fill(Color.black.opacity(0.55))
-            )
-            .shadow(color: .black.opacity(0.38), radius: unit * 0.04, y: unit * 0.014)
-
+            tile
             Spacer(minLength: 0)
-
             signature
                 .padding(.bottom, unit * 0.07)
         }
         .frame(width: size.width, height: size.height)
-        .background(ShareBackgroundView(background))
-        .clipped()
     }
 
     /// `WidgetTile`'s own corner radius, which the surface behind it has to
@@ -383,29 +468,53 @@ public struct ShareCard: View {
         return copy
     }
 
-    private var signature: some View {
-        HStack(spacing: unit * 0.018) {
-            NotchLogo(size: unit * 0.042)
-            Text("Notch Metrics")
-                .font(.system(size: unit * 0.032, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.white.opacity(0.92))
+    /// The two credits, with no pill around them.
+    ///
+    /// Separate from `signature` so the frost mask can lay out the same
+    /// content hidden and take the capsule's size from it, rather than
+    /// guessing at a height.
+    private var signatureContent: some View {
+        HStack(spacing: unit * 0.026) {
+            HStack(spacing: unit * 0.018) {
+                ConnectorIcon(app: request.app, size: unit * 0.042)
+                Text(request.app.name)
+                    .font(.system(size: unit * 0.032, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.92))
+            }
+
+            // A hairline, not a bullet or a dash: the two marks are both
+            // logo-plus-name, and without a rule between them the eye reads
+            // four things in a row rather than two credits.
+            Capsule()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: max(1, unit * 0.0022), height: unit * 0.042)
+
+            HStack(spacing: unit * 0.018) {
+                NotchLogo(size: unit * 0.042)
+                Text("Notch Metrics")
+                    .font(.system(size: unit * 0.032, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.92))
+            }
         }
-        .padding(.horizontal, unit * 0.038)
-        .padding(.vertical, unit * 0.022)
-        // A tinted capsule rather than `.ultraThinMaterial`. A real material
-        // samples what is behind it in the *window*, and `ImageRenderer`
-        // does not draw one at all — the exported PNG would have a hole
-        // where the pill is. A dark translucent fill with a hairline lip
-        // reads as the same glass and survives the export, which is the only
-        // place this view actually matters.
-        .background(Capsule().fill(Color.black.opacity(0.34)))
-        .overlay(
-            Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: max(1, unit * 0.0022)))
-        // A photograph is not uniformly dark, and the signature sits over
-        // whatever the bottom of the picture happens to be.
-        .shadow(color: .black.opacity(0.3), radius: unit * 0.02, y: unit * 0.006)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Notch Metrics")
+    }
+
+    private var signature: some View {
+        signatureContent
+            .padding(.horizontal, unit * 0.038)
+            .padding(.vertical, unit * 0.022)
+            // The tint over the blurred copy the mask lets through here. Not
+            // `.ultraThinMaterial`: a real material samples the *window*
+            // behind it and `ImageRenderer` does not draw one at all, so the
+            // exported pill came out as a hole.
+            .background(Capsule().fill(Color.black.opacity(0.42)))
+            .overlay(
+                Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: max(1, unit * 0.0022))
+            )
+            // A photograph is not uniformly dark, and the signature sits over
+            // whatever the bottom of the picture happens to be.
+            .shadow(color: .black.opacity(0.3), radius: unit * 0.02, y: unit * 0.006)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(request.app.name), Notch Metrics")
     }
 }
 
@@ -481,31 +590,6 @@ public enum ShareMenuIcon {
             path.lineWidth = 1.2
             NSColor.black.setStroke()
             path.stroke()
-            return true
-        }
-        image.isTemplate = true
-        return image
-    }
-
-    /// A filled block in the span's proportions, on the same 6x2 footing the
-    /// grid uses — so Wide and Hero are told apart by shape rather than by
-    /// reading "2x1" and "6x2".
-    public static func span(_ size: WidgetSize) -> NSImage {
-        // A box wide enough for the widest span. Square cells rather than the
-        // grid's 128x84 ones: at a 16pt icon the real proportions made a 1x1
-        // a speck and a 2x2 a vertical sliver, and telling the five apart
-        // matters more here than reproducing the cell's aspect.
-        let box = CGSize(width: 21, height: 14)
-        let cell: CGFloat = 2.6
-        let gap: CGFloat = 0.9
-        let width = CGFloat(size.cols) * cell + CGFloat(size.cols - 1) * gap
-        let height = CGFloat(size.rows) * cell + CGFloat(size.rows - 1) * gap
-        let image = NSImage(size: box, flipped: false) { _ in
-            let rect = CGRect(
-                x: (box.width - width) / 2, y: (box.height - height) / 2,
-                width: width, height: height)
-            NSColor.black.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 1.5, yRadius: 1.5).fill()
             return true
         }
         image.isTemplate = true

@@ -15,11 +15,12 @@ public struct ShareEditorView: View {
 
     @State private var frame: ShareFrame
     @State private var background: ShareBackground
-    @State private var widgetSize: WidgetSize
     /// The chart on the card, which starts as the widget's own but is not
     /// written back to it. A card is a picture of one moment, and wanting
     /// bars in a tweet is not wanting bars in the notch forever.
     @State private var chart: ChartKind
+    /// Open while the background grid is showing.
+    @State private var pickingBackground = false
     /// Set after a save so the button can confirm rather than look inert.
     @State private var savedTo: URL?
     @State private var failure: String?
@@ -28,12 +29,6 @@ public struct ShareEditorView: View {
         self.request = request
         _frame = State(initialValue: .square)
         _background = State(initialValue: .initial)
-        // Opens on the size the widget already is, so the first thing shown
-        // is the tile the user clicked share on. Anything else reads as the
-        // editor having changed their widget.
-        _widgetSize = State(
-            initialValue: ShareTileMetrics.presets.contains(request.widget.size)
-                ? request.widget.size : .square)
         _chart = State(initialValue: request.widget.chart)
     }
 
@@ -104,8 +99,8 @@ public struct ShareEditorView: View {
             let scale = min(available.width / card.width, available.height / card.height, 1)
 
             ShareCard(
-                request: request, widgetSize: widgetSize, background: background, chart: chart,
-                size: card
+                request: request, widgetSize: ShareCard.cardSpan, background: background,
+                chart: chart, size: card
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .scaleEffect(scale)
@@ -116,7 +111,6 @@ public struct ShareEditorView: View {
             // the frame changes, and an overshoot on a rectangle whose shape
             // is also animating reads as a wobble.
             .animation(.snappy(duration: 0.24), value: frame)
-            .animation(.snappy(duration: 0.24), value: widgetSize)
             .animation(.easeOut(duration: 0.18), value: chart)
             .animation(.easeOut(duration: 0.18), value: background)
         }
@@ -158,8 +152,8 @@ public struct ShareEditorView: View {
 
     private func barContent(showsStatus: Bool, labelsExports: Bool) -> some View {
         HStack(spacing: 8) {
-            // The four choices, grouped: they are one kind of thing, and the
-            // two buttons after them are another.
+            // The choices, grouped: they are one kind of thing, and the two
+            // buttons after them are another.
             HStack(spacing: 2) {
                 trigger(
                     caption: "Frame", value: frame.name, icon: ShareMenuIcon.aspect(frame)
@@ -174,39 +168,20 @@ public struct ShareEditorView: View {
                     }
                 }
 
-                trigger(
-                    caption: "Background", value: background.name,
-                    icon: ShareMenuIcon.swatch(background)
-                ) {
-                    // Sectioned by set. Twenty pictures in one flat list is a
-                    // scroll with no shape to it; the sets are how somebody
-                    // thinks about picking one.
-                    ForEach(ShareBackground.groups) { group in
-                        Section(group.label) {
-                            ForEach(group.backgrounds) { preset in
-                                Button {
-                                    background = preset
-                                } label: {
-                                    Text(preset.name)
-                                    Image(nsImage: ShareMenuIcon.swatch(preset))
-                                }
-                            }
-                        }
-                    }
+                // A popover, not a menu. A menu row is one line of text and
+                // one 18pt image and nothing else, which is as much of a
+                // picture as AppKit will put in front of a choice — and the
+                // choice here *is* the picture. Thirty of them want a grid.
+                Button {
+                    pickingBackground.toggle()
+                } label: {
+                    triggerChrome(icon: ShareMenuIcon.swatch(background))
                 }
-
-                trigger(
-                    caption: "Size", value: ShareTileMetrics.label(for: widgetSize),
-                    icon: ShareMenuIcon.span(widgetSize)
-                ) {
-                    ForEach(ShareTileMetrics.presets, id: \.rawValue) { size in
-                        Button {
-                            widgetSize = size
-                        } label: {
-                            Text("\(ShareTileMetrics.label(for: size)) — \(size.rawValue)")
-                            Image(nsImage: ShareMenuIcon.span(size))
-                        }
-                    }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .help("Background: \(background.name)")
+                .popover(isPresented: $pickingBackground, arrowEdge: .bottom) {
+                    backgroundGrid
                 }
 
                 if hasSeries {
@@ -280,23 +255,7 @@ public struct ShareEditorView: View {
         Menu {
             content()
         } label: {
-            HStack(spacing: 4) {
-                Image(nsImage: icon)
-                    .renderingMode(icon.isTemplate ? .template : .original)
-                    .foregroundStyle(NotchTheme.secondaryText)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .bold))
-                    .foregroundStyle(NotchTheme.tertiaryText)
-            }
-            .frame(height: 22)
-            .padding(.horizontal, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.07)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            triggerChrome(icon: icon)
         }
         // `.button` + `.plain`, not `.borderlessButton`. The borderless style
         // throws the label away and draws its own — caption, chevron, no
@@ -307,6 +266,97 @@ public struct ShareEditorView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("\(caption): \(value)")
+    }
+
+    /// The pill every control in the bar wears.
+    ///
+    /// Shared by the menus and by the background button, which is not a menu
+    /// — two drawings of the same pill is how one of them ends up a point
+    /// taller than the others.
+    private func triggerChrome(icon: NSImage) -> some View {
+        HStack(spacing: 4) {
+            Image(nsImage: icon)
+                .renderingMode(icon.isTemplate ? .template : .original)
+                .foregroundStyle(NotchTheme.secondaryText)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 7, weight: .bold))
+                .foregroundStyle(NotchTheme.tertiaryText)
+        }
+        .frame(height: 22)
+        .padding(.horizontal, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.07)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    /// Every background, four across, under its set's heading.
+    ///
+    /// No names on the swatches. "Nebula" and "Iris" tell nobody which is
+    /// which; the picture does, and a caption under each one only makes the
+    /// grid taller. The headings stay, because the sets are how somebody
+    /// narrows thirty pictures down to the three they are choosing between.
+    private var backgroundGrid: some View {
+        let cell = CGSize(width: 62, height: 44)
+        let columns = Array(
+            repeating: GridItem(.fixed(cell.width), spacing: 8), count: Self.swatchColumns)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(ShareBackground.groups) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(group.label)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NotchTheme.secondaryText)
+                        LazyVGrid(columns: columns, spacing: 8) {
+                            ForEach(group.backgrounds) { preset in
+                                Button {
+                                    background = preset
+                                    pickingBackground = false
+                                } label: {
+                                    swatch(preset, size: cell)
+                                }
+                                .buttonStyle(.plain)
+                                .help(preset.name)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+        }
+        // Pinned to the top. A `ScrollView` inside a popover otherwise opens
+        // part-scrolled — the first set arrives already half past the top
+        // edge, which reads as a rendering fault rather than a list.
+        .defaultScrollAnchor(.top)
+        // Tall enough for two sets and a bit of the third, which is what
+        // tells the eye there is more below without a scrollbar having to.
+        .frame(
+            width: CGFloat(Self.swatchColumns) * cell.width
+                + CGFloat(Self.swatchColumns - 1) * 8 + 28,
+            height: 330)
+    }
+
+    private static let swatchColumns = 4
+
+    /// One background, as itself.
+    ///
+    /// The real `ShareBackgroundView`, cropped the way the card crops it, so
+    /// the swatch is a sample of the picture rather than an approximation of
+    /// it that can go out of date.
+    private func swatch(_ preset: ShareBackground, size: CGSize) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let isPicked = preset.id == background.id
+        return ShareBackgroundView(preset)
+            .frame(width: size.width, height: size.height)
+            .clipShape(shape)
+            .overlay(
+                shape.strokeBorder(
+                    isPicked ? NotchTheme.editHighlight : Color.white.opacity(0.14),
+                    lineWidth: isPicked ? 2 : 1))
+            .contentShape(shape)
     }
 
     /// "Sparkline" is what the type is called; "Line" is what it looks
@@ -349,8 +399,8 @@ public struct ShareEditorView: View {
 
     private func render() -> Data? {
         ShareExport.png(
-            request: request, widgetSize: widgetSize, background: background, chart: chart,
-            frame: frame)
+            request: request, widgetSize: ShareCard.cardSpan, background: background,
+            chart: chart, frame: frame)
     }
 
     private func download() {
