@@ -34,4 +34,65 @@ struct MetricQueryRequestTests {
         let request = MetricQueryRequest(widget: widget(range: range, stored: .hour))
         #expect(request.granularity == expected)
     }
+
+    /// `AppEnvironment.commit` decides whether an answer that has just arrived
+    /// still belongs to its tile by comparing the request the widget would
+    /// make *now* against the one that was sent. That is only sound while
+    /// every setting which changes the number is part of the request, so each
+    /// one gets a case here: a field that stops showing up in the comparison
+    /// lets a four-to-ten-second batch write a stale number onto a tile whose
+    /// picker has already moved, under the new window's title.
+    @Test("a setting that changes the number changes the request")
+    func settingsReachTheRequest() {
+        let base = NotchWidget(
+            id: "w", kind: .providerMetric, appId: "github", integrationId: "int_1",
+            metric: "stars", granularity: .day, range: .month, chart: .sparkline,
+            params: ["repo": "a/b"])
+        let asked = MetricQueryRequest(widget: base)
+
+        #expect(MetricQueryRequest(widget: base) == asked)
+
+        var other = base
+        other.range = .quarter
+        #expect(MetricQueryRequest(widget: other) != asked)
+
+        other = base
+        other.params["repo"] = "c/d"
+        #expect(MetricQueryRequest(widget: other) != asked)
+
+        other = base
+        other.params.removeValue(forKey: "repo")
+        #expect(MetricQueryRequest(widget: other) != asked)
+
+        other = base
+        other.integrationId = "int_2"
+        #expect(MetricQueryRequest(widget: other) != asked)
+
+        other = base
+        other.metric = "forks"
+        #expect(MetricQueryRequest(widget: other) != asked)
+
+        // Not cosmetic: a tile with no chart asks the adapter to skip the
+        // series, so the answer carries different content.
+        other = base
+        other.chart = ChartKind.none
+        #expect(MetricQueryRequest(widget: other) != asked)
+    }
+
+    /// The other half of the same bargain. A rename or a resize must *not*
+    /// read as a new question, or every such edit would discard an answer
+    /// already in flight and put the tile back to a skeleton.
+    @Test("a cosmetic change leaves the request alone")
+    func cosmeticsDoNot() {
+        var widget = NotchWidget(
+            id: "w", kind: .providerMetric, appId: "github", integrationId: "int_1",
+            metric: "stars", granularity: .day, range: .month)
+        let asked = MetricQueryRequest(widget: widget)
+
+        widget.name = "Renamed"
+        widget.size = .wide
+        widget.link = "https://example.com"
+        widget.format = WidgetFormat(compact: false)
+        #expect(MetricQueryRequest(widget: widget) == asked)
+    }
 }

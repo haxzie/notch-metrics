@@ -414,6 +414,18 @@ final class AppEnvironment {
     /// change should supersede the previous change's request, not the timer.
     private var pendingRefresh: Task<Void, Never>?
 
+    /// The whole-layout batch in flight, so the next caller queues behind it
+    /// rather than racing it, and the generation of the last caller to ask.
+    ///
+    /// Nothing used to serialise `refresh()`. It is called from the poll, from
+    /// the refresh button, from connection adoption and from the widget
+    /// browser the moment a tile is dropped in, and the batch takes four to
+    /// ten seconds — so two or three ran concurrently as a matter of course,
+    /// each committing a view of the notch it had assembled before the others
+    /// existed. See `commit`.
+    private var inFlightRefresh: Task<Void, Never>?
+    private var refreshGeneration = 0
+
     /// A widget's settings changed, so its number is answering the old
     /// question.
     ///
@@ -663,12 +675,47 @@ final class AppEnvironment {
 
     /// Fetches once, now. Called on launch, on a timer, and after a widget is
     /// added so a new tile fills in rather than sitting on "Loading".
+    ///
+    /// One batch at a time, with at most one caller queued behind it.
+    ///
+    /// Chained rather than joined. A caller that attached itself to the
+    /// request already in flight would be answered about a notch that did not
+    /// contain its own widget — the browser refreshes the instant a tile is
+    /// dropped in, and a batch running at that moment was built before the
+    /// tile existed. So each caller waits for the current batch and then
+    /// issues its own.
+    ///
+    /// Queued callers past the first drop out instead of each costing another
+    /// ten-second round trip: the batch covers the whole layout, so the last
+    /// caller's run answers for everything the ones behind it would have
+    /// asked. That is what keeps four pickers touched in a second from
+    /// becoming four batches back to back.
+    func refresh(rebindAllowed: Bool = true) async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        let previous = inFlightRefresh
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self, self.refreshGeneration == generation else { return }
+            await self.performRefresh(rebindAllowed: rebindAllowed)
+        }
+        inFlightRefresh = task
+        await task.value
+        // Only the last one clears it, so a caller still queued behind this
+        // task does not lose the thing it is waiting on.
+        if refreshGeneration == generation { inFlightRefresh = nil }
+    }
+
     /// `rebindAllowed` is the recursion stop. A widget whose account 404s is
     /// unbound and re-adopted, which re-enters here — and if the rebound id
     /// 404s too (a connections list that disagrees with the metrics route)
     /// that is an unbounded loop hammering the Worker. One attempt, then the
     /// tile says "Pick a connection" and waits for the next poll.
-    func refresh(rebindAllowed: Bool = true) async {
+    ///
+    /// Called through `refresh()` from everywhere except that one re-entry,
+    /// which goes straight here: it is already inside the queue's single slot,
+    /// and queueing behind itself is a deadlock.
+    private func performRefresh(rebindAllowed: Bool = true) async {
         // Demo mode draws its own numbers and must not reach the network for
         // real ones. The poll already skips it; this covers every other way
         // in — the refresh button, and the connection adoption that follows
@@ -718,7 +765,8 @@ final class AppEnvironment {
         // value": that would also overwrite a `.failed` tile with yesterday's
         // number on every poll, and a provider that is still broken an hour
         // later should say so rather than quietly serve stale data forever.
-        var next = states
+        var before = states
+        var next = before
         for widget in widgets where isPending(next[widget.id]) {
             if let cached = await cache.load(
                 widgetID: widget.id, range: widget.range, params: widget.params)
@@ -728,12 +776,24 @@ final class AppEnvironment {
                 next[widget.id] = .loading
             }
         }
-        states = next
-        notch.update(states: states)
+        commit(next, queried: widgets, unchangedFrom: before)
+        // What this run has itself put on screen, which is the baseline the
+        // batch's own answers are measured against below. Re-read rather than
+        // assumed: `commit` declines to write a tile somebody else has
+        // answered in the meantime, so `next` is not reliably what is showing.
+        before = states
 
         // Set when a widget turned out to point at an account that is gone,
         // so adoption gets a chance to rebind it before the next poll.
         var staleBindings = false
+
+        // Widgets to unbind once this run's states are written. Applied after
+        // `commit` rather than inside the loop: unbinding is a change to the
+        // widget, and `commit` declines to write an answer onto a widget that
+        // is no longer asking the question that was sent — so rebinding
+        // mid-loop would throw away the "Pick a connection" the rebind exists
+        // to put there.
+        var rebinds: [NotchWidget] = []
 
         // The tiles say they are being checked for as long as the batch is in
         // flight. Cleared in a `defer` rather than after the call: every exit
@@ -745,10 +805,13 @@ final class AppEnvironment {
 
         do {
             let results = try await api.batch(widgets.map(MetricQueryRequest.init(widget:)))
-            // Superseded while it was in flight. The answer is for the
-            // settings the user has already moved on from, and writing it
-            // would flash the old window's number over the new one's
-            // skeleton a beat before the current request lands.
+            // Belt to `commit`'s braces, and no longer the thing that keeps a
+            // superseded answer off the tiles. `refresh()` runs this in a task
+            // of its own so that one caller walking away does not cancel a
+            // batch the others are queued behind — which means a caller's
+            // cancellation no longer reaches here. `commit` is what declines
+            // the stale write now, per widget and on the evidence rather than
+            // on the caller's lifetime.
             guard !Task.isCancelled else { return }
             guard results.count == widgets.count else { return }
 
@@ -787,7 +850,7 @@ final class AppEnvironment {
                         if rebindAllowed {
                             var rebound = widget
                             rebound.integrationId = nil
-                            layoutModel.update(rebound)
+                            rebinds.append(rebound)
                             staleBindings = true
                         }
                         continue
@@ -822,19 +885,23 @@ final class AppEnvironment {
             // The batch answered, so the plan is live again — subscribing
             // takes effect on the next poll rather than needing a relaunch.
             needsUpgrade = false
-            states = next
-            notch.update(states: states)
+            commit(next, queried: widgets, unchangedFrom: before)
+            for rebound in rebinds { layoutModel.update(rebound) }
 
-            // Once, and only when something actually came loose: `refresh()`
-            // is reentered here, and adoption only reports a change when it
-            // bound a widget that had nothing.
-            if staleBindings, await adoptConnections() { await refresh(rebindAllowed: false) }
+            // Once, and only when something actually came loose: adoption only
+            // reports a change when it bound a widget that had nothing.
+            if staleBindings, await adoptConnections() {
+                await performRefresh(rebindAllowed: false)
+            }
         } catch {
             // A cancelled request is not a failure, it is a request nobody
             // wants the answer to any more. URLSession surfaces cancellation
             // as a transport error, which `tileState` reads as "could not
             // reach Notch Metrics" — so without this, changing a setting
             // twice quickly painted a network error across the whole notch.
+            //
+            // Rarely reached since `refresh()` began running this in its own
+            // task; the same guard now lives per widget in `commit`.
             if Task.isCancelled { return }
 
             Task {
@@ -849,8 +916,7 @@ final class AppEnvironment {
             for widget in widgets where !isValue(next[widget.id]) {
                 next[widget.id] = state
             }
-            states = next
-            notch.update(states: states)
+            commit(next, queried: widgets, unchangedFrom: before)
         }
     }
 
@@ -898,6 +964,44 @@ final class AppEnvironment {
     private func isValue(_ state: TileState?) -> Bool {
         if case .value = state { return true }
         return false
+    }
+
+    /// Writes one refresh's results without taking the rest of the notch with
+    /// them.
+    ///
+    /// `states` is a dictionary and this used to be `states = next`, where
+    /// `next` was copied before a request that takes four to ten seconds.
+    /// That is a last-writer-wins overwrite of every tile, including the ones
+    /// the run never asked about — so a widget added while a batch was in
+    /// flight had its key **dropped**, and a key that is absent renders as
+    /// `.loading`: a skeleton that never fills, until the next poll up to five
+    /// minutes later. That is the "preview shows no numbers" report, and it
+    /// was intermittent because it depended on whether a batch happened to be
+    /// in flight when the tile was added.
+    ///
+    /// Three conditions, and each one stands for a way the old assignment lied.
+    /// Only the widgets this run queried. Only where nothing else has written
+    /// one since, because a newer answer for the same tile is the better one
+    /// by definition — `refreshOne` answers in well under a second and lost
+    /// that race routinely. And only while the widget is still asking the same
+    /// question, since the request carries the range and params it was built
+    /// with and an answer that lands after the picker moved belongs to a
+    /// window nobody is looking at.
+    private func commit(
+        _ resolved: [String: TileState],
+        queried: [NotchWidget],
+        unchangedFrom before: [String: TileState]
+    ) {
+        let live = Dictionary(
+            layoutModel.layout.widgets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for widget in queried {
+            guard let state = resolved[widget.id], let current = live[widget.id],
+                MetricQueryRequest(widget: current) == MetricQueryRequest(widget: widget),
+                states[widget.id] == before[widget.id]
+            else { continue }
+            states[widget.id] = state
+        }
+        notch.update(states: states)
     }
 
     /// What a widget with no usable account should say.

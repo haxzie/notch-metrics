@@ -1,8 +1,15 @@
 import Foundation
 import MetricsCore
 
-/// The request bodies and response shapes the app actually uses.
-public struct MetricQueryRequest: Codable, Sendable {
+// The request bodies and response shapes the app actually uses.
+
+/// One metric, asked for.
+///
+/// `Equatable` so a refresh can ask whether the widget it is about to write an
+/// answer onto is still asking the question that was sent. This is the whole
+/// question — no field of a widget that changes the number is missing from
+/// here — which is what makes that comparison trustworthy.
+public struct MetricQueryRequest: Codable, Sendable, Equatable {
     public let integrationId: String
     public let metric: String
     public let granularity: String?
