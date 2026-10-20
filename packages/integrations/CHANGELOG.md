@@ -1,5 +1,64 @@
 # @notch/integrations
 
+## 0.3.0
+
+### Minor Changes
+
+- [`1becc46`](https://github.com/haxzie/notch-metrics/commit/1becc460c6350b16764bef88616c5f1ab429a723) Thanks [@haxzie](https://github.com/haxzie)! - Read private repositories on a GitHub connection.
+
+  GitHub has no read-only scope for private repositories on an OAuth app. The
+  only scope that reaches one is `repo`, which carries read and write on code
+  for every repository the signed-in account can see. That is the grant now
+  asked for, and the connect page says so in those terms rather than in terms
+  of what the connector uses.
+
+  A connection made before this keeps working for public repositories. GitHub
+  returns the scopes it granted on every response, so a private repository on
+  an older connection now says to reconnect instead of leaving a correct
+  repository name looking wrong.
+
+### Patch Changes
+
+- [`4ca8331`](https://github.com/haxzie/notch-metrics/commit/4ca83318fdc0f389e85d4a5c7756d9ebe22ce077) Thanks [@haxzie](https://github.com/haxzie)! - Answer a Google Analytics widget over 90 days and 12 months.
+
+  Google sends an empty object for a date range it found no data at all in, so
+  the entry in `totals` has no range name on it and no figure in it. Every
+  window has one behind it to compare against, and on a property younger than
+  that window — a site set up three months ago, asked for the year — the range
+  Google empties is always the comparison one. Reading the range name off that
+  empty entry threw, and the tile said the provider could not be reached for a
+  report that had arrived intact.
+
+  An empty entry is now read as the zero it is, matched to its range by
+  position. A 90-day and a 12-month tile answer, with no percentage beside them
+  until there is a window to compare against.
+
+- [`0a7fc50`](https://github.com/haxzie/notch-metrics/commit/0a7fc50250b9f100e9b1958eb2a58d3919014217) Thanks [@haxzie](https://github.com/haxzie)! - Stop a single rejected request from marking a whole connection broken.
+
+  A GitHub repository that has been renamed, mistyped or made private answers
+  404, and that was being reported as an authentication failure — which marked
+  the connection dead, asked for a reconnect that could not fix a repository
+  name, and stopped the connection's token being refreshed from then on. It is
+  now reported against the widget's repository, where the problem actually is.
+
+  Google's connectors had the same shape of fault from the other direction.
+  YouTube, Search Console and Analytics all answer 403 when a daily quota is
+  spent, and that was being read as a rejected credential rather than as a wait.
+  A spent quota is now a rate limit, and clears on its own.
+
+- [`26463a2`](https://github.com/haxzie/notch-metrics/commit/26463a22a8899ef477ebf6b761cc2e1d6871e02d) Thanks [@haxzie](https://github.com/haxzie)! - Give PostHog long enough to answer.
+
+  Every PostHog number is a HogQL aggregate over the event table rather than a
+  row read, and a ninety-day one measures five to nine and a half seconds
+  across this connector's metrics. The eight seconds every provider got was
+  inside that spread, so the same widget timed out on one refresh and answered
+  on the next, with nothing about the widget to explain the difference.
+
+  A connector can now say how long one of its requests may take. PostHog says
+  fifteen seconds; nothing else sets it. The whole metric is still bounded by
+  the twenty-second budget the caller passes in either way, so a slow provider
+  cannot hold a Worker open.
+
 ## 0.2.0
 
 ### Minor Changes

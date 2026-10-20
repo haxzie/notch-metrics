@@ -1,5 +1,89 @@
 # @notch/mac
 
+## 0.3.2
+
+### Patch Changes
+
+- [`aa17bd2`](https://github.com/haxzie/notch-metrics/commit/aa17bd2df4ca8a15fddc51df6db0d88aade37191) Thanks [@haxzie](https://github.com/haxzie)! - Fill in a widget added while the notch was already fetching.
+
+  A tile dropped in from the browser sometimes previewed nothing at all — a
+  skeleton beside a configure pane with the account picked and every setting
+  right — and stayed that way for up to five minutes before a number appeared.
+
+  Nothing serialised `refresh()`. It is called from the five-minute poll, the
+  refresh button, connection adoption and the browser the instant a tile lands,
+  and the batch behind it takes four to ten seconds, so two or three ran at
+  once as a matter of course. Each one copied the whole `states` dictionary
+  before its request and assigned the copy back after, which is a
+  last-writer-wins overwrite of every tile including the ones it never asked
+  about. A widget added while a batch was in flight did not exist when that
+  copy was taken, so the commit _removed_ its entry — and a tile with no entry
+  renders as loading.
+
+  Two changes. `refresh()` now runs one batch at a time with at most one caller
+  queued behind it, chained rather than joined: a caller that attached itself
+  to the request already in flight would be answered about a notch that did
+  not contain its own widget. And the results are merged per widget rather than
+  assigned, under three conditions — only the widgets that run asked about, only
+  where nothing newer has answered since, and only while the widget is still
+  asking the question that was sent. The last of those also retires a quieter
+  bug, where a slow batch could paint a stale figure under a range the user had
+  already moved on from.
+
+  `refreshOne` answers a single picker change in well under a second and was
+  the most frequent loser of the race it is meant to win.
+
+- [`5b15e78`](https://github.com/haxzie/notch-metrics/commit/5b15e78d72c640ee9e45544175d7d98cad4c1d2a) Thanks [@haxzie](https://github.com/haxzie)! - Give the share card real glass, the provider's name, and one size.
+
+  Four changes to the same picture.
+
+  The plates were flat black rectangles. `.ultraThinMaterial` is what the
+  notch uses, but a material samples the window behind it and `ImageRenderer`
+  declines to draw one at all, so the exported card never had frost in it —
+  only a tint. The card now draws the background twice, blurs the second copy
+  and masks it to the plates, which is the same effect built out of things the
+  renderer does draw. The tint over it went from 55% to 62% black, so a pale
+  wallpaper cannot wash the figure out.
+
+  The footer pill credits the provider first, then a hairline, then Notch
+  Metrics. A card posted on its own said where the screenshot was made but not
+  what it was of.
+
+  The size menu is gone and every card is a 2x2. A share card holds one tile
+  with nothing to pack around it, so the span is a composition decision rather
+  than the user's: a 1x1 came out a stamp in the middle of a 1080px square and
+  a 6x2 left a letterbox of wallpaper above and below it.
+
+  The background menu is a four-column grid in a popover. A menu row is one
+  line of text and one 18pt image, which is as much of a picture as AppKit
+  will put in front of a choice — and the choice here is the picture. The Haze
+  set joins Aurora and Anime, two of which left.
+
+- [`a61b8c4`](https://github.com/haxzie/notch-metrics/commit/a61b8c4766f5c938823c79d2bac733eb6595c7c1) Thanks [@haxzie](https://github.com/haxzie)! - Make the installer window look like it belongs to the app.
+
+  White, with the icons centred and the instruction along the bottom. The
+  window used to be a dark gradient with everything sitting two thirds of the
+  way down it — the Finder draws an icon's name in dark text inside a disk
+  image whatever the background is, so "NotchMetrics" and "Applications" were
+  charcoal on near black, and the first thing anybody saw of this app was a
+  label they had to squint at.
+
+  The arrow between the two is the mark's own: the brand ramp along it, magenta
+  leaving the app and amber arriving at the folder, finished with the open
+  chevron the icon ends on rather than a plain triangle.
+
+- [`cd09475`](https://github.com/haxzie/notch-metrics/commit/cd09475c4f17d7e6fd1810b65b2a10b7100d2c80) Thanks [@haxzie](https://github.com/haxzie)! - Fill a tile in a second when its range changes, rather than in ten.
+
+  Changing a widget's settings refetched the whole notch. That request is
+  serialised per connection and answers only when its slowest group has, so the
+  one tile somebody was looking at waited behind every other integration in the
+  layout — eight to ten seconds with a few payment providers and a GitHub
+  account ahead of it. A skeleton held that long does not read as a slow fetch,
+  it reads as a widget that never loads.
+
+  The tile whose settings changed is now fetched on its own. The whole batch is
+  still what a poll does, and still what answers a widget with no account yet.
+
 ## 0.3.1
 
 ### Patch Changes
