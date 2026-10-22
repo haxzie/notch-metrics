@@ -11,6 +11,14 @@ on:
       # `notes` URL in latest.json — keeps describing the previous version,
       # with the anchor for the new one missing entirely.
       - "apps/mac/CHANGELOG.md"
+      # Every /sources page is generated from the provider manifests, so a
+      # connector change is a site change with nothing under apps/web to show
+      # for it. Without this a new provider, a new metric, or a promotion out
+      # of beta lands on main, passes CI, and never reaches the site — until
+      # some unrelated web edit happens to deploy it. That is how three
+      # connectors kept a "Beta" badge for a day after the release that
+      # removed it.
+      - "packages/integrations/**"
       - "packages/ui/**"
       - "packages/env/**"
       - "packages/schemas/**"
