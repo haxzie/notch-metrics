@@ -81,7 +81,7 @@ export const manifest: ProviderManifest = {
     },
   ],
   allowedHosts: ["www.googleapis.com", "searchconsole.googleapis.com", "oauth2.googleapis.com"],
-  status: "beta",
+  status: "stable",
   minAppVersion: "0.1.0",
 };
 

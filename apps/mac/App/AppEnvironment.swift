@@ -496,13 +496,7 @@ final class AppEnvironment {
                 await cache.store(
                     series, widgetID: widgetId, range: widget.range, params: widget.params)
             case .failure(let failure):
-                Task {
-                    await LogFile.shared.write(
-                        "metric",
-                        "\(widget.appId)/\(metric) \(widget.range.rawValue)"
-                            + " [\(widget.range.defaultGranularity.rawValue)] →"
-                            + " \(failure.code.rawValue): \(failure.message)")
-                }
+                logMetricFailure(widget, failure)
                 // The account is gone. Rebinding lives in `refresh()`, and
                 // doing it here would be a second copy of a thing that is
                 // already subtle.
@@ -822,17 +816,7 @@ final class AppEnvironment {
                     await cache.store(
                         series, widgetID: widget.id, range: widget.range, params: widget.params)
                 case .failure(let failure):
-                    // The one line worth having when a widget misbehaves on
-                    // one range and not another: which widget, which window,
-                    // and the server's own sentence — which now carries the
-                    // provider's, rather than a bare status.
-                    Task {
-                        await LogFile.shared.write(
-                            "metric",
-                            "\(widget.appId)/\(widget.metric ?? "?") \(widget.range.rawValue)"
-                                + " [\(widget.granularity.rawValue)] → \(failure.code.rawValue):"
-                                + " \(failure.message)")
-                    }
+                    logMetricFailure(widget, failure)
                     // `not_found` is the server saying this widget points at
                     // an account that is gone — disconnected, or reconnected
                     // under a new id. Left alone the tile reads "That
@@ -964,6 +948,35 @@ final class AppEnvironment {
     private func isValue(_ state: TileState?) -> Bool {
         if case .value = state { return true }
         return false
+    }
+
+    /// The one line worth having when a widget misbehaves on one range and not
+    /// another: which widget, which window, the bucket that was actually asked
+    /// for, and the server's own sentence — which carries the provider's,
+    /// rather than a bare status.
+    ///
+    /// One copy because there were two, and they had drifted. The batch's
+    /// printed `widget.granularity` — the field frozen when a widget is
+    /// created, which no control has ever changed — while every request is
+    /// built from `range.defaultGranularity`. So a 30d tile that asked for
+    /// daily buckets was logged as `[hour]`, which is the exact signature of a
+    /// bug fixed long ago in `MetricQueryRequest`. A log that names a dead bug
+    /// at the moment a widget is failing costs more than no log at all.
+    ///
+    /// `retryAfterSeconds` is here because it is the only number that says how
+    /// long a `rate_limited` will last: the server obeys a provider's own
+    /// `Retry-After` literally. Without it a rate limit that clears in a
+    /// minute and a hard spend limit that never clears read identically.
+    private func logMetricFailure(_ widget: NotchWidget, _ failure: MetricFailure) {
+        let granularity = widget.range.defaultGranularity.rawValue
+        let retry = failure.retryAfterSeconds.map { ", retry in \($0)s" } ?? ""
+        Task {
+            await LogFile.shared.write(
+                "metric",
+                "\(widget.appId)/\(widget.metric ?? "?") \(widget.range.rawValue)"
+                    + " [\(granularity)] → \(failure.code.rawValue):"
+                    + " \(failure.message)\(retry)")
+        }
     }
 
     /// Writes one refresh's results without taking the rest of the notch with

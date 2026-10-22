@@ -161,7 +161,7 @@ export const manifest: ProviderManifest = {
     "www.googleapis.com",
     "oauth2.googleapis.com",
   ],
-  status: "beta",
+  status: "stable",
   minAppVersion: "0.1.0",
 };
 
