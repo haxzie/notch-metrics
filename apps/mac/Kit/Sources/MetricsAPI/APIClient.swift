@@ -287,6 +287,22 @@ extension APIClient {
     public func disconnect(_ id: String) async throws(APIError) -> OKResponse {
         try await delete("v1/integrations/\(id)", as: OKResponse.self)
     }
+
+    /// The signed-in account: who, on what plan, with how much connected.
+    public func me() async throws(APIError) -> MeResponse {
+        try await get("v1/me", as: MeResponse.self)
+    }
+
+    /// Revokes *this* Mac's device token, server-side.
+    ///
+    /// The token is the only thing a sign-out has to undo, and deleting the
+    /// local copy alone would leave a credential that still works sitting in
+    /// the account's device list until it expired. The route takes the token
+    /// it is revoking from the request's own authentication, so there is no
+    /// id to pass and no way to revoke somebody else's.
+    public func revokeThisDevice() async throws(APIError) -> OKResponse {
+        try await post("v1/desktop/revoke", body: [String: String](), as: OKResponse.self)
+    }
 }
 
 public struct OKResponse: Decodable, Sendable {

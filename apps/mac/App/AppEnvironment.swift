@@ -93,6 +93,16 @@ final class AppEnvironment {
             || isUpgradeDemo
     }
 
+    /// The welcome screen, on a Mac that already has a token.
+    ///
+    /// Not demo mode: the sign-in button has to be the real one, reaching the
+    /// real browser handshake. All this does is withhold the account, which is
+    /// otherwise arrangeable only by signing out — and signing out of the
+    /// build you are working on takes the Keychain item with it.
+    static var isWelcomeDemo: Bool {
+        ProcessInfo.processInfo.environment["NOTCH_DEBUG_WELCOME"] == "1"
+    }
+
     /// The lapsed-plan panel, without waiting for a trial to end.
     ///
     /// Implies demo mode for the same reason the skeletons do: the state is
@@ -137,6 +147,14 @@ final class AppEnvironment {
     /// The button used to look identical before the click, during the browser
     /// round trip, and after a failure that only reached NSLog — so "nothing
     /// happened" and "it failed" were the same picture.
+    /// The signed-in account, once `/v1/me` has answered.
+    ///
+    /// Optional for the whole of a cold launch: the token is in the Keychain
+    /// but nothing has asked the server who it belongs to yet, and the Account
+    /// pane is reachable before the answer arrives — and offline, where it
+    /// never does.
+    private(set) var account: AccountUser?
+
     enum SignInState: Equatable {
         case idle
         /// The browser is open and we are waiting for the callback.
@@ -282,7 +300,7 @@ final class AppEnvironment {
         }
         notch.availableUpdate = updates.state.offer
 
-        isSignedIn = await auth.isSignedIn
+        isSignedIn = await auth.isSignedIn && !Self.isWelcomeDemo
 
         // No starter layout. It used to seed three Stripe tiles, which meant
         // a new user's notch was full of an app they had never connected and
@@ -356,6 +374,57 @@ final class AppEnvironment {
             // After the connections, so the first feed page can name them.
             startAlerts()
         }
+        Task { await loadAccount() }
+    }
+
+    /// Who the token belongs to. Drives the Account pane's identity line.
+    ///
+    /// Failures are silent on purpose: this is one line in a pane, and the
+    /// pane says "Signed in" without it. An error banner for a name nobody
+    /// asked to see would be the loudest thing on the screen.
+    private func loadAccount() async {
+        guard !Self.isDemo, isSignedIn else { return }
+        account = try? await api.me().user
+    }
+
+    /// Signs this Mac out: revokes the token, then forgets everything it
+    /// unlocked.
+    ///
+    /// The revoke goes first and is best-effort. A server that cannot be
+    /// reached must not strand the user signed in — they asked to leave, and
+    /// the token is unusable here the moment the Keychain copy is gone — but
+    /// skipping it when it *can* be reached would leave a working credential
+    /// in the account's device list.
+    ///
+    /// Widgets stay. A layout is the user's arrangement of their own notch,
+    /// not account data, and deleting it on a sign-out means rebuilding it by
+    /// hand after signing back in.
+    func signOut() async {
+        _ = try? await api.revokeThisDevice()
+        await auth.clear()
+
+        isSignedIn = false
+        account = nil
+        needsUpgrade = false
+        signIn = .idle
+
+        // Numbers, notifications and connection names all belong to the
+        // account that has just left. A figure surviving a sign-out is the
+        // next user of this Mac reading the last one's revenue.
+        await cache.clear()
+        connectionsKnowledge = .unknown
+        connectionsByProvider = [:]
+        notch.update(connectionNames: [:])
+        stopAlerts()
+        await alerts.clear()
+        notch.unreadAlertCount = 0
+
+        // Every catalogue-backed view was rendered against an account that no
+        // longer exists here, and the tiles go back to their signed-out
+        // placeholders.
+        catalogueChanged()
+        states = Self.placeholderStates(for: layoutModel.layout, signedIn: false)
+        notch.update(states: states)
     }
 
     /// Points a widget with no account at the only one its provider has.

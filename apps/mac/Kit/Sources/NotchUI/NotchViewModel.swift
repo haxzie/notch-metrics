@@ -239,6 +239,10 @@ public final class NotchViewModel {
     public var onAddWidget: @MainActor () -> Void = {}
     /// Starts the browser sign-in handshake.
     public var onSignIn: @MainActor () -> Void = {}
+    /// Gives up on one that is out. The browser may never answer — the tab
+    /// gets closed, the user changes their mind — and until it does the
+    /// button is the only thing on the welcome screen.
+    public var onCancelSignIn: @MainActor () -> Void = {}
     public var onUpgrade: @MainActor () -> Void = {}
     public var onTogglePin: @MainActor () -> Void = {}
     public var onClose: @MainActor () -> Void = {}

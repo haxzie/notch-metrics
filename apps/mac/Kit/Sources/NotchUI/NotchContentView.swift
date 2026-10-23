@@ -314,7 +314,9 @@ public struct NotchContentView: View {
             // Before anything else, including the panes. A grid of tiles all
             // reading "Sign in" said the same thing eight times and still
             // left the user to work out where to do it.
-            SignedOutNotch(isSigningIn: view.isSigningIn, onSignIn: view.onSignIn)
+            SignedOutNotch(
+                isSigningIn: view.isSigningIn, onSignIn: view.onSignIn,
+                onCancel: view.onCancelSignIn, onDismiss: view.onClose)
                 .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
                 .padding(.top, NotchWidgetCanvas.contentTop)
                 .padding(.bottom, Self.configureBottomInset)
@@ -421,7 +423,8 @@ public struct NotchContentView: View {
             refreshingIDs: view.visibleRefreshingIDs,
             onConfigureWidget: onConfigureWidget,
             onShareWidget: onShareWidget,
-            onOpenWidget: view.onOpenWidget)
+            onOpenWidget: view.onOpenWidget,
+            onAddWidget: view.onAddWidget)
             // The well, not the tiles, is what has to clear the panel edge —
             // so the tiles are inset by the margin the well wants *plus* the
             // distance the well extends past them.
@@ -464,13 +467,21 @@ public struct NotchContentView: View {
 
             // Both are about numbers there are none of yet, or none to be
             // had: refreshing a lapsed plan fetches another 402, and alerts
-            // are gated on the same plan. Settings stays either way — it is
-            // the way to the account pane and to quitting.
+            // are gated on the same plan.
             if view.isSignedIn, !view.needsUpgrade {
                 refreshButton
                 alertsButton
             }
-            headerButton("gearshape", help: "Settings", action: onOpenSettings)
+            // Settings stays for a lapsed plan — it is the way to the billing
+            // pane — but not on the welcome screen, which carries the one
+            // button there is and nothing else. Every pane behind the gear is
+            // empty until an account exists, and this is not a dead end for
+            // somebody who wants out: the app menu keeps Settings on Cmd-,
+            // and Quit on Cmd-Q, and the app is frontmost when the greeting
+            // is on screen.
+            if view.isSignedIn || view.needsUpgrade {
+                headerButton("gearshape", help: "Settings", action: onOpenSettings)
+            }
 
             Spacer(minLength: 0)
             // The width of the camera housing, kept clear.
@@ -1155,6 +1166,9 @@ public struct NotchWidgetCanvas: View {
     public var onShareWidget: (ShareRequest) -> Void = { _ in }
     /// Opens a tile's destination in the browser.
     public var onOpenWidget: (URL) -> Void = { _ in }
+    /// Opens the widget browser. Only the empty state uses it from in here —
+    /// the header owns the other way in. See `EmptyNotch`.
+    public var onAddWidget: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1195,7 +1209,8 @@ public struct NotchWidgetCanvas: View {
         refreshingIDs: Set<String> = [],
         onConfigureWidget: @escaping (NotchWidget) -> Void = { _ in },
         onShareWidget: @escaping (ShareRequest) -> Void = { _ in },
-        onOpenWidget: @escaping (URL) -> Void = { _ in }
+        onOpenWidget: @escaping (URL) -> Void = { _ in },
+        onAddWidget: @escaping () -> Void = {}
     ) {
         self.model = model
         self.states = states
@@ -1207,6 +1222,7 @@ public struct NotchWidgetCanvas: View {
         self.onConfigureWidget = onConfigureWidget
         self.onShareWidget = onShareWidget
         self.onOpenWidget = onOpenWidget
+        self.onAddWidget = onAddWidget
     }
 
     public var body: some View {
@@ -1264,7 +1280,7 @@ public struct NotchWidgetCanvas: View {
                 // new user's notch was full of an app they had never
                 // connected, each tile reading "Connect Stripe".
                 if layout.widgets.isEmpty {
-                    EmptyNotch()
+                    EmptyNotch(onAddWidget: onAddWidget)
                         .frame(width: grid.contentSize.width, height: grid.contentSize.height)
                 }
 
@@ -1748,26 +1764,35 @@ public struct NotchWidgetCanvas: View {
 /// The grid is replaced rather than filled with tiles that each say "Sign
 /// in": the number of widgets somebody happens to have is not how many times
 /// they should be asked, and a tile is not a place anyone looks for a button.
+///
+/// A greeting and one button, with no headline and no explanation of the
+/// product. This is the first thing a new user sees, and the notch has
+/// already been opened for them — anything else here is reading material in
+/// front of the only thing there is to do. See `HelloMark`.
 private struct SignedOutNotch: View {
     let isSigningIn: Bool
     let onSignIn: () -> Void
+    /// Stops waiting for a browser that is not coming back. See
+    /// `signInButton`.
+    let onCancel: () -> Void
+    /// Escape. The welcome notch is opened pinned, so hover cannot close it
+    /// and the one button left in the header is a small target for somebody
+    /// who just wants it gone.
+    let onDismiss: () -> Void
+
+    @State private var isHovering = false
+    @State private var escapeMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
-            NotchLogo(size: 26)
-            Text("Sign in to see your numbers")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(NotchTheme.primaryText)
-                .padding(.top, 10)
-            Text("Your revenue, traffic and support figures, in the notch.")
-                .font(.system(size: 11.5))
-                .foregroundStyle(NotchTheme.secondaryText)
-                .padding(.top, 3)
+            HelloMark(height: 78)
             signInButton
-                .padding(.top, 14)
+                .padding(.top, 18)
             Spacer(minLength: 0)
         }
+        .onAppear(perform: watchForEscape)
+        .onDisappear(perform: stopWatchingForEscape)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1777,12 +1802,43 @@ private struct SignedOutNotch: View {
                 .strokeBorder(Color.white.opacity(0.07), lineWidth: 1))
     }
 
-    /// Deliberately the largest thing in the panel. It is the only action
-    /// available, and everything else here is explaining it.
+    /// A local `NSEvent` monitor for the same reason the grid's Delete key
+    /// uses one: the notch is a non-activating panel with nothing in it that
+    /// takes focus, so `onKeyPress` never fires. Installed only while the
+    /// greeting is on screen, so an Escape pressed anywhere else in the app
+    /// is not swallowed by it.
+    private func watchForEscape() {
+        guard escapeMonitor == nil else { return }
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            onDismiss()
+            return nil
+        }
+    }
+
+    private func stopWatchingForEscape() {
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+        escapeMonitor = nil
+    }
+
+    /// Deliberately the largest thing in the panel, and the only thing in it
+    /// that can be pressed.
+    ///
+    /// Three labels, one button. Waiting, it reports the browser it is waiting
+    /// for; hovered while waiting, it offers to stop. Not disabled while the
+    /// handshake is out, which it used to be: a disabled button in SwiftUI
+    /// receives no hover at all, so the state that most needs a way out was
+    /// the one state nothing could be done about — the user closed the tab,
+    /// and the notch sat there saying "waiting" for three minutes.
     private var signInButton: some View {
-        Button(action: onSignIn) {
+        Button(action: isSigningIn ? onCancel : onSignIn) {
             HStack(spacing: 7) {
-                if isSigningIn {
+                if isSigningIn, isHovering {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Cancel")
+                        .font(.system(size: 13, weight: .semibold))
+                } else if isSigningIn {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.white)
@@ -1798,15 +1854,21 @@ private struct SignedOutNotch: View {
             .foregroundStyle(Color.white)
             .padding(.horizontal, 20)
             .padding(.vertical, 9)
-            .background(Capsule().fill(NotchTheme.editHighlight))
+            // Dimmed while waiting, which is what `disabled` used to draw for
+            // us — the handshake is somewhere else, and a button at full
+            // strength looks like one that still wants pressing.
+            .background(
+                Capsule().fill(
+                    NotchTheme.editHighlight.opacity(isSigningIn && !isHovering ? 0.65 : 1)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(isSigningIn)
+        .onHover { isHovering = $0 }
         // The handshake happens in a browser, which is a window away — so the
         // button says where it is going before it goes.
-        .help("Opens your browser to sign in")
+        .help(isSigningIn ? "Stop waiting for the browser" : "Opens your browser to sign in")
         .animation(.easeOut(duration: 0.15), value: isSigningIn)
+        .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 }
 
@@ -1870,7 +1932,14 @@ private struct TrialEndedNotch: View {
 }
 
 /// What the notch says before anything is in it.
+///
+/// A button rather than the sentence that used to be here. "Press Edit
+/// Widgets, then Add Widget" named two controls, one of which only appears
+/// after the other is pressed — which is a route to describe, not a thing to
+/// do, in the one place where the notch is otherwise empty.
 private struct EmptyNotch: View {
+    let onAddWidget: () -> Void
+
     var body: some View {
         VStack(spacing: 5) {
             Image(systemName: "square.on.square.dashed")
@@ -1879,11 +1948,34 @@ private struct EmptyNotch: View {
             Text("No widgets yet")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NotchTheme.secondaryText)
-            Text("Press Edit Widgets, then Add Widget")
-                .font(.system(size: 10.5))
-                .foregroundStyle(NotchTheme.tertiaryText)
+            addWidgetsButton
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The header's Edit Widgets pill — same mark, same metrics — but filled
+    /// rather than outlined.
+    ///
+    /// The quiet version of this button reads as a label in a panel that is
+    /// otherwise empty, and this is the only thing to do on the screen. Blue
+    /// for the same reason Sign in is: it is the notch's one "do this" colour,
+    /// and the brand gradient on a control reads as decoration.
+    private var addWidgetsButton: some View {
+        Button(action: onAddWidget) {
+            HStack(spacing: 5) {
+                WidgetsMark(size: 11.5)
+                Text("Add widgets")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(NotchTheme.editHighlight))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.white)
+        .help("Browse widgets and add one")
     }
 }
 

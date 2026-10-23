@@ -61,16 +61,34 @@ struct GeneralPane: View {
 struct AccountPane: View {
     @Environment(AppEnvironment.self) private var env
     @State private var signInError: String?
+    @State private var isConfirmingSignOut = false
+    @State private var isSigningOut = false
 
     var body: some View {
         Form {
             Section("Account") {
                 if env.isSignedIn {
-                    LabeledContent("Status", value: "Signed in")
+                    // The email rather than "Signed in", when it is known.
+                    // Which account this Mac is signed in as is the question
+                    // the pane is open to answer — on a second account, or
+                    // after somebody else used the machine, "Signed in" says
+                    // nothing that the presence of numbers in the notch did
+                    // not already say.
+                    //
+                    // `/v1/me` has not answered yet on a cold launch, and
+                    // never answers offline — so the row changes label rather
+                    // than value. "Signed in as: Signed in" is what pairing
+                    // the new label with the old fallback reads as.
+                    if let email = env.account?.email {
+                        LabeledContent("Signed in as", value: email)
+                    } else {
+                        LabeledContent("Status", value: "Signed in")
+                    }
                     Button("Open billing") {
                         NSWorkspace.shared.open(
                             AppEnvironment.appURL.appendingPathComponent("app/settings/billing"))
                     }
+                    signOutButton
                 } else {
                     LabeledContent("Status", value: "Signed out")
                     LabeledContent("Sign in") {
@@ -98,6 +116,34 @@ struct AccountPane: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Signs this Mac out, after asking.
+    ///
+    /// Confirmed rather than immediate: signing back in is a browser round
+    /// trip through the website, which is a long way back from a misclick on a
+    /// pane whose other button opens billing. The dialog names what it does
+    /// and what it leaves alone — the widgets stay arranged.
+    private var signOutButton: some View {
+        Button("Sign out…", role: .destructive) { isConfirmingSignOut = true }
+            .disabled(isSigningOut)
+            .confirmationDialog(
+                "Sign out of Notch Metrics?", isPresented: $isConfirmingSignOut,
+                titleVisibility: .visible
+            ) {
+                Button("Sign out", role: .destructive) {
+                    isSigningOut = true
+                    Task {
+                        await env.signOut()
+                        isSigningOut = false
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    "This Mac stops showing your numbers until you sign in again. "
+                        + "Your widgets stay as you arranged them.")
+            }
     }
 
     /// Mints the PKCE challenge *before* opening the browser.

@@ -24,6 +24,9 @@ public final class NotchWindowController {
     /// Starts the browser sign-in handshake. Owned by the app target, which
     /// is where the PKCE challenge and the website's URL live.
     public var onSignIn: () -> Void = {}
+    /// Stops waiting for the browser to come back. See
+    /// `NotchViewModel.onCancelSignIn`.
+    public var onCancelSignIn: () -> Void = {}
     public var onUpgrade: () -> Void = {}
 
     /// Whether there is an account behind the numbers. The notch shows the
@@ -297,6 +300,7 @@ public final class NotchWindowController {
         viewModel.onOpenWidget = { [weak self] url in self?.onOpenWidget(url) }
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
         viewModel.onSignIn = { [weak self] in self?.onSignIn() }
+        viewModel.onCancelSignIn = { [weak self] in self?.onCancelSignIn() }
         viewModel.onUpgrade = { [weak self] in self?.onUpgrade() }
         viewModel.isSignedIn = isSignedIn
         viewModel.isSigningIn = isSigningIn
@@ -366,8 +370,7 @@ public final class NotchWindowController {
         // a second, which is correct behaviour and makes an unpinned debug
         // expand useless for screenshots.
         if ProcessInfo.processInfo.environment["NOTCH_DEBUG_EXPAND"] == "1" {
-            expand()
-            if !isPinned { togglePin() }
+            openPinned()
             if ProcessInfo.processInfo.environment["NOTCH_DEBUG_EDIT"] == "1" {
                 model.isEditing = true
             }
@@ -776,6 +779,19 @@ public final class NotchWindowController {
         guard let view else { return }
         view.isPinned.toggle()
         if view.isPinned { hover?.cancelPendingCollapse() }
+    }
+
+    /// Opens the notch for somebody who did not hover it — a launch, or a
+    /// second open of an app that is already running.
+    ///
+    /// Pinned, not merely expanded, and that is the whole point: the exit
+    /// watch `expand()` installs finds the pointer somewhere else entirely and
+    /// collapses again within half a second. A panel that appears and goes
+    /// before the pointer can reach it reads as a glitch, and on the welcome
+    /// screen it takes the only sign-in button in the app with it.
+    public func openPinned() {
+        expand()
+        if !isPinned { togglePin() }
     }
 
     private func reassertLevel() {

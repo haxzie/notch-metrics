@@ -98,6 +98,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         env.notch.onSignIn = { [weak self] in
             self?.env.beginSignIn()
         }
+        // Same call the Account pane's Cancel makes. It only stops the app
+        // waiting: the challenge stays on disk and is still good for ten
+        // minutes, so a browser tab finished after a cancel still signs the
+        // user in rather than failing at the callback.
+        env.notch.onCancelSignIn = { [weak self] in
+            self?.env.signInFinished(error: nil)
+        }
 
         // The chip in the notch's bottom corner. It lands on the pane rather
         // than starting a download: an 18 MB fetch beginning because somebody
@@ -112,7 +119,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await self.env.refreshNow() }
         }
 
-        Task { await env.start() }
+        Task {
+            await env.start()
+            // Opening the app opens the notch, not a window. The notch *is*
+            // the app, and for a first-time user the settings window that
+            // used to appear here is a list of panes that are all empty
+            // until there is an account — the one thing to do was two clicks
+            // away, in a window that says nothing about what this is.
+            // Unless Settings was asked for while we were starting — a
+            // `notchmetrics://settings` link, or the menu bar item. The notch
+            // is pinned above every window, so opening it now would park it on
+            // top of the window the user is waiting for.
+            guard !settingsIsWanted else { return }
+            env.notch.openPinned()
+        }
+        suppressLaunchSettingsWindow()
 
         installMainMenu()
         updateStatusItem()
@@ -268,6 +289,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// because `onOpenURL` is attached to a scene — and this app normally has
     /// no window open at all, so the callback would simply never fire.
     func application(_ application: NSApplication, open urls: [URL]) {
+        // Before the URLs are even looked at: a `notchmetrics://` open
+        // activates the app, and the activation brings the settings window
+        // with it. A `settings` link sets `settingsIsWanted` below, which
+        // stops this immediately.
+        hideSettingsWindowSoon()
         for url in urls {
             switch url.host {
             case "auth":
@@ -331,6 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await env.start()
             Self.log.info("signed in: \(self.env.isSignedIn, privacy: .public)")
             env.signInFinished(error: nil)
+            showNotchAfterSignIn()
         } catch AuthError.noPendingSignIn where env.isSignedIn {
             // The web page's effect runs twice under React strict mode, so a
             // second callback arrives with a code we no longer have a
@@ -342,6 +369,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // with no window to attach itself to.
             Self.log.error("sign-in failed: \(String(describing: error), privacy: .public)")
             env.signInFinished(error: Self.describe(error))
+        }
+    }
+
+    /// Where the user lands when the browser hands the sign-in back.
+    ///
+    /// The notch, because that is what they were signing in to. The browser's
+    /// "Open Notch Metrics?" prompt activates the app, and an activation
+    /// brings the settings window with it unless something takes it away
+    /// again — so the first thing most people used to see after signing in
+    /// was a pane of settings they had not asked for, with the thing they
+    /// came for hidden behind it.
+    ///
+    /// Unless the sign-in was started from the Account pane, in which case
+    /// that window is where they are reading "Signed in as…" and the notch
+    /// must not land on top of it. `beginSignIn` suspends the notch either
+    /// way, so the suspended pane cannot tell these two apart — which window
+    /// is wanted can.
+    private func showNotchAfterSignIn() {
+        guard !settingsIsWanted else {
+            // Otherwise the pane it was started from stays put and the notch
+            // springs open later, over whatever is on screen by then.
+            env.notch.discardSuspendedPane()
+            return
+        }
+        hideSettingsWindowSoon()
+        if env.notch.hasSuspendedPane {
+            // Back to the pane it was signed in from — a half-configured
+            // widget, or the browser.
+            env.notch.resumeAfterExternalFlow()
+        } else {
+            env.notch.openPinned()
         }
     }
 
@@ -365,7 +423,138 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Opening an app that is already running — from the Dock, from Finder,
+    /// from Spotlight — asks AppKit to put its windows back. There are none
+    /// to put back here, and the answer to "open Notch Metrics" is the same
+    /// as it is at launch: the notch, pinned.
+    ///
+    /// `false` so AppKit does not then go looking for a window to restore.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        // Except when Settings is already up and merely behind something, in
+        // which case bringing it forward is what was asked for.
+        guard !hasVisibleWindows else { return true }
+        env.notch.openPinned()
+        return false
+    }
+
+    /// Whether the settings window is wanted *on screen right now*, as
+    /// opposed to existing because SwiftUI made one. See
+    /// `hideSettingsWindowUnlessWanted`.
+    ///
+    /// Cleared when the window closes rather than left true for the rest of
+    /// the run: a flag that only ever goes up would let the window follow the
+    /// app forward for every activation after the first visit to Settings.
+    private var settingsIsWanted = false
+
+    private var settingsCloseObserver: (any NSObjectProtocol)?
+
+    /// Notices the settings window closing, so `settingsIsWanted` goes back
+    /// down.
+    ///
+    /// Registered against the window itself rather than filtering inside the
+    /// block: a notification cannot be read from a `Sendable` closure under
+    /// strict concurrency, and `NSWindow.identifier` is main-actor isolated.
+    /// With the window as the observer's `object` there is nothing to read.
+    private func watchForSettingsClose(_ window: NSWindow) {
+        guard settingsCloseObserver == nil else { return }
+        settingsCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settingsIsWanted = false }
+        }
+    }
+
+    /// Takes the settings window back off screen unless somebody asked for it.
+    ///
+    /// Called on every activation, not just at launch, because *being
+    /// activated is what puts it back*. A `notchmetrics://` link — the one
+    /// the browser hands over at the end of a sign-in — activates the app,
+    /// and SwiftUI re-shows the window for a scene it still considers open.
+    /// Ordering it out once at launch only covers the launch.
+    private func hideSettingsWindowUnlessWanted() {
+        guard !settingsIsWanted else { return }
+        guard let window = NSApp.windows
+            .first(where: { $0.identifier?.rawValue == SettingsWindowID.main }),
+            window.isVisible
+        else { return }
+        window.orderOut(nil)
+    }
+
+    /// Catches the settings window the moment it puts itself on screen.
+    ///
+    /// A timer cannot do this. The window is created during a scene update
+    /// whose timing depends on what else the launch is doing — a Keychain
+    /// prompt, a first network round trip — so a poll that gives up after a
+    /// second hides it on a fast launch and misses it on a slow one, and the
+    /// difference does not show up until somebody signs in on a cold machine
+    /// and lands in a pane of settings.
+    ///
+    /// A window becoming key is the signal, and `NSApp.keyWindow` is read
+    /// here rather than the notification's object because a notification
+    /// cannot cross into a `Sendable` closure under strict concurrency.
+    private func watchForUnwantedSettingsWindow() {
+        settingsAppearObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hideSettingsWindowUnlessWanted() }
+        }
+    }
+
+    private var settingsAppearObserver: (any NSObjectProtocol)?
+    private var settingsHideTask: Task<Void, Never>?
+
+    /// Keeps hiding the settings window for the next couple of seconds.
+    ///
+    /// Opening a `notchmetrics://` URL activates the app, and the activation
+    /// puts the `Window` scene's window on screen *without it ever becoming
+    /// key* — so neither the appearance watcher nor a single pass at the
+    /// moment the URL arrives catches it. It lands a fraction of a second
+    /// later, which is what made signing in end on a pane of settings instead
+    /// of in the notch.
+    ///
+    /// Bounded, and it stops the moment somebody actually asks for Settings.
+    /// Two seconds of a no-op check every 100ms is the cost of not having to
+    /// predict when AppKit will do this.
+    private func hideSettingsWindowSoon() {
+        settingsHideTask?.cancel()
+        settingsHideTask = Task { @MainActor [weak self] in
+            for _ in 0..<20 {
+                guard let self, !Task.isCancelled, !self.settingsIsWanted else { return }
+                self.hideSettingsWindowUnlessWanted()
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        hideSettingsWindowSoon()
+    }
+
+    /// Keeps the window SwiftUI opens for the `Window` scene off screen until
+    /// somebody asks for it.
+    ///
+    /// `defaultLaunchBehavior(.suppressed)` is the supported way to do this
+    /// and needs macOS 15; this app runs on 14. Taking it back off screen is
+    /// the only alternative, and it cannot be taken off screen before it
+    /// exists — it is created during the first scene update, which has not
+    /// happened when `applicationDidFinishLaunching` returns. See
+    /// `watchForUnwantedSettingsWindow` for why that wait is a watcher rather
+    /// than a poll.
+    ///
+    /// **`orderOut`, never `close`.** A `Window` scene's window is created
+    /// once; `openSettings` finds it by identifier and brings it forward, and
+    /// its `showSettingsWindow:` fallback only answers for a `Settings` scene,
+    /// which this app deliberately does not use. Close it and the object is
+    /// gone, so the gear in the notch — and `notchmetrics://settings`, and the
+    /// menu bar item — all stop doing anything at all. Ordered out it is still
+    /// there, off screen, waiting to be asked for.
+    private func suppressLaunchSettingsWindow() {
+        watchForUnwantedSettingsWindow()
+        hideSettingsWindowSoon()
+    }
+
     func openSettings() {
+        settingsIsWanted = true
         // The notch is pinned above every window, including the one about to
         // be brought forward, so it would sit on top of Settings. Discarded
         // rather than suspended: Settings is somewhere to stay, and a notch
@@ -381,6 +570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue == SettingsWindowID.main }) {
+            watchForSettingsClose(existing)
             existing.makeKeyAndOrderFront(nil)
             return
         }

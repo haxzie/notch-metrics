@@ -59,6 +59,7 @@ The notch is awkward to inspect because it hides when the pointer leaves it.
 | `NOTCH_DEBUG_DEMO=1`     | Plausible numbers instead of "Sign in". For screenshots.     |
 | `NOTCH_DEBUG_BROWSE=1`   | Open the widget browser in the notch at launch.              |
 | `NOTCH_DEBUG_UPGRADE=1`  | The lapsed-plan panel. Implies demo.                         |
+| `NOTCH_DEBUG_WELCOME=1`  | The welcome screen, with a token still in the Keychain.      |
 | `NOTCH_DEBUG_SKELETON=1` | Every tile loading, over the demo layout. Implies demo.      |
 | `NOTCH_DEBUG_CONFIG=…`   | Configure pane: `1` for one with no account, or a metric id. |
 | `NOTCH_DEBUG_SHARE=…`    | Share editor: `1` for the first widget, or a metric id.      |
