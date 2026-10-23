@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { stripe } from "../src/providers/stripe/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { scalar, stubContext, sub } from "./helpers.ts";
+import { scalar, stubContext, sub, expectMetrics } from "./helpers.ts";
 
 const creds = { secret_key: "rk_test_abc123" };
 const request = {
@@ -111,7 +111,7 @@ describe("stripe verify", () => {
     const result = await stripe.verify(ctx, creds);
     expect(result.accountLabel).toBe("Acme");
     expect(result.currency).toBe("USD");
-    expect(result.availableMetrics).toEqual(["revenue", "refunds", "recent_payments"]);
+    expectMetrics(result.availableMetrics, ["revenue", "refunds", "recent_payments"]);
   });
 
   it("offers everything when the key is unrestricted", async () => {

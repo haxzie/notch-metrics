@@ -1,16 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 
-/**
- * Amplitude's Dashboard REST API buckets by whole days in the project's
- * timezone, and offers hourly only on some of its charts.
- *
- * So every metric here is asked for daily and rolled up locally, and `hour`
- * is not offered at all rather than offered and silently served as a day.
- */
-const ZONE_NOTE =
-  "Days are your Amplitude project's timezone, so the figures match its own charts.";
-
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "amplitude",
   name: "Amplitude",
   category: "analytics",
@@ -49,38 +39,6 @@ export const manifest: ProviderManifest = {
         { value: "eu", label: "European Union" },
       ],
       default: "us",
-    },
-  ],
-  metrics: [
-    {
-      id: "active_users",
-      label: "Active users",
-      shortLabel: "Users",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: `Users who did anything in the window, which Amplitude calls "Any Active Event". The headline is Amplitude's own de-duplicated figure for the whole window, so the bars do not add up to it: one person active on three days is one user and three bars. ${ZONE_NOTE}`,
-    },
-    {
-      id: "new_users",
-      label: "New users",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: `Users whose first ever event Amplitude recorded in the window. A user is new on exactly one day, so these bars do add up to the headline. ${ZONE_NOTE}`,
-    },
-    {
-      id: "events",
-      label: "Events",
-      shortLabel: "Events",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: `Every event recorded in the window, of every type, which Amplitude calls "Any Event". ${ZONE_NOTE}`,
     },
   ],
   allowedHosts: ["amplitude.com", "analytics.eu.amplitude.com"],

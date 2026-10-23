@@ -10,6 +10,7 @@ import type {
   RawSeries,
   VerifyResult,
 } from "../../types.ts";
+import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { ProviderError } from "../../types.ts";
 import { manifest } from "./manifest.ts";
 
@@ -146,36 +147,6 @@ interface Spec {
   distinct: boolean;
 }
 
-const SPECS: Partial<Record<MetricId, Spec>> = {
-  events: { table: "events", time: "timestamp", aggregate: "count()", distinct: false },
-  pageviews: {
-    table: "events",
-    time: "timestamp",
-    aggregate: "count()",
-    filter: "event = '$pageview'",
-    distinct: false,
-  },
-  active_users: {
-    table: "events",
-    time: "timestamp",
-    aggregate: "count(DISTINCT person_id)",
-    distinct: true,
-  },
-  sessions: {
-    table: "events",
-    time: "timestamp",
-    aggregate: "count(DISTINCT properties.$session_id)",
-    filter: "properties.$session_id IS NOT NULL",
-    distinct: true,
-  },
-  new_users: {
-    table: "persons",
-    time: "created_at",
-    aggregate: "count()",
-    distinct: false,
-  },
-};
-
 /**
  * `toStartOfHour` for an hour, `toStartOfDay` for everything else.
  *
@@ -279,7 +250,137 @@ async function windowTotals(
   return { current, previous: request.comparePrevious ? previous : null };
 }
 
-export const posthog: ProviderAdapter<PosthogCredentials> = {
+const { series } = metricsFor<PosthogCredentials>();
+
+/**
+ * One HogQL metric.
+ *
+ * The five differ only by a `Spec` — which table, which time column, which
+ * aggregate, and whether a distinct count makes the window total something
+ * other than the sum of its buckets. That table used to be `SPECS`, keyed on
+ * metric id and read by both the switch and `verify`; each metric carries its
+ * own now.
+ */
+function hogqlMetric(options: {
+  id: MetricId;
+  label: string;
+  shortLabel: string;
+  granularities: [Granularity, ...Granularity[]];
+  methodology: string;
+  spec: Spec;
+}) {
+  return series({
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    unit: "count",
+    granularities: options.granularities,
+    compare: true,
+    methodology: options.methodology,
+
+    async fetch(ctx, creds, request: MetricRequest): Promise<SeriesResult> {
+      const spec = options.spec;
+      const project = await resolveProject(ctx, creds);
+      const rows = await buckets(ctx, creds, project, spec, options.id, request);
+      const current = rows.filter((row) => row.at.getTime() >= request.from.getTime());
+
+      const points = bucketSum(current, {
+        from: request.from,
+        to: request.to,
+        granularity: request.granularity,
+        timeZone: ctx.timeZone,
+      });
+
+      if (!spec.distinct) {
+        const sum = (set: typeof rows) => set.reduce((total, row) => total + row.amount, 0);
+        return {
+          points,
+          value: sum(current),
+          // Gated on the flag rather than on what came back: a row from before
+          // the window would otherwise become a delta nobody asked for.
+          previousValue: request.comparePrevious
+            ? sum(rows.filter((row) => row.at.getTime() < request.from.getTime()))
+            : null,
+        };
+      }
+
+      // A second query rather than a headline that is the sum of its own
+      // chart and wrong: one person active on three days is three bars and
+      // one user.
+      const totals = await windowTotals(ctx, creds, project, spec, options.id, request);
+      return { points, value: totals.current, previousValue: totals.previous };
+    },
+  });
+}
+
+export const activeUsers = hogqlMetric({
+  id: "active_users",
+  label: "Active users",
+  shortLabel: "Users",
+  granularities: ["hour", "day", "week", "month"],
+  methodology:
+    "People with at least one event in the window, de-duplicated. The headline counts each person once across the whole window, so the bars do not add up to it: one person on three days is one user and three bars. Days are your PostHog project's timezone, so the figures match its own dashboards.",
+  spec: {
+    table: "events",
+    time: "timestamp",
+    // A distinct count, so the window total is not the sum of its buckets.
+    aggregate: "count(DISTINCT person_id)",
+    distinct: true,
+  },
+});
+
+export const newUsers = hogqlMetric({
+  id: "new_users",
+  label: "New users",
+  shortLabel: "New",
+  granularities: ["day", "week", "month"],
+  methodology:
+    "Person profiles PostHog first created in the window. Anonymous visitors who are never identified do not create one, so this counts people PostHog can tell apart rather than every first visit.",
+  spec: { table: "persons", time: "created_at", aggregate: "count()", distinct: false },
+});
+
+export const events = hogqlMetric({
+  id: "events",
+  label: "Events",
+  shortLabel: "Events",
+  granularities: ["hour", "day", "week", "month"],
+  methodology: "Every event recorded in the window, of every name.",
+  spec: { table: "events", time: "timestamp", aggregate: "count()", distinct: false },
+});
+
+export const pageviews = hogqlMetric({
+  id: "pageviews",
+  label: "Pageviews",
+  shortLabel: "Views",
+  granularities: ["hour", "day", "week", "month"],
+  methodology: "`$pageview` events in the window. Repeat views by one person all count.",
+  spec: {
+    table: "events",
+    time: "timestamp",
+    aggregate: "count()",
+    filter: "event = '$pageview'",
+    distinct: false,
+  },
+});
+
+export const sessions = hogqlMetric({
+  id: "sessions",
+  label: "Sessions",
+  shortLabel: "Sessions",
+  granularities: ["hour", "day", "week", "month"],
+  methodology:
+    "Distinct `$session_id`s seen in the window. The headline de-duplicates across the whole window, so a session spanning midnight is one session and two bars.",
+  spec: {
+    table: "events",
+    time: "timestamp",
+    aggregate: "count(DISTINCT properties.$session_id)",
+    filter: "properties.$session_id IS NOT NULL",
+    distinct: true,
+  },
+});
+
+export const posthog = provider({
+  metrics: [activeUsers, newUsers, events, pageviews, sessions],
   manifest,
   credentialSchema,
 
@@ -289,7 +390,7 @@ export const posthog: ProviderAdapter<PosthogCredentials> = {
   // spread, so the same widget timed out or answered depending on the day.
   requestTimeoutMs: 15_000,
 
-  async verify(ctx, creds): Promise<VerifyResult> {
+  async verify(ctx, creds) {
     // Names the connection and proves `user:read` in one call.
     const identity = await me(ctx, creds);
     const project = creds.project_id || (identity.team?.id ? String(identity.team.id) : "");
@@ -326,49 +427,9 @@ export const posthog: ProviderAdapter<PosthogCredentials> = {
     return {
       accountLabel: label,
       currency: null,
-      availableMetrics: Object.keys(SPECS) as MetricId[],
+      // No `availableMetrics`: it was `Object.keys(SPECS)`, the same table
+      // the switch read. Derived from the metrics now, so the catalogue and
+      // what a connection offers cannot disagree.
     };
   },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    const spec = SPECS[request.metric];
-    if (!spec) {
-      throw new ProviderError("unsupported", `PostHog does not provide ${request.metric}.`);
-    }
-
-    const project = await resolveProject(ctx, creds);
-    const rows = await buckets(ctx, creds, project, spec, request.metric, request);
-    const current = rows.filter((row) => row.at.getTime() >= request.from.getTime());
-
-    const points = bucketSum(current, {
-      from: request.from,
-      to: request.to,
-      granularity: request.granularity,
-      timeZone: ctx.timeZone,
-    });
-
-    if (!spec.distinct) {
-      const sum = (set: typeof rows) => set.reduce((total, row) => total + row.amount, 0);
-      return {
-        unit: "count",
-        currency: null,
-        points,
-        value: sum(current),
-        // Gated on the flag rather than on what came back: a row from before
-        // the window would otherwise become a delta nobody asked for.
-        previousValue: request.comparePrevious
-          ? sum(rows.filter((row) => row.at.getTime() < request.from.getTime()))
-          : null,
-      };
-    }
-
-    const totals = await windowTotals(ctx, creds, project, spec, request.metric, request);
-    return {
-      unit: "count",
-      currency: null,
-      points,
-      value: totals.current,
-      previousValue: totals.previous,
-    };
-  },
-};
+});

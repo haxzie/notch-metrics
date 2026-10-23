@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openai } from "../src/providers/openai/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { refusedOfferedRanges, scalar, stubContext } from "./helpers.ts";
+import { refusedOfferedRanges, scalar, stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = { admin_key: "sk-admin-0123456789abcdefghij" };
 
@@ -53,7 +53,7 @@ describe("openai", () => {
       "/organization/costs": { __status: 400 },
     });
     const result = await openai.verify(ctx, creds);
-    expect(result.availableMetrics).toEqual([
+    expectMetrics(result.availableMetrics, [
       "tokens",
       "input_tokens",
       "output_tokens",
@@ -78,7 +78,7 @@ describe("openai", () => {
     });
 
     const result = await openai.verify(ctx, creds);
-    expect(result.availableMetrics).toEqual([
+    expectMetrics(result.availableMetrics, [
       "tokens",
       "input_tokens",
       "output_tokens",

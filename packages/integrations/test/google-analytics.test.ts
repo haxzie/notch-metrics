@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { googleAnalytics } from "../src/providers/google-analytics/index.ts";
-import { stubContext } from "./helpers.ts";
+import { stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = { property_id: "123456", access_token: "ya29.0123456789" };
 
@@ -29,7 +29,7 @@ describe("google analytics", () => {
     });
     const result = await googleAnalytics.verify(ctx, creds);
     expect(result.accountLabel).toBe("Marketing site");
-    expect(result.availableMetrics).toEqual(["active_users", "new_users", "sessions", "pageviews"]);
+    expectMetrics(result.availableMetrics, ["active_users", "new_users", "sessions", "pageviews"]);
   });
 
   it("still connects when the Admin API is not enabled, named by number", async () => {

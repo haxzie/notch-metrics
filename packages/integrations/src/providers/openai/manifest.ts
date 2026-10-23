@@ -5,7 +5,7 @@ import type { ProviderManifest } from "@notch/schemas";
  * metric here shares one shape: a token or request count per day, totalled
  * over the window.
  */
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "openai",
   name: "OpenAI",
   category: "ai",
@@ -36,70 +36,6 @@ export const manifest: ProviderManifest = {
       required: false,
       placeholder: "proj_…",
       help: "Leave empty to total every project in the organisation.",
-    },
-  ],
-  metrics: [
-    {
-      id: "tokens",
-      label: "Tokens",
-      shortLabel: "Tokens",
-      unit: "count",
-      granularities: ["hour", "day", "week"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 300,
-      methodology:
-        "Input plus output tokens on chat and completions requests in the window. Input includes cached reads and cache writes, so this matches what the Usage page totals rather than what you were charged for.",
-    },
-    {
-      id: "input_tokens",
-      label: "Input tokens",
-      shortLabel: "Input",
-      unit: "count",
-      granularities: ["hour", "day", "week"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 300,
-      methodology:
-        "Input tokens on completions requests, cached reads and cache writes included. Audio and image inputs are counted in their own token units, as OpenAI reports them.",
-    },
-    {
-      id: "output_tokens",
-      label: "Output tokens",
-      shortLabel: "Output",
-      unit: "count",
-      granularities: ["hour", "day", "week"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 300,
-      methodology: "Output tokens generated on completions requests in the window.",
-    },
-    {
-      id: "api_requests",
-      label: "API requests",
-      shortLabel: "Requests",
-      unit: "count",
-      granularities: ["hour", "day", "week"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 300,
-      methodology:
-        "Model requests on the completions endpoint. One batch job counts as the requests inside it, not as one.",
-    },
-    {
-      id: "api_spend",
-      label: "API spend",
-      shortLabel: "Spend",
-      unit: "currency",
-      // No `hour`. OpenAI's cost endpoint buckets by day and nothing finer, so
-      // an hourly series would be one day's figure repeated or stacked on a
-      // single midnight point — both of which read as data.
-      granularities: ["day", "week"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 300,
-      methodology:
-        "Billed cost per day from OpenAI's cost report, every line item included: tokens, tools and storage. Rounded to the cent per day, so it tracks the invoice rather than the fractional amounts the API returns.",
     },
   ],
   allowedHosts: ["api.openai.com"],

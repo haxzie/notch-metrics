@@ -9,6 +9,7 @@ import type {
   RawSeries,
   VerifyResult,
 } from "../../types.ts";
+import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { ProviderError } from "../../types.ts";
 import { manifest } from "./manifest.ts";
 
@@ -122,68 +123,18 @@ function unixSeconds(date: Date): string {
   return String(Math.floor(date.getTime() / 1000));
 }
 
-export const openai: ProviderAdapter<OpenAICredentials> = {
-  manifest,
-  credentialSchema,
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    // Yesterday onwards, one bucket. The window does not matter — this call
-    // exists to prove the key is an admin key before a row is written, and an
-    // organisation with no traffic yesterday still answers 200 with an empty
-    // bucket.
-    const usage = new URL(`${API}/organization/usage/completions`);
-    usage.searchParams.set("start_time", unixSeconds(new Date(ctx.now().getTime() - DAY_MS)));
-    usage.searchParams.set("bucket_width", "1d");
-    usage.searchParams.set("limit", "1");
-    if (creds.project_id) usage.searchParams.append("project_ids[]", creds.project_id);
-    await get<Page<UsageResult>>(ctx, creds, usage);
-
-    const available: MetricId[] = ["tokens", "input_tokens", "output_tokens", "api_requests"];
-    let accountLabel = creds.project_id ?? null;
-
-    // Cost is a separate permission from usage on a scoped admin key. Narrowed
-    // rather than fatal: a key that can read tokens but not dollars is still
-    // worth four working widgets.
-    try {
-      const costs = new URL(`${API}/organization/costs`);
-      costs.searchParams.set("start_time", unixSeconds(new Date(ctx.now().getTime() - DAY_MS)));
-      costs.searchParams.set("limit", "1");
-      const body = await get<Page<CostResult>>(ctx, creds, costs);
-      available.push("api_spend");
-      accountLabel =
-        body.data.flatMap((bucket) => bucket.results).find((r) => r.organization_id)
-          ?.organization_id ?? accountLabel;
-    } catch (error) {
-      // A permanent refusal narrows; a transient one is fatal.
-      //
-      // `availableMetrics` is written once at connect time, so swallowing a
-      // 500 or a rate limit would hide spend permanently over a bad thirty
-      // seconds. But re-throwing everything else lets an *optional* probe
-      // fail the whole connection — which is exactly what a malformed cost
-      // request did on the Claude connector, leaving it unconnectable while
-      // all four token metrics worked.
-      const permanent = new Set(["auth_failed", "bad_response", "unsupported", "not_found"]);
-      if (!(error instanceof ProviderError) || !permanent.has(error.code)) throw error;
-      ctx.log("openai cost report refused, narrowing metrics", {
-        code: error.code,
-        message: error.message,
-      });
-    }
-
-    return { accountLabel, currency: "USD", availableMetrics: available };
-  },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    if (request.metric === "api_spend") return spend(ctx, creds, request);
-    return usage(ctx, creds, request);
-  },
-};
-
 async function usage(
   ctx: AdapterContext,
   creds: OpenAICredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+  /**
+   * Which of the usage report's columns this metric is.
+   *
+   * Passed in rather than switched on `request.metric`, whose `default` arm
+   * was unreachable: `fetchMetric` had already decided this was not spend.
+   */
+  pick: (result: UsageResult) => number,
+): Promise<SeriesResult> {
   const width = bucketWidth(request.granularity);
   const plan = planWalk({
     from: request.from,
@@ -201,21 +152,6 @@ async function usage(
     limit: String(PER_PAGE[width]),
   });
 
-  const pick = (result: UsageResult): number => {
-    switch (request.metric) {
-      case "tokens":
-        return result.input_tokens + result.output_tokens;
-      case "input_tokens":
-        return result.input_tokens;
-      case "output_tokens":
-        return result.output_tokens;
-      case "api_requests":
-        return result.num_model_requests;
-      default:
-        throw new ProviderError("unsupported", `OpenAI does not provide ${request.metric}.`);
-    }
-  };
-
   const events = rows.map((row) => ({ at: row.at, amount: pick(row.result) }));
   return series(ctx, events, request, plan.comparePrevious, null);
 }
@@ -224,7 +160,7 @@ async function spend(
   ctx: AdapterContext,
   creds: OpenAICredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   if (request.granularity === "hour") {
     throw new ProviderError(
       "unsupported",
@@ -288,7 +224,7 @@ function series(
   comparePrevious: boolean,
   currency: string | null,
   note?: string,
-): RawSeries {
+): SeriesResult {
   const total = (rows: typeof events) => rows.reduce((sum, row) => sum + row.amount, 0);
 
   const current = events.filter((row) => row.at >= request.from);
@@ -304,11 +240,151 @@ function series(
     : [];
 
   return {
-    unit: currency ? "currency" : "count",
     currency,
     points,
     value: Math.round(total(current)),
     previousValue: comparePrevious ? Math.round(total(previous)) : null,
-    note,
+    ...(note !== undefined ? { note } : {}),
   };
 }
+
+const { series: seriesMetric } = metricsFor<OpenAICredentials>();
+
+/**
+ * One of the four usage metrics.
+ *
+ * All four walk the same completions report and differ only in which column
+ * they add up — the argument, where it used to be a `pick` switch.
+ */
+function usageMetric(options: {
+  id: MetricId;
+  label: string;
+  shortLabel: string;
+  methodology: string;
+  pick: (result: UsageResult) => number;
+}) {
+  return seriesMetric({
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    unit: "count",
+    // Hourly is real on the usage report. Spend below is daily-only, which
+    // is why the two declare different sets rather than one generous one.
+    granularities: ["hour", "day", "week"],
+    compare: true,
+    freshnessSeconds: 300,
+    methodology: options.methodology,
+    fetch: (ctx, creds, request: MetricRequest) => usage(ctx, creds, request, options.pick),
+  });
+}
+
+export const tokens = usageMetric({
+  id: "tokens",
+  label: "Tokens",
+  shortLabel: "Tokens",
+  methodology:
+    "Input plus output tokens on chat and completions requests in the window. Input includes cached reads and cache writes, so this matches what the Usage page totals rather than what you were charged for.",
+  pick: (result) => result.input_tokens + result.output_tokens,
+});
+
+export const inputTokens = usageMetric({
+  id: "input_tokens",
+  label: "Input tokens",
+  shortLabel: "Input",
+  methodology:
+    "Input tokens on completions requests, cached reads and cache writes included. Audio and image inputs are counted in their own token units, as OpenAI reports them.",
+  pick: (result) => result.input_tokens,
+});
+
+export const outputTokens = usageMetric({
+  id: "output_tokens",
+  label: "Output tokens",
+  shortLabel: "Output",
+  methodology: "Output tokens generated on completions requests in the window.",
+  pick: (result) => result.output_tokens,
+});
+
+export const apiRequests = usageMetric({
+  id: "api_requests",
+  label: "API requests",
+  shortLabel: "Requests",
+  methodology:
+    "Model requests on the completions endpoint. One batch job counts as the requests inside it, not as one.",
+  pick: (result) => result.num_model_requests,
+});
+
+export const apiSpend = seriesMetric({
+  id: "api_spend",
+  label: "API spend",
+  shortLabel: "Spend",
+  unit: "currency",
+  // Daily-only, so `hour` is absent where the usage metrics have it and
+  // `24h` is never offered. Declaring it would be the "too generous" half of
+  // the range bug this connector shipped with.
+  granularities: ["day", "week"],
+  compare: true,
+  freshnessSeconds: 300,
+  methodology:
+    "Billed cost per day from OpenAI's cost report, every line item included: tokens, tools and storage. Rounded to the cent per day, so it tracks the invoice rather than the fractional amounts the API returns.",
+  fetch: spend,
+});
+
+export const openai = provider({
+  metrics: [tokens, inputTokens, outputTokens, apiRequests, apiSpend],
+  manifest,
+  credentialSchema,
+
+  async verify(ctx, creds) {
+    // Yesterday onwards, one bucket. The window does not matter — this call
+    // exists to prove the key is an admin key before a row is written, and an
+    // organisation with no traffic yesterday still answers 200 with an empty
+    // bucket.
+    const usage = new URL(`${API}/organization/usage/completions`);
+    usage.searchParams.set("start_time", unixSeconds(new Date(ctx.now().getTime() - DAY_MS)));
+    usage.searchParams.set("bucket_width", "1d");
+    usage.searchParams.set("limit", "1");
+    if (creds.project_id) usage.searchParams.append("project_ids[]", creds.project_id);
+    await get<Page<UsageResult>>(ctx, creds, usage);
+
+    // Spend is withheld on refusal rather than the four token metrics being
+    // listed on success: `provider()` derives what is available from the
+    // metrics, so `verify` says only what this key cannot reach.
+    let spendUnavailable = false;
+    let accountLabel = creds.project_id ?? null;
+
+    // Cost is a separate permission from usage on a scoped admin key. Narrowed
+    // rather than fatal: a key that can read tokens but not dollars is still
+    // worth four working widgets.
+    try {
+      const costs = new URL(`${API}/organization/costs`);
+      costs.searchParams.set("start_time", unixSeconds(new Date(ctx.now().getTime() - DAY_MS)));
+      costs.searchParams.set("limit", "1");
+      const body = await get<Page<CostResult>>(ctx, creds, costs);
+      accountLabel =
+        body.data.flatMap((bucket) => bucket.results).find((r) => r.organization_id)
+          ?.organization_id ?? accountLabel;
+    } catch (error) {
+      // A permanent refusal narrows; a transient one is fatal.
+      //
+      // `availableMetrics` is written once at connect time, so swallowing a
+      // 500 or a rate limit would hide spend permanently over a bad thirty
+      // seconds. But re-throwing everything else lets an *optional* probe
+      // fail the whole connection — which is exactly what a malformed cost
+      // request did on the Claude connector, leaving it unconnectable while
+      // all four token metrics worked.
+      const permanent = new Set(["auth_failed", "bad_response", "unsupported", "not_found"]);
+      if (!(error instanceof ProviderError) || !permanent.has(error.code)) throw error;
+      spendUnavailable = true;
+      ctx.log("openai cost report refused, narrowing metrics", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+
+    return {
+      accountLabel,
+      currency: "USD",
+      ...(spendUnavailable ? { unavailableMetrics: ["api_spend" as MetricId] } : {}),
+    };
+  },
+});

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
+import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
+  RawListItem,
   MetricRequest,
   ProviderAdapter,
   RawSeries,
@@ -167,68 +169,6 @@ function storeFilter(creds: LemonSqueezyCredentials): Record<string, string | un
   return creds.store_id ? { "filter[store_id]": creds.store_id } : {};
 }
 
-export const lemonsqueezy: ProviderAdapter<LemonSqueezyCredentials> = {
-  manifest,
-  credentialSchema,
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    const me = await get<{ data: Resource<{ name?: string; email?: string }> }>(
-      ctx,
-      creds,
-      "/users/me",
-    );
-
-    const stores = await get<{ data: Resource<{ name?: string; currency?: string }>[] }>(
-      ctx,
-      creds,
-      "/stores",
-      { "page[size]": 100 },
-    );
-
-    const chosen = creds.store_id
-      ? stores.data?.find((store) => store.id === creds.store_id)
-      : stores.data?.[0];
-
-    // A store id that does not belong to this key would otherwise fail later
-    // as an empty dashboard rather than a rejected connection.
-    if (creds.store_id && !chosen) {
-      throw new ProviderError("unsupported", `This API key cannot see store ${creds.store_id}.`);
-    }
-
-    const label = creds.store_id
-      ? (chosen?.attributes.name ?? `Store ${creds.store_id}`)
-      : (me.data?.attributes.name ?? me.data?.attributes.email ?? "Lemon Squeezy");
-
-    return {
-      accountLabel: label,
-      currency: chosen?.attributes.currency?.toUpperCase() ?? null,
-      availableMetrics: [
-        "mrr",
-        "revenue",
-        "active_subscribers",
-        "refunds",
-        "recent_payments",
-      ] satisfies MetricId[],
-    };
-  },
-
-  async fetchMetric(ctx, creds, request): Promise<RawSeries> {
-    switch (request.metric) {
-      case "mrr":
-        return mrr(ctx, creds);
-      case "active_subscribers":
-        return activeSubscribers(ctx, creds);
-      case "revenue":
-      case "refunds":
-        return fromOrders(ctx, creds, request);
-      case "recent_payments":
-        return latestOrders(ctx, creds);
-      default:
-        throw new ProviderError("unsupported", `Lemon Squeezy does not provide ${request.metric}.`);
-    }
-  },
-};
-
 async function activeSubscriptions(ctx: AdapterContext, creds: LemonSqueezyCredentials) {
   return walk<SubscriptionAttributes>(ctx, creds, "/subscriptions", {
     ...storeFilter(creds),
@@ -244,7 +184,10 @@ async function activeSubscriptions(ctx: AdapterContext, creds: LemonSqueezyCrede
  * with 800 subscribers typically has a handful of prices, and one request per
  * subscription would exhaust the Worker's budget on a mid-sized store.
  */
-async function mrr(ctx: AdapterContext, creds: LemonSqueezyCredentials): Promise<RawSeries> {
+async function mrrValue(
+  ctx: AdapterContext,
+  creds: LemonSqueezyCredentials,
+): Promise<ScalarResult> {
   const { items, truncated } = await activeSubscriptions(ctx, creds);
 
   const priceIds = [
@@ -283,14 +226,10 @@ async function mrr(ctx: AdapterContext, creds: LemonSqueezyCredentials): Promise
   const value = Math.round(total);
 
   return {
-    unit: "currency",
     // The store's currency, which `verify` recorded. Lemon Squeezy prices
     // carry no currency of their own — a store has exactly one.
     currency: ctx.preferredCurrency,
-    points: [{ t: ctx.now(), v: value }],
     value,
-    previousValue: null,
-    asOf: ctx.now(),
     note: join(
       unpriced > 0
         ? `${unpriced} subscription${unpriced === 1 ? "" : "s"} had no recurring price and were excluded.`
@@ -300,21 +239,12 @@ async function mrr(ctx: AdapterContext, creds: LemonSqueezyCredentials): Promise
   };
 }
 
-async function activeSubscribers(
+async function activeCount(
   ctx: AdapterContext,
   creds: LemonSqueezyCredentials,
-): Promise<RawSeries> {
+): Promise<ScalarResult> {
   const { items, truncated } = await activeSubscriptions(ctx, creds);
-
-  return {
-    unit: "count",
-    currency: null,
-    points: [{ t: ctx.now(), v: items.length }],
-    value: items.length,
-    previousValue: null,
-    asOf: ctx.now(),
-    note: truncationNote(truncated),
-  };
+  return { value: items.length, note: truncationNote(truncated) };
 }
 
 /** Orders took payment. `pending`, `failed` and `fraudulent` did not. */
@@ -324,7 +254,15 @@ async function fromOrders(
   ctx: AdapterContext,
   creds: LemonSqueezyCredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+  /**
+   * Which amount on an order this metric is.
+   *
+   * Passed in rather than read off `request.metric`: revenue and refunds are
+   * the same walk over the same orders, and the only difference between them
+   * is this line.
+   */
+  amountOf: (row: Resource<OrderAttributes>) => number,
+): Promise<SeriesResult> {
   const windowMs = request.to.getTime() - request.from.getTime();
   const from = request.comparePrevious ? new Date(request.from.getTime() - windowMs) : request.from;
 
@@ -344,9 +282,6 @@ async function fromOrders(
   );
   const { kept, note } = splitByCurrency(paid, ctx.preferredCurrency);
 
-  const amountOf = (row: Resource<OrderAttributes>) =>
-    request.metric === "refunds" ? row.attributes.refunded_amount : row.attributes.total;
-
   const events = kept
     .map((row) => ({ at: new Date(row.attributes.created_at), amount: amountOf(row) }))
     .filter((event) => event.amount > 0);
@@ -365,7 +300,6 @@ async function fromOrders(
     : null;
 
   return {
-    unit: "currency",
     currency: ctx.preferredCurrency,
     points,
     value,
@@ -378,7 +312,7 @@ async function fromOrders(
 async function latestOrders(
   ctx: AdapterContext,
   creds: LemonSqueezyCredentials,
-): Promise<RawSeries> {
+): Promise<RawListItem[]> {
   const body = await get<Page<OrderAttributes>>(ctx, creds, "/orders", {
     ...storeFilter(creds),
     "page[number]": 1,
@@ -401,5 +335,106 @@ async function latestOrders(
         status: row.attributes.status,
       };
     });
-  return recentPayments(ctx, rows);
+  // Sorted, capped and totalled by the shared payments metric.
+  return rows;
 }
+
+const { scalar, series } = metricsFor<LemonSqueezyCredentials>();
+
+export const mrr = scalar({
+  id: "mrr",
+  label: "Monthly recurring revenue",
+  shortLabel: "MRR",
+  unit: "currency",
+  freshnessSeconds: 180,
+  methodology:
+    "Active subscriptions, each price normalised to a monthly amount by its renewal interval. A snapshot of the book right now, not a total over the window.",
+  fetch: mrrValue,
+});
+
+export const revenue = series({
+  id: "revenue",
+  label: "Revenue",
+  shortLabel: "Revenue",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Orders in the window that took payment, by `total`. Gross: a later refund does not remove the order from the day it was paid.",
+  fetch: (ctx, creds, request) => fromOrders(ctx, creds, request, (row) => row.attributes.total),
+});
+
+export const activeSubscribers = scalar({
+  id: "active_subscribers",
+  label: "Active subscribers",
+  shortLabel: "Active",
+  unit: "count",
+  freshnessSeconds: 180,
+  methodology: "Subscriptions in status `active` right now, trials included.",
+  fetch: activeCount,
+});
+
+export const refunds = series({
+  id: "refunds",
+  label: "Refunds",
+  shortLabel: "Refunds",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  // Bucketed by the order's own date, because Lemon Squeezy does not
+  // expose when the refund happened — only that it did and for how much.
+  freshnessSeconds: 60,
+  methodology:
+    "`refunded_amount` on orders in the window, bucketed by the order date rather than the refund date, which the API does not expose.",
+  fetch: (ctx, creds, request) =>
+    fromOrders(ctx, creds, request, (row) => row.attributes.refunded_amount),
+});
+
+export const payments = recentPaymentsMetric<LemonSqueezyCredentials>({
+  methodology:
+    "The latest orders that took payment, newest first, with the buyer's name or email and the first product on the order. The headline is their total in your currency.",
+  rows: latestOrders,
+});
+
+export const lemonsqueezy = provider({
+  metrics: [mrr, revenue, activeSubscribers, refunds, payments],
+  manifest,
+  credentialSchema,
+
+  async verify(ctx, creds) {
+    const me = await get<{ data: Resource<{ name?: string; email?: string }> }>(
+      ctx,
+      creds,
+      "/users/me",
+    );
+
+    const stores = await get<{ data: Resource<{ name?: string; currency?: string }>[] }>(
+      ctx,
+      creds,
+      "/stores",
+      { "page[size]": 100 },
+    );
+
+    const chosen = creds.store_id
+      ? stores.data?.find((store) => store.id === creds.store_id)
+      : stores.data?.[0];
+
+    // A store id that does not belong to this key would otherwise fail later
+    // as an empty dashboard rather than a rejected connection.
+    if (creds.store_id && !chosen) {
+      throw new ProviderError("unsupported", `This API key cannot see store ${creds.store_id}.`);
+    }
+
+    const label = creds.store_id
+      ? (chosen?.attributes.name ?? `Store ${creds.store_id}`)
+      : (me.data?.attributes.name ?? me.data?.attributes.email ?? "Lemon Squeezy");
+
+    // No `availableMetrics`: it was these five ids written out a second time
+    // beside the manifest and the switch. Derived from the metrics now.
+    return {
+      accountLabel: label,
+      currency: chosen?.attributes.currency?.toUpperCase() ?? null,
+    };
+  },
+});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ProviderError } from "../src/types.ts";
 import { credentialSchema, shopify } from "../src/providers/shopify/index.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { scalar, stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = {
   shop_domain: "acme-supply.myshopify.com",

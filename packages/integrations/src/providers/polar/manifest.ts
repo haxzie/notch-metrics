@@ -1,8 +1,7 @@
 import type { ProviderManifest } from "@notch/schemas";
-import { recentPaymentsDescriptor } from "../../list.ts";
 import { paymentReceivedNotification } from "../../notifications.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "polar",
   name: "Polar",
   category: "revenue",
@@ -40,69 +39,6 @@ export const manifest: ProviderManifest = {
       ],
       default: "production",
     },
-  ],
-  metrics: [
-    {
-      id: "mrr",
-      label: "Monthly recurring revenue",
-      shortLabel: "MRR",
-      unit: "currency",
-      granularities: ["day", "month"],
-      supportsSeries: false,
-      supportsCompare: false,
-      freshnessSeconds: 180,
-      methodology:
-        "Polar's own MRR: active subscriptions normalised to a month, yearly plans divided by twelve, trials excluded. The latest day Polar has computed.",
-    },
-    {
-      id: "revenue",
-      label: "Revenue",
-      shortLabel: "Revenue",
-      unit: "currency",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 60,
-      methodology:
-        "Order subtotals in the window as Polar reports them, before Polar's fees and before tax. In the organization's currency.",
-    },
-    {
-      id: "active_subscribers",
-      label: "Active subscriptions",
-      shortLabel: "Active",
-      unit: "count",
-      granularities: ["day", "month"],
-      supportsSeries: false,
-      supportsCompare: false,
-      freshnessSeconds: 180,
-      methodology:
-        "Active subscriptions on the latest day Polar has computed, including paused and past-due ones, excluding trials.",
-    },
-    {
-      id: "new_subscribers",
-      label: "New subscriptions",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 180,
-      methodology: "Subscriptions started in the window, as Polar counts them.",
-    },
-    {
-      id: "churned_subscribers",
-      label: "Churned subscriptions",
-      shortLabel: "Churn",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 180,
-      methodology: "Subscriptions that ended in the window, as Polar counts them.",
-    },
-    recentPaymentsDescriptor(
-      "The latest paid orders, newest first, with the customer's name or email and the product. Amounts are what the customer paid, after discounts and including tax.",
-    ),
   ],
   notifications: [
     paymentReceivedNotification("An order that completed. Refunds are not announced here."),

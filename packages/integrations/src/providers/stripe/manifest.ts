@@ -1,8 +1,7 @@
 import type { ProviderManifest } from "@notch/schemas";
-import { recentPaymentsDescriptor } from "../../list.ts";
 import { paymentReceivedNotification, metricThresholdNotification } from "../../notifications.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "stripe",
   name: "Stripe",
   category: "revenue",
@@ -25,79 +24,6 @@ export const manifest: ProviderManifest = {
       help: "A restricted key with read access to Charges and Subscriptions is enough, and is safer than a full secret key.",
       pattern: "^(sk|rk)_(live|test)_[A-Za-z0-9]+$",
     },
-  ],
-  metrics: [
-    {
-      id: "mrr",
-      label: "Monthly recurring revenue",
-      shortLabel: "MRR",
-      unit: "currency",
-      granularities: ["day", "week", "month"],
-      supportsSeries: false,
-      supportsCompare: false,
-      freshnessSeconds: 180,
-      methodology:
-        "Active subscriptions right now, each item normalised to a monthly amount (annual ÷ 12, weekly × 52/12) and reduced by any percentage coupon. A snapshot, not a sum over the window.",
-    },
-    {
-      id: "revenue",
-      label: "Revenue",
-      shortLabel: "Revenue",
-      unit: "currency",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 60,
-      methodology:
-        "Gross charges from balance transactions in the window, before Stripe fees. Refunds are reported separately rather than netted off.",
-    },
-    {
-      id: "active_subscribers",
-      label: "Active subscribers",
-      shortLabel: "Active",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: false,
-      supportsCompare: false,
-      freshnessSeconds: 180,
-      methodology: "Subscriptions in Stripe status `active` right now. Trials are not counted.",
-    },
-    {
-      id: "new_subscribers",
-      label: "New subscribers",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 180,
-      methodology: "Subscriptions created in the window, bucketed by creation time.",
-    },
-    {
-      id: "churned_subscribers",
-      label: "Churned subscribers",
-      shortLabel: "Churn",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 180,
-      methodology: "Subscriptions cancelled in the window, bucketed by cancellation time.",
-    },
-    {
-      id: "refunds",
-      label: "Refunds",
-      shortLabel: "Refunds",
-      unit: "currency",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 60,
-      methodology: "Refund balance transactions in the window, as a positive amount.",
-    },
-    recentPaymentsDescriptor(
-      "The latest succeeded charges, newest first, with the payer's billing name or receipt email and the charge description. The headline is their total in your currency.",
-    ),
   ],
   notifications: [
     paymentReceivedNotification(

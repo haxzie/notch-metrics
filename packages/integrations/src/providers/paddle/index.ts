@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
+import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
+  RawListItem,
   MetricRequest,
   ProviderAdapter,
   RawSeries,
@@ -162,74 +164,6 @@ function join(...notes: (string | undefined)[]): string | undefined {
   return present.length ? present.join(" ") : undefined;
 }
 
-export const paddle: ProviderAdapter<PaddleCredentials> = {
-  manifest,
-  credentialSchema,
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    // The cheapest authenticated call Paddle has: no permission, no paging.
-    // Proves the key is real and on the right host before anything else.
-    await get(ctx, creds, "/event-types");
-
-    // Permissions are per entity. Narrowing to what the key can read beats
-    // rejecting a key that was deliberately scoped down.
-    const available: MetricId[] = [];
-    let currency: string | null = null;
-    const permitted = async (probe: () => Promise<unknown>, grants: MetricId[]) => {
-      try {
-        await probe();
-        available.push(...grants);
-      } catch (error) {
-        if (!(error instanceof ProviderError) || error.code !== "auth_failed") throw error;
-        ctx.log(`paddle key lacks a permission; not offering ${grants.join(", ")}`);
-      }
-    };
-    await permitted(async () => {
-      const page = await get<Page<Transaction>>(ctx, creds, "/transactions", { per_page: 1 });
-      currency = page.data?.[0]?.currency_code?.toUpperCase() ?? null;
-    }, ["revenue", "recent_payments"]);
-    await permitted(
-      () => get(ctx, creds, "/subscriptions", { per_page: 1 }),
-      ["mrr", "active_subscribers", "new_subscribers", "churned_subscribers"],
-    );
-
-    if (available.length === 0) {
-      throw new ProviderError(
-        "unsupported",
-        "This key can read neither transactions nor subscriptions. Grant it read access to both.",
-      );
-    }
-
-    return {
-      // Paddle has no endpoint that names the seller, so the environment is
-      // the only thing that tells two connections apart. The detail only —
-      // the provider's name is added by `connectionName`.
-      accountLabel: creds.mode === "sandbox" ? "Sandbox" : null,
-      currency,
-      availableMetrics: available,
-    };
-  },
-
-  async fetchMetric(ctx, creds, request): Promise<RawSeries> {
-    switch (request.metric) {
-      case "mrr":
-        return mrr(ctx, creds);
-      case "active_subscribers":
-        return activeSubscribers(ctx, creds);
-      case "revenue":
-        return revenue(ctx, creds, request);
-      case "new_subscribers":
-        return subscriptionEvents(ctx, creds, request, "started_at");
-      case "churned_subscribers":
-        return subscriptionEvents(ctx, creds, request, "canceled_at");
-      case "recent_payments":
-        return latestTransactions(ctx, creds);
-      default:
-        throw new ProviderError("unsupported", `Paddle does not provide ${request.metric}.`);
-    }
-  },
-};
-
 async function activeSubscriptions(ctx: AdapterContext, creds: PaddleCredentials) {
   return walk<Subscription>(ctx, creds, "/subscriptions", {
     status: "active",
@@ -243,7 +177,7 @@ async function activeSubscriptions(ctx: AdapterContext, creds: PaddleCredentials
  * Each recurring item is price times quantity per cycle, normalised to a
  * month. Other currencies are excluded and named rather than summed at 1:1.
  */
-async function mrr(ctx: AdapterContext, creds: PaddleCredentials): Promise<RawSeries> {
+async function mrrValue(ctx: AdapterContext, creds: PaddleCredentials): Promise<ScalarResult> {
   const { items, truncated } = await activeSubscriptions(ctx, creds);
   const want = ctx.preferredCurrency.toUpperCase();
   const others = new Set<string>();
@@ -271,12 +205,8 @@ async function mrr(ctx: AdapterContext, creds: PaddleCredentials): Promise<RawSe
   const value = Math.round(total);
 
   return {
-    unit: "currency",
     currency: ctx.preferredCurrency,
-    points: [{ t: ctx.now(), v: value }],
     value,
-    previousValue: null,
-    asOf: ctx.now(),
     note: join(
       others.size
         ? `${[...others].sort().join(" and ")} excluded; totals are ${want} only.`
@@ -286,20 +216,9 @@ async function mrr(ctx: AdapterContext, creds: PaddleCredentials): Promise<RawSe
   };
 }
 
-async function activeSubscribers(
-  ctx: AdapterContext,
-  creds: PaddleCredentials,
-): Promise<RawSeries> {
+async function activeCount(ctx: AdapterContext, creds: PaddleCredentials): Promise<ScalarResult> {
   const { items, truncated } = await activeSubscriptions(ctx, creds);
-  return {
-    unit: "count",
-    currency: null,
-    points: [{ t: ctx.now(), v: items.length }],
-    value: items.length,
-    previousValue: null,
-    asOf: ctx.now(),
-    note: truncationNote(truncated, "subscriptions"),
-  };
+  return { value: items.length, note: truncationNote(truncated, "subscriptions") };
 }
 
 /** Transactions that took money. `billed` is an invoice awaiting payment. */
@@ -310,11 +229,11 @@ function stamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-async function revenue(
+async function revenueOver(
   ctx: AdapterContext,
   creds: PaddleCredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   const windowMs = request.to.getTime() - request.from.getTime();
   const from = request.comparePrevious ? new Date(request.from.getTime() - windowMs) : request.from;
 
@@ -355,7 +274,6 @@ async function revenue(
     : null;
 
   return {
-    unit: "currency",
     currency: ctx.preferredCurrency,
     points: request.wantSeries ? points : [],
     value,
@@ -381,7 +299,7 @@ async function subscriptionEvents(
   creds: PaddleCredentials,
   request: MetricRequest,
   field: "started_at" | "canceled_at",
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   const windowMs = request.to.getTime() - request.from.getTime();
   const from = request.comparePrevious ? new Date(request.from.getTime() - windowMs) : request.from;
 
@@ -412,8 +330,6 @@ async function subscriptionEvents(
     : null;
 
   return {
-    unit: "count",
-    currency: null,
     points: request.wantSeries ? points : [],
     value,
     previousValue,
@@ -424,7 +340,7 @@ async function subscriptionEvents(
 async function latestTransactions(
   ctx: AdapterContext,
   creds: PaddleCredentials,
-): Promise<RawSeries> {
+): Promise<RawListItem[]> {
   const page = await get<Page<Transaction>>(ctx, creds, "/transactions", {
     status: "paid,completed",
     order_by: "billed_at[DESC]",
@@ -443,5 +359,126 @@ async function latestTransactions(
       currency: transaction.currency_code.toUpperCase(),
       status: transaction.status,
     }));
-  return recentPayments(ctx, rows);
+  // Sorted, capped and totalled by the shared payments metric.
+  return rows;
 }
+
+const { scalar, series } = metricsFor<PaddleCredentials>();
+
+export const mrr = scalar({
+  id: "mrr",
+  label: "Monthly recurring revenue",
+  shortLabel: "MRR",
+  unit: "currency",
+  freshnessSeconds: 180,
+  methodology:
+    "Active subscriptions, each recurring item's unit price times quantity normalised to a month by its billing cycle. Discounts are not applied. A snapshot of the book right now.",
+  fetch: mrrValue,
+});
+
+export const revenue = series({
+  id: "revenue",
+  label: "Revenue",
+  shortLabel: "Revenue",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Transactions billed in the window that are paid or completed, by their total including tax, before Paddle's fee. Bucketed by billing date.",
+  fetch: revenueOver,
+});
+
+export const activeSubscribers = scalar({
+  id: "active_subscribers",
+  label: "Active subscriptions",
+  shortLabel: "Active",
+  unit: "count",
+  freshnessSeconds: 180,
+  methodology: "Subscriptions in status `active` right now. Trialing and paused are not counted.",
+  fetch: activeCount,
+});
+
+export const newSubscribers = series({
+  id: "new_subscribers",
+  label: "New subscriptions",
+  shortLabel: "New",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 180,
+  methodology:
+    "Subscriptions whose `started_at` falls in the window, in any status. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
+  fetch: (ctx, creds, request) => subscriptionEvents(ctx, creds, request, "started_at"),
+});
+
+export const churnedSubscribers = series({
+  id: "churned_subscribers",
+  label: "Churned subscriptions",
+  shortLabel: "Churn",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 180,
+  methodology:
+    "Subscriptions whose `canceled_at` falls in the window. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
+  fetch: (ctx, creds, request) => subscriptionEvents(ctx, creds, request, "canceled_at"),
+});
+
+export const payments = recentPaymentsMetric<PaddleCredentials>({
+  methodology:
+    "The latest paid or completed transactions by billing date, with the customer's name or email and the first product on the transaction. Totals include tax.",
+  rows: latestTransactions,
+});
+
+export const paddle = provider({
+  metrics: [mrr, revenue, activeSubscribers, newSubscribers, churnedSubscribers, payments],
+  manifest,
+  credentialSchema,
+
+  async verify(ctx, creds) {
+    // The cheapest authenticated call Paddle has: no permission, no paging.
+    // Proves the key is real and on the right host before anything else.
+    await get(ctx, creds, "/event-types");
+
+    // Permissions are per entity. Narrowing to what the key can read beats
+    // rejecting a key that was deliberately scoped down.
+    // Said as what the key *cannot* read. `provider()` derives the available
+    // set from the metrics, so this no longer restates them.
+    const unavailableMetrics: MetricId[] = [];
+    let currency: string | null = null;
+    const permitted = async (probe: () => Promise<unknown>, grants: MetricId[]) => {
+      try {
+        await probe();
+      } catch (error) {
+        if (!(error instanceof ProviderError) || error.code !== "auth_failed") throw error;
+        unavailableMetrics.push(...grants);
+        ctx.log(`paddle key lacks a permission; not offering ${grants.join(", ")}`);
+      }
+    };
+    await permitted(async () => {
+      const page = await get<Page<Transaction>>(ctx, creds, "/transactions", { per_page: 1 });
+      currency = page.data?.[0]?.currency_code?.toUpperCase() ?? null;
+    }, ["revenue", "recent_payments"]);
+    await permitted(
+      () => get(ctx, creds, "/subscriptions", { per_page: 1 }),
+      ["mrr", "active_subscribers", "new_subscribers", "churned_subscribers"],
+    );
+
+    if (unavailableMetrics.length === 6) {
+      throw new ProviderError(
+        "unsupported",
+        "This key can read neither transactions nor subscriptions. Grant it read access to both.",
+      );
+    }
+
+    return {
+      // Paddle has no endpoint that names the seller, so the environment is
+      // the only thing that tells two connections apart. The detail only —
+      // the provider's name is added by `connectionName`.
+      accountLabel: creds.mode === "sandbox" ? "Sandbox" : null,
+      currency,
+      unavailableMetrics,
+    };
+  },
+});

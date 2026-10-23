@@ -7,18 +7,12 @@ import {
   googleOAuth,
   isGoogleQuotaReason,
 } from "../../google-oauth.ts";
+import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { bucketSum, dayAt, ymd } from "../../normalise.ts";
-import type {
-  AdapterContext,
-  HttpResponse,
-  MetricRequest,
-  ProviderAdapter,
-  RawSeries,
-  VerifyResult,
-} from "../../types.ts";
+import type { AdapterContext, HttpResponse, MetricRequest } from "../../types.ts";
 import { ProviderError } from "../../types.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "google-analytics",
   name: "Google Analytics",
   category: "analytics",
@@ -38,49 +32,6 @@ export const manifest: ProviderManifest = {
     selectionLabel: "Which property?",
   },
   fields: [],
-  metrics: [
-    {
-      id: "active_users",
-      label: "Active users",
-      shortLabel: "Users",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "GA4 `activeUsers`. The headline is the de-duplicated count over the whole window, as GA reports it; the chart is per day, so its bars do not add up to the headline: one person on three days is one user and three bars.",
-    },
-    {
-      id: "new_users",
-      label: "New users",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "GA4 `newUsers`: people whose first session fell in the window.",
-    },
-    {
-      id: "sessions",
-      label: "Sessions",
-      shortLabel: "Sessions",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "GA4 `sessions` in the window.",
-    },
-    {
-      id: "pageviews",
-      label: "Page views",
-      shortLabel: "Views",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "GA4 `screenPageViews`: every page and screen view in the window.",
-    },
-  ],
   allowedHosts: [
     "analyticsdata.googleapis.com",
     // Only for naming the property. The report itself is the Data API.
@@ -101,16 +52,10 @@ export const credentialSchema = z.object({
 });
 export type GoogleAnalyticsCredentials = z.infer<typeof credentialSchema>;
 
+const { series } = metricsFor<GoogleAnalyticsCredentials>();
+
 const DATA = "https://analyticsdata.googleapis.com/v1beta";
 const ADMIN = "https://analyticsadmin.googleapis.com/v1beta";
-
-/** Our id → GA4's metric name. */
-const METRICS: Partial<Record<MetricId, string>> = {
-  active_users: "activeUsers",
-  new_users: "newUsers",
-  sessions: "sessions",
-  pageviews: "screenPageViews",
-};
 
 /**
  * 403 from Google is three different things: the API is not enabled on
@@ -168,97 +113,6 @@ async function runReport(
   return response.json<RunReportResponse>();
 }
 
-export const googleAnalytics: ProviderAdapter<GoogleAnalyticsCredentials> = {
-  manifest,
-  credentialSchema,
-  // Empty, and explicit. Without it the connect page falls back to rendering
-  // every schema field — which would put an access token in a text box.
-  userInputFields: [],
-
-  oauth: googleOAuth<GoogleAnalyticsCredentials>({
-    scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
-    scopeSummary: ["Read your Google Analytics reports"],
-    empty: { property_id: "" },
-    selection: {
-      label: "Which property?",
-      field: "property_id",
-      async options(credentials) {
-        // Account summaries list every property the account can see in one
-        // call, grouped by account — which is the hint, because two
-        // properties called "Website" under different accounts are common.
-        const response = await fetch(`${ADMIN}/accountSummaries?pageSize=200`, {
-          redirect: "manual",
-          headers: googleHeaders(credentials.access_token),
-        });
-        if (!response.ok) {
-          throw new ProviderError(
-            "auth_failed",
-            "We could not list your Google Analytics properties. Check the Google Analytics Admin API is enabled.",
-          );
-        }
-        const body = (await response.json()) as {
-          accountSummaries?: {
-            displayName: string;
-            propertySummaries?: { property: string; displayName: string }[];
-          }[];
-        };
-        return (body.accountSummaries ?? []).flatMap((account) =>
-          (account.propertySummaries ?? []).map((p) => ({
-            // "properties/123" → "123". The Data API path wants the number.
-            value: p.property.replace(/^properties\//, ""),
-            label: p.displayName,
-            hint: account.displayName,
-          })),
-        );
-      },
-    },
-  }),
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    // One tiny report: proves the token, the scope, the API being enabled
-    // and access to this property, which is everything a metric needs.
-    const today = ymd(ctx.now(), ctx.timeZone);
-    await runReport(ctx, creds, {
-      dateRanges: [{ startDate: today, endDate: today }],
-      metrics: [{ name: "activeUsers" }],
-      limit: 1,
-    });
-
-    // Named after the property, so two connections can be told apart. Best
-    // effort: a property is still connectable if the Admin API is not
-    // enabled, it just reads as its number.
-    let label = `Property ${creds.property_id}`;
-    try {
-      const response = await ctx.http(`${ADMIN}/properties/${creds.property_id}`, {
-        headers: googleHeaders(creds.access_token),
-      });
-      if (response.ok) {
-        const body = await response.json<{ displayName?: string }>();
-        if (body.displayName) label = body.displayName;
-      }
-    } catch (error) {
-      ctx.log("could not name the GA4 property", { error: String(error) });
-    }
-
-    return {
-      accountLabel: label,
-      currency: null,
-      availableMetrics: Object.keys(METRICS) as MetricId[],
-    };
-  },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    const name = METRICS[request.metric];
-    if (!name) {
-      throw new ProviderError(
-        "unsupported",
-        `Google Analytics does not provide ${request.metric}.`,
-      );
-    }
-    return report(ctx, creds, name, request);
-  },
-};
-
 /**
  * One request carries both windows. With two date ranges GA appends a
  * `dateRange` dimension to every row, and `totals` carries one row per
@@ -270,7 +124,7 @@ async function report(
   creds: GoogleAnalyticsCredentials,
   metric: string,
   request: MetricRequest,
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   const windowMs = request.to.getTime() - request.from.getTime();
   const ranges = [
     { startDate: ymd(request.from, ctx.timeZone), endDate: ymd(request.to, ctx.timeZone) },
@@ -336,10 +190,146 @@ async function report(
   };
 
   return {
-    unit: "count",
-    currency: null,
     points,
     value: total(0) ?? events.reduce((sum, e) => sum + e.amount, 0),
     previousValue: request.comparePrevious ? total(1) : null,
   };
 }
+
+/**
+ * One GA4 metric.
+ *
+ * All four ask for the same report and differ only in the name GA4 knows the
+ * metric by — which used to live in a `METRICS` lookup the switch consulted,
+ * one more table that had to agree with the manifest.
+ */
+function ga4Metric(options: {
+  id: MetricId;
+  label: string;
+  shortLabel: string;
+  /** GA4's own name for it: `activeUsers`, `screenPageViews`. */
+  name: string;
+  methodology: string;
+}) {
+  return series({
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    unit: "count",
+    granularities: ["day", "week", "month"],
+    compare: true,
+    methodology: options.methodology,
+    fetch: (ctx, creds, request: MetricRequest): Promise<SeriesResult> =>
+      report(ctx, creds, options.name, request),
+  });
+}
+
+export const activeUsers = ga4Metric({
+  id: "active_users",
+  label: "Active users",
+  shortLabel: "Users",
+  name: "activeUsers",
+  methodology:
+    "GA4 `activeUsers`. The headline is the de-duplicated count over the whole window, as GA reports it; the chart is per day, so its bars do not add up to the headline: one person on three days is one user and three bars.",
+});
+export const newUsers = ga4Metric({
+  id: "new_users",
+  label: "New users",
+  shortLabel: "New",
+  name: "newUsers",
+  methodology: "GA4 `newUsers`: people whose first session fell in the window.",
+});
+export const sessions = ga4Metric({
+  id: "sessions",
+  label: "Sessions",
+  shortLabel: "Sessions",
+  name: "sessions",
+  methodology: "GA4 `sessions` in the window.",
+});
+export const pageviews = ga4Metric({
+  id: "pageviews",
+  label: "Page views",
+  shortLabel: "Views",
+  name: "screenPageViews",
+  methodology: "GA4 `screenPageViews`: every page and screen view in the window.",
+});
+
+export const googleAnalytics = provider({
+  metrics: [activeUsers, newUsers, sessions, pageviews],
+  manifest,
+  credentialSchema,
+  // Empty, and explicit. Without it the connect page falls back to rendering
+  // every schema field — which would put an access token in a text box.
+  userInputFields: [],
+
+  oauth: googleOAuth<GoogleAnalyticsCredentials>({
+    scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+    scopeSummary: ["Read your Google Analytics reports"],
+    empty: { property_id: "" },
+    selection: {
+      label: "Which property?",
+      field: "property_id",
+      async options(credentials) {
+        // Account summaries list every property the account can see in one
+        // call, grouped by account — which is the hint, because two
+        // properties called "Website" under different accounts are common.
+        const response = await fetch(`${ADMIN}/accountSummaries?pageSize=200`, {
+          redirect: "manual",
+          headers: googleHeaders(credentials.access_token),
+        });
+        if (!response.ok) {
+          throw new ProviderError(
+            "auth_failed",
+            "We could not list your Google Analytics properties. Check the Google Analytics Admin API is enabled.",
+          );
+        }
+        const body = (await response.json()) as {
+          accountSummaries?: {
+            displayName: string;
+            propertySummaries?: { property: string; displayName: string }[];
+          }[];
+        };
+        return (body.accountSummaries ?? []).flatMap((account) =>
+          (account.propertySummaries ?? []).map((p) => ({
+            // "properties/123" → "123". The Data API path wants the number.
+            value: p.property.replace(/^properties\//, ""),
+            label: p.displayName,
+            hint: account.displayName,
+          })),
+        );
+      },
+    },
+  }),
+
+  async verify(ctx, creds) {
+    // One tiny report: proves the token, the scope, the API being enabled
+    // and access to this property, which is everything a metric needs.
+    const today = ymd(ctx.now(), ctx.timeZone);
+    await runReport(ctx, creds, {
+      dateRanges: [{ startDate: today, endDate: today }],
+      metrics: [{ name: "activeUsers" }],
+      limit: 1,
+    });
+
+    // Named after the property, so two connections can be told apart. Best
+    // effort: a property is still connectable if the Admin API is not
+    // enabled, it just reads as its number.
+    let label = `Property ${creds.property_id}`;
+    try {
+      const response = await ctx.http(`${ADMIN}/properties/${creds.property_id}`, {
+        headers: googleHeaders(creds.access_token),
+      });
+      if (response.ok) {
+        const body = await response.json<{ displayName?: string }>();
+        if (body.displayName) label = body.displayName;
+      }
+    } catch (error) {
+      ctx.log("could not name the GA4 property", { error: String(error) });
+    }
+
+    // No `availableMetrics`: it was `Object.keys(METRICS)`, the lookup table
+    // the switch used, which had to agree with the manifest and was the only
+    // thing saying so. Derived from the metrics above now.
+    return { accountLabel: label, currency: null };
+  },
+});

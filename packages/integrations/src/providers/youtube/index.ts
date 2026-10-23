@@ -16,9 +16,10 @@ import type {
   RawSeries,
   VerifyResult,
 } from "../../types.ts";
+import { metricsFor, provider, type SeriesResult, type TotalResult } from "../../metric.ts";
 import { ProviderError } from "../../types.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "youtube",
   name: "YouTube",
   // Not `analytics`: that bucket is product analytics, and a channel is a
@@ -40,120 +41,6 @@ export const manifest: ProviderManifest = {
     selectionLabel: "Which channel?",
   },
   fields: [],
-  metrics: [
-    {
-      id: "views",
-      label: "Views",
-      shortLabel: "Views",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "YouTube Analytics `views` for the channel in the window. YouTube's day boundaries are Pacific Time, so a day here can straddle two of yours.",
-    },
-    {
-      id: "watch_time",
-      label: "Watch time",
-      shortLabel: "Watch time",
-      unit: "duration",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "YouTube Analytics `estimatedMinutesWatched` in the window, shown as hours. This is the figure monetisation thresholds are measured against.",
-    },
-    {
-      id: "average_view_duration",
-      label: "Average view duration",
-      shortLabel: "Avg view",
-      unit: "duration",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Watch time divided by views over the whole window, rather than the mean of the daily averages, which would weight a quiet day the same as a busy one.",
-    },
-    {
-      id: "subscribers",
-      label: "Subscribers",
-      shortLabel: "Subs",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      // A total, and YouTube publishes no history of it. The comparison is
-      // real even so: the net change over the window comes from Analytics.
-      supportsSeries: false,
-      supportsCompare: true,
-      methodology:
-        "Subscribers on the channel right now, as the YouTube Data API reports it, which rounds anything over a thousand to three figures, so 12,345 reads as 12,300. The change against the previous window is the exact net gain from Analytics, so the arrow is right even where the total is rounded.",
-    },
-    {
-      id: "new_subscribers",
-      label: "New subscribers",
-      shortLabel: "New subs",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      keywords: ["youtube", "subs gained", "audience"],
-      methodology:
-        "YouTube Analytics `subscribersGained`: people who subscribed in the window. Gross, not net: unsubscribes are not deducted, so this does not match the change in the subscriber total.",
-    },
-    {
-      id: "likes",
-      label: "Likes",
-      shortLabel: "Likes",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "YouTube Analytics `likes` across the channel's videos in the window.",
-    },
-    {
-      id: "comments",
-      label: "Comments",
-      shortLabel: "Comments",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "YouTube Analytics `comments` left on the channel's videos in the window.",
-    },
-    {
-      id: "revenue",
-      label: "Estimated revenue",
-      shortLabel: "Revenue",
-      unit: "currency",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      keywords: ["youtube", "earnings", "adsense", "payout"],
-      methodology:
-        "YouTube Analytics `estimatedRevenue`: net earnings from ads and YouTube Premium, after YouTube's share. Subject to month-end adjustment, so the current month is provisional, and it excludes partner-sold advertising. Only channels in the YouTube Partner Program have it at all.",
-    },
-    {
-      id: "ad_revenue",
-      label: "Ad revenue",
-      shortLabel: "Ad rev.",
-      unit: "currency",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "YouTube Analytics `estimatedAdRevenue`: the advertising part of estimated revenue alone, with YouTube Premium earnings excluded. Also subject to month-end adjustment.",
-    },
-    {
-      id: "rpm",
-      label: "Revenue per mille",
-      shortLabel: "RPM",
-      unit: "currency",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Estimated revenue per thousand views, computed over the whole window rather than averaged across daily rates. This is RPM as YouTube Studio reports it, meaning total revenue over total views with every view counted. It is not CPM, which is per thousand ad impressions and counts only monetised playbacks.",
-    },
-  ],
   allowedHosts: [
     "youtubeanalytics.googleapis.com",
     // The Data API: naming the channel, listing them for the picker, and the
@@ -484,61 +371,311 @@ function sum(rows: { totals: Totals }[]): Totals {
 /** Minutes are what the API reports; seconds are what a `duration` is. */
 const SECONDS_PER_MINUTE = 60;
 
-function figure(metric: MetricId, totals: Totals): number {
-  switch (metric) {
-    case "views":
-      return totals.views;
-    case "watch_time":
-      return totals.minutesWatched * SECONDS_PER_MINUTE;
-    case "average_view_duration":
-      return totals.views === 0 ? 0 : (totals.minutesWatched * SECONDS_PER_MINUTE) / totals.views;
-    case "new_subscribers":
-      return totals.subscribersGained;
-    case "likes":
-      return totals.likes;
-    case "comments":
-      return totals.comments;
-    case "revenue":
-      return toMinorUnits(totals.revenue);
-    case "ad_revenue":
-      return toMinorUnits(totals.adRevenue);
-    case "rpm":
-      // Per *thousand views*, and over the window's own totals — the mean of
-      // daily RPMs would let a day with four views and one lucky ad outweigh
-      // a day with forty thousand.
-      return totals.views === 0 ? 0 : toMinorUnits((totals.revenue / totals.views) * 1000);
-    default:
-      return 0;
+/**
+ * Anything that comes out of the day report.
+ *
+ * Rates and means are computed from the summed components per bucket, never
+ * averaged from daily values — see `average_view_duration`.
+ */
+async function timeSeries(
+  ctx: AdapterContext,
+  creds: YouTubeCredentials,
+  request: MetricRequest,
+  /**
+   * The arithmetic that turns summed components into this metric's number.
+   *
+   * Passed in rather than switched on `request.metric`, which is what
+   * `figure()` did — one of three side tables keyed on the metric id, beside
+   * `UNITS` and `SERVED`, each of which had to agree with the manifest.
+   */
+  figure: (totals: Totals) => number,
+  /** Revenue columns need a separate, monetised report. */
+  monetary = false,
+): Promise<SeriesResult> {
+  const windowMs = request.to.getTime() - request.from.getTime();
+  const current = await report(ctx, creds, request.from, request.to, monetary);
+  const previous = request.comparePrevious
+    ? await report(
+        ctx,
+        creds,
+        new Date(request.from.getTime() - windowMs),
+        new Date(request.from.getTime() - 1),
+        monetary,
+      )
+    : null;
+
+  return {
+    currency: current.currency,
+    points: bucket(current.rows, figure, request.granularity, request, ctx.timeZone),
+    value: figure(sum(current.rows)),
+    previousValue: previous ? figure(sum(previous.rows)) : null,
+    note: note(ctx, monetary, current.currency),
+  };
+}
+
+/**
+ * What the tile says under the number.
+ *
+ * The substitution is worth a sentence rather than a silent conversion: a
+ * figure in dollars under a heading that says the account is in rupees is
+ * the kind of wrong a user only catches by doing the arithmetic themselves.
+ */
+function note(ctx: AdapterContext, monetary: boolean, currency: string | null): string {
+  if (!monetary) return LAG_NOTE;
+  const substituted = currency !== null && currency !== ctx.preferredCurrency.toUpperCase();
+  return [
+    LAG_NOTE,
+    "Revenue is provisional until YouTube's month-end adjustment.",
+    substituted
+      ? `YouTube cannot report in ${ctx.preferredCurrency.toUpperCase()}, so this is ${currency}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * The subscriber total, with the window's net change behind it.
+ *
+ * Two calls, because neither API has both halves: the Data API has the
+ * current count and no history, Analytics has the daily deltas and no
+ * running total. Walking the deltas back from today is what makes the
+ * comparison exact even though the total is rounded.
+ */
+async function subscribers(
+  ctx: AdapterContext,
+  creds: YouTubeCredentials,
+  request: MetricRequest,
+): Promise<TotalResult> {
+  const entry = await channel(ctx, creds);
+  const count = Number(entry?.statistics?.subscriberCount ?? NaN);
+  if (!Number.isFinite(count)) {
+    // A channel can hide its subscriber count, and then the field is simply
+    // absent. Zero would read as a channel nobody follows.
+    throw new ProviderError(
+      "unsupported",
+      "This channel does not publish its subscriber count. Try new subscribers instead.",
+    );
+  }
+
+  let net: number | null = null;
+  if (request.comparePrevious) {
+    const { rows } = await report(ctx, creds, request.from, request.to);
+    const totals = sum(rows);
+    net = totals.subscribersGained - totals.subscribersLost;
+  }
+
+  // A `total`, not a scalar: no series — the Data API has no history — but a
+  // real comparison, because Analytics has the window's daily deltas and
+  // walking them back from today makes the previous figure exact even though
+  // the total itself is rounded.
+  return {
+    value: count,
+    previousValue: net === null ? null : count - net,
+    note: "YouTube rounds subscriber counts over a thousand to three figures.",
+  };
+}
+
+/** Gap-filled like `bucketSum`, but each bucket carries components rather than one sum. */
+function bucket(
+  rows: { day: Date; totals: Totals }[],
+  figure: (totals: Totals) => number,
+  granularity: Granularity,
+  window: { from: Date; to: Date },
+  timeZone: string,
+): { t: Date; v: number }[] {
+  const byBucket = new Map<number, Totals>();
+  for (const row of rows) {
+    const key = bucketStart(row.day, granularity, timeZone).getTime();
+    const totals = byBucket.get(key) ?? emptyTotals();
+    add(totals, row.totals);
+    byBucket.set(key, totals);
+  }
+
+  const points: { t: Date; v: number }[] = [];
+  let cursor = bucketStart(window.from, granularity, timeZone);
+  const end = bucketStart(window.to, granularity, timeZone);
+  for (let i = 0; cursor <= end && i < 1000; i++) {
+    const totals = byBucket.get(cursor.getTime());
+    points.push({ t: new Date(cursor), v: totals ? figure(totals) : 0 });
+    cursor = bucketStart(
+      new Date(cursor.getTime() + stride(granularity) + 1),
+      granularity,
+      timeZone,
+    );
+  }
+  return points;
+}
+
+/** Enough to land in the next bucket; `bucketStart` snaps it back. */
+function stride(granularity: Granularity): number {
+  switch (granularity) {
+    case "hour":
+      return 60 * 60 * 1000;
+    case "day":
+      return 24 * 60 * 60 * 1000;
+    case "week":
+      return 7 * 24 * 60 * 60 * 1000;
+    case "month":
+      return 31 * 24 * 60 * 60 * 1000;
   }
 }
 
-const UNITS: Partial<Record<MetricId, RawSeries["unit"]>> = {
-  views: "count",
-  watch_time: "duration",
-  average_view_duration: "duration",
-  new_subscribers: "count",
-  likes: "count",
-  comments: "count",
-  revenue: "currency",
-  ad_revenue: "currency",
-  rpm: "currency",
-};
+const { series, total } = metricsFor<YouTubeCredentials>();
 
-/** Everything the adapter can serve. `verify` narrows this per channel. */
-const SERVED: MetricId[] = [
-  "views",
-  "watch_time",
-  "average_view_duration",
-  "subscribers",
-  "new_subscribers",
-  "likes",
-  "comments",
-  "revenue",
-  "ad_revenue",
-  "rpm",
-];
+export const views = series({
+  id: "views",
+  label: "Views",
+  shortLabel: "Views",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology:
+    "YouTube Analytics `views` for the channel in the window. YouTube's day boundaries are Pacific Time, so a day here can straddle two of yours.",
+  fetch: (ctx, creds, request) => timeSeries(ctx, creds, request, (totals) => totals.views),
+});
 
-export const youtube: ProviderAdapter<YouTubeCredentials> = {
+export const watchTime = series({
+  id: "watch_time",
+  label: "Watch time",
+  shortLabel: "Watch time",
+  unit: "duration",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology:
+    "YouTube Analytics `estimatedMinutesWatched` in the window, shown as hours. This is the figure monetisation thresholds are measured against.",
+  fetch: (ctx, creds, request) =>
+    timeSeries(ctx, creds, request, (totals) => totals.minutesWatched * SECONDS_PER_MINUTE),
+});
+
+export const averageViewDuration = series({
+  id: "average_view_duration",
+  label: "Average view duration",
+  shortLabel: "Avg view",
+  unit: "duration",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology:
+    "Watch time divided by views over the whole window, rather than the mean of the daily averages, which would weight a quiet day the same as a busy one.",
+  fetch: (ctx, creds, request) =>
+    timeSeries(ctx, creds, request, (totals) =>
+      totals.views === 0 ? 0 : (totals.minutesWatched * SECONDS_PER_MINUTE) / totals.views,
+    ),
+});
+
+export const newSubscribers = series({
+  id: "new_subscribers",
+  label: "New subscribers",
+  shortLabel: "New subs",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  keywords: ["youtube", "subs gained", "audience"],
+  methodology:
+    "YouTube Analytics `subscribersGained`: people who subscribed in the window. Gross, not net: unsubscribes are not deducted, so this does not match the change in the subscriber total.",
+  fetch: (ctx, creds, request) =>
+    timeSeries(ctx, creds, request, (totals) => totals.subscribersGained),
+});
+
+export const likes = series({
+  id: "likes",
+  label: "Likes",
+  shortLabel: "Likes",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology: "YouTube Analytics `likes` across the channel's videos in the window.",
+  fetch: (ctx, creds, request) => timeSeries(ctx, creds, request, (totals) => totals.likes),
+});
+
+export const comments = series({
+  id: "comments",
+  label: "Comments",
+  shortLabel: "Comments",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology: "YouTube Analytics `comments` left on the channel's videos in the window.",
+  fetch: (ctx, creds, request) => timeSeries(ctx, creds, request, (totals) => totals.comments),
+});
+
+export const revenue = series({
+  id: "revenue",
+  label: "Estimated revenue",
+  shortLabel: "Revenue",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  keywords: ["youtube", "earnings", "adsense", "payout"],
+  methodology:
+    "YouTube Analytics `estimatedRevenue`: net earnings from ads and YouTube Premium, after YouTube's share. Subject to month-end adjustment, so the current month is provisional, and it excludes partner-sold advertising. Only channels in the YouTube Partner Program have it at all.",
+  fetch: (ctx, creds, request) =>
+    timeSeries(ctx, creds, request, (totals) => toMinorUnits(totals.revenue), true),
+});
+
+export const adRevenue = series({
+  id: "ad_revenue",
+  label: "Ad revenue",
+  shortLabel: "Ad rev.",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology:
+    "YouTube Analytics `estimatedAdRevenue`: the advertising part of estimated revenue alone, with YouTube Premium earnings excluded. Also subject to month-end adjustment.",
+  fetch: (ctx, creds, request) =>
+    timeSeries(ctx, creds, request, (totals) => toMinorUnits(totals.adRevenue), true),
+});
+
+export const rpm = series({
+  id: "rpm",
+  label: "Revenue per mille",
+  shortLabel: "RPM",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology:
+    "Estimated revenue per thousand views, computed over the whole window rather than averaged across daily rates. This is RPM as YouTube Studio reports it, meaning total revenue over total views with every view counted. It is not CPM, which is per thousand ad impressions and counts only monetised playbacks.",
+  fetch: (ctx, creds, request) =>
+    timeSeries(
+      ctx,
+      creds,
+      request,
+      (totals) =>
+        // Per *thousand views*, and over the window's own totals — the mean of
+        // daily RPMs would let a day with four views and one lucky ad outweigh
+        // a day with forty thousand.
+        totals.views === 0 ? 0 : toMinorUnits((totals.revenue / totals.views) * 1000),
+      true,
+    ),
+});
+
+export const subscriberCount = total({
+  id: "subscribers",
+  label: "Subscribers",
+  shortLabel: "Subs",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  // A total, and YouTube publishes no history of it. The comparison is
+  // real even so: the net change over the window comes from Analytics.
+  methodology:
+    "Subscribers on the channel right now, as the YouTube Data API reports it, which rounds anything over a thousand to three figures, so 12,345 reads as 12,300. The change against the previous window is the exact net gain from Analytics, so the arrow is right even where the total is rounded.",
+  fetch: subscribers,
+});
+
+export const youtube = provider({
+  metrics: [
+    views,
+    watchTime,
+    averageViewDuration,
+    subscriberCount,
+    newSubscribers,
+    likes,
+    comments,
+    revenue,
+    adRevenue,
+    rpm,
+  ],
   manifest,
   credentialSchema,
   // Empty, and explicit. Without it the connect page falls back to rendering
@@ -584,7 +721,7 @@ export const youtube: ProviderAdapter<YouTubeCredentials> = {
     },
   }),
 
-  async verify(ctx, creds): Promise<VerifyResult> {
+  async verify(ctx, creds) {
     // The channel rather than a report: it proves the token, the scope and
     // the Data API, and it is the call that names the connection. A channel
     // the account has lost access to answers with no items rather than a
@@ -626,159 +763,9 @@ export const youtube: ProviderAdapter<YouTubeCredentials> = {
     return {
       accountLabel: entry.snippet?.title ?? creds.channel_id,
       currency,
-      availableMetrics: monetised ? SERVED : SERVED.filter((m) => !MONETARY_METRICS.has(m)),
+      // Said as what this channel cannot answer. `SERVED` was a third list
+      // of the same ten ids; `provider()` derives the available set now.
+      ...(monetised ? {} : { unavailableMetrics: [...MONETARY_METRICS] }),
     };
   },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    if (request.metric === "subscribers") return subscribers(ctx, creds, request);
-    if (!UNITS[request.metric]) {
-      throw new ProviderError("unsupported", `YouTube does not provide ${request.metric}.`);
-    }
-    return timeSeries(ctx, creds, request);
-  },
-};
-
-/**
- * Anything that comes out of the day report.
- *
- * Rates and means are computed from the summed components per bucket, never
- * averaged from daily values — see `average_view_duration`.
- */
-async function timeSeries(
-  ctx: AdapterContext,
-  creds: YouTubeCredentials,
-  request: MetricRequest,
-): Promise<RawSeries> {
-  const monetary = MONETARY_METRICS.has(request.metric);
-  const windowMs = request.to.getTime() - request.from.getTime();
-  const current = await report(ctx, creds, request.from, request.to, monetary);
-  const previous = request.comparePrevious
-    ? await report(
-        ctx,
-        creds,
-        new Date(request.from.getTime() - windowMs),
-        new Date(request.from.getTime() - 1),
-        monetary,
-      )
-    : null;
-
-  return {
-    unit: UNITS[request.metric] ?? "count",
-    currency: current.currency,
-    points: bucket(current.rows, request.metric, request.granularity, request, ctx.timeZone),
-    value: figure(request.metric, sum(current.rows)),
-    previousValue: previous ? figure(request.metric, sum(previous.rows)) : null,
-    note: note(ctx, monetary, current.currency),
-  };
-}
-
-/**
- * What the tile says under the number.
- *
- * The substitution is worth a sentence rather than a silent conversion: a
- * figure in dollars under a heading that says the account is in rupees is
- * the kind of wrong a user only catches by doing the arithmetic themselves.
- */
-function note(ctx: AdapterContext, monetary: boolean, currency: string | null): string {
-  if (!monetary) return LAG_NOTE;
-  const substituted = currency !== null && currency !== ctx.preferredCurrency.toUpperCase();
-  return [
-    LAG_NOTE,
-    "Revenue is provisional until YouTube's month-end adjustment.",
-    substituted
-      ? `YouTube cannot report in ${ctx.preferredCurrency.toUpperCase()}, so this is ${currency}.`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-/**
- * The subscriber total, with the window's net change behind it.
- *
- * Two calls, because neither API has both halves: the Data API has the
- * current count and no history, Analytics has the daily deltas and no
- * running total. Walking the deltas back from today is what makes the
- * comparison exact even though the total is rounded.
- */
-async function subscribers(
-  ctx: AdapterContext,
-  creds: YouTubeCredentials,
-  request: MetricRequest,
-): Promise<RawSeries> {
-  const entry = await channel(ctx, creds);
-  const count = Number(entry?.statistics?.subscriberCount ?? NaN);
-  if (!Number.isFinite(count)) {
-    // A channel can hide its subscriber count, and then the field is simply
-    // absent. Zero would read as a channel nobody follows.
-    throw new ProviderError(
-      "unsupported",
-      "This channel does not publish its subscriber count. Try new subscribers instead.",
-    );
-  }
-
-  let net: number | null = null;
-  if (request.comparePrevious) {
-    const { rows } = await report(ctx, creds, request.from, request.to);
-    const totals = sum(rows);
-    net = totals.subscribersGained - totals.subscribersLost;
-  }
-
-  return {
-    unit: "count",
-    currency: null,
-    // One point, at now. A flat line invented from a single reading would
-    // look like data.
-    points: [{ t: ctx.now(), v: count }],
-    value: count,
-    previousValue: net === null ? null : count - net,
-    asOf: ctx.now(),
-    note: "YouTube rounds subscriber counts over a thousand to three figures.",
-  };
-}
-
-/** Gap-filled like `bucketSum`, but each bucket carries components rather than one sum. */
-function bucket(
-  rows: { day: Date; totals: Totals }[],
-  metric: MetricId,
-  granularity: Granularity,
-  window: { from: Date; to: Date },
-  timeZone: string,
-): { t: Date; v: number }[] {
-  const byBucket = new Map<number, Totals>();
-  for (const row of rows) {
-    const key = bucketStart(row.day, granularity, timeZone).getTime();
-    const totals = byBucket.get(key) ?? emptyTotals();
-    add(totals, row.totals);
-    byBucket.set(key, totals);
-  }
-
-  const points: { t: Date; v: number }[] = [];
-  let cursor = bucketStart(window.from, granularity, timeZone);
-  const end = bucketStart(window.to, granularity, timeZone);
-  for (let i = 0; cursor <= end && i < 1000; i++) {
-    const totals = byBucket.get(cursor.getTime());
-    points.push({ t: new Date(cursor), v: totals ? figure(metric, totals) : 0 });
-    cursor = bucketStart(
-      new Date(cursor.getTime() + stride(granularity) + 1),
-      granularity,
-      timeZone,
-    );
-  }
-  return points;
-}
-
-/** Enough to land in the next bucket; `bucketStart` snaps it back. */
-function stride(granularity: Granularity): number {
-  switch (granularity) {
-    case "hour":
-      return 60 * 60 * 1000;
-    case "day":
-      return 24 * 60 * 60 * 1000;
-    case "week":
-      return 7 * 24 * 60 * 60 * 1000;
-    case "month":
-      return 31 * 24 * 60 * 60 * 1000;
-  }
-}
+});

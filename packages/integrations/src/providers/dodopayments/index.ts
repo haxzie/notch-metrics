@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
+import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
+  RawListItem,
   MetricRequest,
   ProviderAdapter,
   RawSeries,
@@ -181,62 +183,6 @@ function join(...notes: (string | undefined)[]): string | undefined {
   return present.length ? present.join(" ") : undefined;
 }
 
-export const dodopayments: ProviderAdapter<DodoCredentials> = {
-  manifest,
-  credentialSchema,
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    // There is no `/me` on this API, so the proof that the key works against
-    // this host is a one-row list — and Dodo keys carry scopes per resource,
-    // so each list is probed on its own. A key with `payments:read` and no
-    // `subscriptions:read` is a perfectly good key for revenue; rejecting it
-    // outright told somebody their key was wrong when it was merely narrow.
-    const payments = await probe<DodoPayment>(ctx, creds, "/payments");
-    const subscriptions = await probe<DodoSubscription>(ctx, creds, "/subscriptions");
-
-    const available: MetricId[] = [];
-    if (payments.allowed) available.push("revenue", "one_time_sales", "recent_payments");
-    if (subscriptions.allowed) available.push("mrr", "active_subscribers");
-    if (available.length === 0) {
-      throw new ProviderError(
-        "unsupported",
-        "This key can read neither payments nor subscriptions. Give it payments:read and subscriptions:read.",
-      );
-    }
-    if (!subscriptions.allowed) {
-      ctx.log("dodo key lacks subscriptions:read; offering revenue and payments only");
-    }
-
-    const currency = subscriptions.first?.currency ?? payments.first?.currency ?? null;
-
-    return {
-      // The API exposes no account or business name, so the mode is the only
-      // thing that distinguishes two connections. The detail only — the
-      // provider's name is added by `connectionName`.
-      accountLabel: creds.mode === "test" ? "Test" : null,
-      currency: currency?.toUpperCase() ?? null,
-      availableMetrics: available,
-    };
-  },
-
-  async fetchMetric(ctx, creds, request): Promise<RawSeries> {
-    switch (request.metric) {
-      case "mrr":
-        return mrr(ctx, creds);
-      case "active_subscribers":
-        return activeSubscribers(ctx, creds);
-      case "revenue":
-        return revenue(ctx, creds, request, () => true);
-      case "one_time_sales":
-        return revenue(ctx, creds, request, isOneTime);
-      case "recent_payments":
-        return latestPayments(ctx, creds);
-      default:
-        throw new ProviderError("unsupported", `Dodo Payments does not provide ${request.metric}.`);
-    }
-  },
-};
-
 /**
  * A snapshot of the subscription book, not a total over a window.
  *
@@ -244,7 +190,7 @@ export const dodopayments: ProviderAdapter<DodoCredentials> = {
  * worth right now, and there is a single point because Dodo exposes no
  * history of it.
  */
-async function mrr(ctx: AdapterContext, creds: DodoCredentials): Promise<RawSeries> {
+async function mrrValue(ctx: AdapterContext, creds: DodoCredentials): Promise<ScalarResult> {
   const { items, truncated } = await walk<DodoSubscription>(ctx, creds, "/subscriptions", {
     status: "active",
   });
@@ -266,31 +212,15 @@ async function mrr(ctx: AdapterContext, creds: DodoCredentials): Promise<RawSeri
   // subscription keeps an annual plan's twelfth from drifting across a book.
   const value = Math.round(total);
 
-  return {
-    unit: "currency",
-    currency: ctx.preferredCurrency,
-    points: [{ t: ctx.now(), v: value }],
-    value,
-    previousValue: null,
-    asOf: ctx.now(),
-    note: join(note, truncationNote(truncated)),
-  };
+  return { currency: ctx.preferredCurrency, value, note: join(note, truncationNote(truncated)) };
 }
 
-async function activeSubscribers(ctx: AdapterContext, creds: DodoCredentials): Promise<RawSeries> {
+async function activeCount(ctx: AdapterContext, creds: DodoCredentials): Promise<ScalarResult> {
   const { items, truncated } = await walk<DodoSubscription>(ctx, creds, "/subscriptions", {
     status: "active",
   });
 
-  return {
-    unit: "count",
-    currency: null,
-    points: [{ t: ctx.now(), v: items.length }],
-    value: items.length,
-    previousValue: null,
-    asOf: ctx.now(),
-    note: truncationNote(truncated),
-  };
+  return { value: items.length, note: truncationNote(truncated) };
 }
 
 /**
@@ -298,12 +228,12 @@ async function activeSubscribers(ctx: AdapterContext, creds: DodoCredentials): P
  * says yes to. Total revenue and one-time sales are the same walk with a
  * different filter; the list has no server-side way to ask for either.
  */
-async function revenue(
+async function revenueOver(
   ctx: AdapterContext,
   creds: DodoCredentials,
   request: MetricRequest,
   include: (payment: DodoPayment) => boolean,
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   const from = request.comparePrevious
     ? new Date(request.from.getTime() - (request.to.getTime() - request.from.getTime()))
     : request.from;
@@ -333,7 +263,6 @@ async function revenue(
     : null;
 
   return {
-    unit: "currency",
     currency: ctx.preferredCurrency,
     points,
     value,
@@ -346,7 +275,7 @@ async function revenue(
  * The newest payments that actually took money. Dodo lists newest first, so
  * one page over-fetched by a factor of two covers a run of failed attempts.
  */
-async function latestPayments(ctx: AdapterContext, creds: DodoCredentials): Promise<RawSeries> {
+async function latestPayments(ctx: AdapterContext, creds: DodoCredentials): Promise<RawListItem[]> {
   const body = await get<DodoList<DodoPayment>>(ctx, creds, "/payments", {
     page_size: RECENT_PAYMENTS_LIMIT * 2,
     page_number: 0,
@@ -362,5 +291,108 @@ async function latestPayments(ctx: AdapterContext, creds: DodoCredentials): Prom
       currency: payment.currency.toUpperCase(),
       status: payment.status,
     }));
-  return recentPayments(ctx, rows);
+  // Sorted, capped and totalled by `recentPaymentsMetric`, shared with the
+  // other payment connectors.
+  return rows;
 }
+
+const { scalar, series } = metricsFor<DodoCredentials>();
+
+export const mrr = scalar({
+  id: "mrr",
+  label: "Monthly recurring revenue",
+  shortLabel: "MRR",
+  unit: "currency",
+  freshnessSeconds: 180,
+  methodology:
+    "Active subscriptions, each `recurring_pre_tax_amount` normalised to a monthly amount using its payment frequency. A snapshot of the book right now, not a total over the window.",
+  fetch: mrrValue,
+});
+
+export const revenue = series({
+  id: "revenue",
+  label: "Total revenue",
+  shortLabel: "Revenue",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Every succeeded payment in the window, subscription renewals and one-time purchases together, by `total_amount`. Gross, before refunds and fees.",
+  fetch: (ctx, creds, request) => revenueOver(ctx, creds, request, () => true),
+});
+
+export const oneTimeSales = series({
+  id: "one_time_sales",
+  label: "One-time sales",
+  shortLabel: "One-time",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Succeeded payments in the window that are not tied to a subscription, by `total_amount`. Gross, before refunds and fees.",
+  // The same walk as revenue with a different filter: the list has no
+  // server-side way to ask for either.
+  fetch: (ctx, creds, request) => revenueOver(ctx, creds, request, isOneTime),
+});
+
+export const activeSubscribers = scalar({
+  id: "active_subscribers",
+  label: "Active subscribers",
+  shortLabel: "Active",
+  unit: "count",
+  freshnessSeconds: 180,
+  methodology: "Subscriptions in status `active` right now.",
+  fetch: activeCount,
+});
+
+export const payments = recentPaymentsMetric<DodoCredentials>({
+  methodology:
+    "The latest succeeded payments, newest first, with the customer's name or email. The headline is their total in your currency.",
+  rows: latestPayments,
+});
+
+export const dodopayments = provider({
+  metrics: [mrr, revenue, oneTimeSales, activeSubscribers, payments],
+  manifest,
+  credentialSchema,
+
+  async verify(ctx, creds) {
+    // There is no `/me` on this API, so the proof that the key works against
+    // this host is a one-row list — and Dodo keys carry scopes per resource,
+    // so each list is probed on its own. A key with `payments:read` and no
+    // `subscriptions:read` is a perfectly good key for revenue; rejecting it
+    // outright told somebody their key was wrong when it was merely narrow.
+    const payments = await probe<DodoPayment>(ctx, creds, "/payments");
+    const subscriptions = await probe<DodoSubscription>(ctx, creds, "/subscriptions");
+
+    // Said as what this key *cannot* read. `provider()` derives the available
+    // set from the metrics, so this is no longer a second copy of them.
+    const unavailableMetrics: MetricId[] = [];
+    if (!payments.allowed) {
+      unavailableMetrics.push("revenue", "one_time_sales", "recent_payments");
+    }
+    if (!subscriptions.allowed) unavailableMetrics.push("mrr", "active_subscribers");
+    if (!payments.allowed && !subscriptions.allowed) {
+      throw new ProviderError(
+        "unsupported",
+        "This key can read neither payments nor subscriptions. Give it payments:read and subscriptions:read.",
+      );
+    }
+    if (!subscriptions.allowed) {
+      ctx.log("dodo key lacks subscriptions:read; offering revenue and payments only");
+    }
+
+    const currency = subscriptions.first?.currency ?? payments.first?.currency ?? null;
+
+    return {
+      // The API exposes no account or business name, so the mode is the only
+      // thing that distinguishes two connections. The detail only — the
+      // provider's name is added by `connectionName`.
+      accountLabel: creds.mode === "test" ? "Test" : null,
+      currency: currency?.toUpperCase() ?? null,
+      unavailableMetrics,
+    };
+  },
+});

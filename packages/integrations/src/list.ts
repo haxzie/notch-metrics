@@ -1,5 +1,6 @@
 import type { MetricDescriptor } from "@notch/schemas";
-import type { AdapterContext, RawListItem, RawSeries } from "./types.ts";
+import { listMetric, type MetricDefinition } from "./metric.ts";
+import type { AdapterContext, MetricRequest, RawListItem, RawSeries } from "./types.ts";
 
 /**
  * How many rows a list widget carries.
@@ -68,4 +69,67 @@ export function recentPayments(ctx: AdapterContext, rows: RawListItem[]): RawSer
     asOf: ctx.now(),
     items,
   };
+}
+
+/**
+ * The payments feed as one metric, shared by every payment provider.
+ *
+ * `recentPaymentsDescriptor` and `recentPayments` were the two halves of
+ * this: a descriptor each provider spread into its manifest and a builder
+ * each called from its own `case`, with nothing holding the two together.
+ * Both are still exported — the builder because Shopify's currency handling
+ * reaches for it, the descriptor because this is built from it and
+ * `list.test.ts` pins its flags — but a provider wants this.
+ *
+ * A provider supplies only `rows`. The sort, the cap and the headline total
+ * are the shared half, and they are the half worth not having six copies of:
+ * the total is the rows in the user's own currency, which is not
+ * `items.length` and is the one thing a provider could plausibly get wrong
+ * on its own.
+ */
+export function recentPaymentsMetric<C extends Record<string, unknown>>(options: {
+  methodology: string;
+  rows: (ctx: AdapterContext, credentials: C, request: MetricRequest) => Promise<RawListItem[]>;
+  /**
+   * The currency the headline is totalled in, when it is not the user's.
+   *
+   * A Shopify store sells in exactly one currency, which is usually not the
+   * one the user asked the notch for — and totalling in theirs filters every
+   * row out and shows zero against a list of ten sales. So the store's own
+   * currency wins there, and `note` says so.
+   *
+   * Defaulted rather than required because for every other provider the
+   * user's currency is the right one: the rows are a mixed book and a sum of
+   * two currencies is not a number.
+   */
+  totalIn?: (ctx: AdapterContext, items: RawListItem[]) => string;
+  /** Said alongside the figure, e.g. that the total is in another currency. */
+  note?: (ctx: AdapterContext, totalledIn: string) => string | undefined;
+}): MetricDefinition<C> {
+  const descriptor = recentPaymentsDescriptor(options.methodology);
+  return listMetric<C>({
+    id: "recent_payments",
+    label: descriptor.label,
+    shortLabel: descriptor.shortLabel,
+    unit: "currency",
+    limit: RECENT_PAYMENTS_LIMIT,
+    freshnessSeconds: descriptor.freshnessSeconds,
+    methodology: options.methodology,
+
+    async fetch(ctx, credentials, request) {
+      const rows = await options.rows(ctx, credentials, request);
+      const currency = options.totalIn?.(ctx, rows) ?? ctx.preferredCurrency;
+      const series = recentPayments({ ...ctx, preferredCurrency: currency }, rows);
+      const note = options.note?.(ctx, currency);
+      // `value` is explicit because it is not the row count: a feed too short
+      // to show rows still has to say something true, and that is their total
+      // in one currency.
+      return {
+        items: series.items ?? [],
+        value: series.value,
+        currency: series.currency,
+        ...(note !== undefined ? { note } : {}),
+      };
+    },
+  });
 }

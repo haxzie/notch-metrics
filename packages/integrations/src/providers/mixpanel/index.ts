@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { ProviderManifest } from "@notch/schemas";
-import type { ProviderAdapter } from "../../types.ts";
+import { metricsFor, provider } from "../../metric.ts";
 import { notImplemented } from "../../types.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "mixpanel",
   name: "Mixpanel",
   category: "analytics",
@@ -48,38 +48,6 @@ export const manifest: ProviderManifest = {
       default: "us",
     },
   ],
-  metrics: [
-    {
-      id: "active_users",
-      label: "Active users",
-      shortLabel: "Users",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "Users with at least one event in the window.",
-    },
-    {
-      id: "new_users",
-      label: "New users",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "Users seen for the first time in the window.",
-    },
-    {
-      id: "events",
-      label: "Events",
-      shortLabel: "Events",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "Events recorded in the window.",
-    },
-  ],
   allowedHosts: ["mixpanel.com", "eu.mixpanel.com"],
   status: "coming_soon",
   minAppVersion: "0.1.0",
@@ -93,19 +61,63 @@ export const credentialSchema = z.object({
 });
 export type MixpanelCredentials = z.infer<typeof credentialSchema>;
 
+const { scalar, series } = metricsFor<MixpanelCredentials>();
+
+const activeUsers = series({
+  id: "active_users",
+  label: "Active users",
+  shortLabel: "Users",
+  unit: "count",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  methodology: "Users with at least one event in the window.",
+
+  async fetch() {
+    notImplemented("Mixpanel");
+  },
+});
+
+const newUsers = series({
+  id: "new_users",
+  label: "New users",
+  shortLabel: "New",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  methodology: "Users seen for the first time in the window.",
+
+  async fetch() {
+    notImplemented("Mixpanel");
+  },
+});
+
+const events = series({
+  id: "events",
+  label: "Events",
+  shortLabel: "Events",
+  unit: "count",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  methodology: "Events recorded in the window.",
+
+  async fetch() {
+    notImplemented("Mixpanel");
+  },
+});
+
 /**
  * Declared but not implemented. `status: "coming_soon"` is what the
  * catalogue reads to list it and disable its connect button; returning
  * zeroes instead would look like a working integration reporting a dead
  * business.
  */
-export const mixpanel: ProviderAdapter<MixpanelCredentials> = {
+export const mixpanel = provider({
   manifest,
   credentialSchema,
+  userInputFields: [],
+  metrics: [activeUsers, newUsers, events],
+
   async verify() {
     notImplemented("Mixpanel");
   },
-  async fetchMetric() {
-    notImplemented("Mixpanel");
-  },
-};
+});

@@ -9,6 +9,7 @@ import type {
   RawSeries,
   VerifyResult,
 } from "../../types.ts";
+import { metricsFor, provider, type ScalarResult, type TotalResult } from "../../metric.ts";
 import { ProviderError } from "../../types.ts";
 import { manifest } from "./manifest.ts";
 
@@ -187,52 +188,6 @@ async function overview(
   });
 }
 
-export const revenuecat: ProviderAdapter<RevenueCatCredentials> = {
-  manifest,
-  credentialSchema,
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    const project = await resolveProject(ctx, creds);
-
-    // Proves `charts_metrics:overview:read`, which every metric here needs. A
-    // key without it would otherwise become a row that fails on first poll.
-    const metrics = await overview(ctx, creds, project.id);
-
-    return {
-      accountLabel: project.label,
-      currency: metrics.currency?.toUpperCase() ?? null,
-      availableMetrics: [
-        "mrr",
-        "revenue",
-        "active_subscribers",
-        "trials",
-        "new_users",
-        "active_users",
-      ] satisfies MetricId[],
-    };
-  },
-
-  async fetchMetric(ctx, creds, request): Promise<RawSeries> {
-    const project = await projectIdFor(ctx, creds);
-    switch (request.metric) {
-      case "mrr":
-        return fromOverview(ctx, creds, project, "mrr", "currency");
-      case "active_subscribers":
-        return fromOverview(ctx, creds, project, "active_subscriptions", "count");
-      case "trials":
-        return fromOverview(ctx, creds, project, "active_trials", "count");
-      case "new_users":
-        return fromOverview(ctx, creds, project, "new_customers", "count");
-      case "active_users":
-        return fromOverview(ctx, creds, project, "active_users", "count");
-      case "revenue":
-        return revenue(ctx, creds, project, request);
-      default:
-        throw new ProviderError("unsupported", `RevenueCat does not provide ${request.metric}.`);
-    }
-  },
-};
-
 /**
  * On a poll the project is already settled, so a key that can see exactly
  * one is resolved again only when nothing was typed — one extra request on a
@@ -256,7 +211,7 @@ async function fromOverview(
   projectId: string,
   id: string,
   unit: "currency" | "count",
-): Promise<RawSeries> {
+): Promise<ScalarResult> {
   const body = await overview(ctx, creds, projectId);
   const metric = body.metrics?.find((candidate) => candidate.id === id);
   if (!metric || typeof metric.value !== "number") {
@@ -269,11 +224,8 @@ async function fromOverview(
   const asOf = metric.last_updated_at ? new Date(metric.last_updated_at) : ctx.now();
 
   return {
-    unit,
     currency: unit === "currency" ? currency : null,
-    points: [{ t: ctx.now(), v: value }],
     value,
-    previousValue: null,
     asOf,
     note: currencyNote(ctx, currency, unit),
   };
@@ -310,12 +262,12 @@ function isoDay(date: Date, timeZone: string): string {
  * Charts domain allows 25 calls a minute, so a thirty-point sparkline is a
  * minute of budget per widget. The previous window is one more call.
  */
-async function revenue(
+async function revenueTotal(
   ctx: AdapterContext,
   creds: RevenueCatCredentials,
   projectId: string,
   request: MetricRequest,
-): Promise<RawSeries> {
+): Promise<TotalResult> {
   const path = `/projects/${encodeURIComponent(projectId)}/metrics/revenue`;
   const total = (from: Date, to: Date) =>
     get<RevenueMetric>(ctx, creds, path, {
@@ -341,11 +293,110 @@ async function revenue(
   }
 
   return {
-    unit: "currency",
     currency,
-    points: [{ t: request.to, v: value }],
     value,
     previousValue,
+    // The end of the window, not this instant: this is a total *to* `to`.
+    at: request.to,
     note: currencyNote(ctx, currency, "currency"),
   };
 }
+
+const { scalar, total } = metricsFor<RevenueCatCredentials>();
+
+export const mrr = scalar({
+  id: "mrr",
+  label: "Monthly recurring revenue",
+  shortLabel: "MRR",
+  unit: "currency",
+  freshnessSeconds: 180,
+  methodology:
+    "RevenueCat's own MRR figure for the project: active paid subscriptions normalised to a month, as shown on the Overview. A snapshot of the book right now.",
+  fetch: async (ctx, creds) =>
+    fromOverview(ctx, creds, await projectIdFor(ctx, creds), "mrr", "currency"),
+});
+
+export const activeSubscribers = scalar({
+  id: "active_subscribers",
+  label: "Active subscriptions",
+  shortLabel: "Active subs",
+  unit: "count",
+  freshnessSeconds: 180,
+  methodology:
+    "Paid subscriptions active right now, including ones that are cancelled or in a grace period until they expire. Trials are not counted.",
+  fetch: async (ctx, creds) =>
+    fromOverview(ctx, creds, await projectIdFor(ctx, creds), "active_subscriptions", "count"),
+});
+
+export const trials = scalar({
+  id: "trials",
+  label: "Active trials",
+  shortLabel: "Trials",
+  unit: "count",
+  freshnessSeconds: 180,
+  methodology:
+    "Free trials active right now, including cancelled ones, until they convert to paid or expire.",
+  fetch: async (ctx, creds) =>
+    fromOverview(ctx, creds, await projectIdFor(ctx, creds), "active_trials", "count"),
+});
+
+export const newUsers = scalar({
+  id: "new_users",
+  label: "New customers · 28 days",
+  shortLabel: "New · 28d",
+  unit: "count",
+  methodology:
+    "App User IDs first seen in the last 28 days, as RevenueCat's Overview counts them. The window is fixed by RevenueCat and ignores the widget's range. Aliased IDs count once.",
+  fetch: async (ctx, creds) =>
+    fromOverview(ctx, creds, await projectIdFor(ctx, creds), "new_customers", "count"),
+});
+
+export const activeUsers = scalar({
+  id: "active_users",
+  label: "Active customers · 28 days",
+  shortLabel: "Active · 28d",
+  unit: "count",
+  methodology:
+    "App User IDs that contacted RevenueCat in the last 28 days. The window is fixed by RevenueCat and ignores the widget's range. May lag by one to two hours.",
+  fetch: async (ctx, creds) =>
+    fromOverview(ctx, creds, await projectIdFor(ctx, creds), "active_users", "count"),
+});
+
+export const revenue = total({
+  id: "revenue",
+  label: "Revenue",
+  shortLabel: "Revenue",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  // RevenueCat's total endpoint answers one window at a time, so the delta
+  // is a second call and a sparkline is not available without a chart walk.
+  freshnessSeconds: 60,
+  methodology:
+    "Gross revenue across every app in the project for the days in the window, before store commission and taxes. Today is partial while transactions are still arriving.",
+  // A window total with a delta and no chart — the Charts endpoint answers
+  // one figure per call, so a sparkline would be a minute of rate budget.
+  fetch: async (ctx, creds, request) =>
+    revenueTotal(ctx, creds, await projectIdFor(ctx, creds), request),
+});
+
+export const revenuecat = provider({
+  metrics: [mrr, revenue, activeSubscribers, trials, newUsers, activeUsers],
+  manifest,
+  credentialSchema,
+
+  async verify(ctx, creds) {
+    const project = await resolveProject(ctx, creds);
+
+    // Proves `charts_metrics:overview:read`, which every metric here needs. A
+    // key without it would otherwise become a row that fails on first poll.
+    const metrics = await overview(ctx, creds, project.id);
+
+    // No `availableMetrics`: these six ids were written out a second time
+    // beside the manifest and the switch. Derived from the metrics now.
+    return {
+      accountLabel: project.label,
+      currency: metrics.currency?.toUpperCase() ?? null,
+    };
+  },
+});

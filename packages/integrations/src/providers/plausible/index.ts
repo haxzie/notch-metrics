@@ -1,19 +1,23 @@
 import { z } from "zod";
 import type { Granularity, MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
+import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { bucketSum, instantOfWallClock } from "../../normalise.ts";
-import type {
-  AdapterContext,
-  HttpResponse,
-  MetricRequest,
-  ProviderAdapter,
-  RawSeries,
-  VerifyResult,
-} from "../../types.ts";
+import type { AdapterContext, HttpResponse, MetricRequest } from "../../types.ts";
 import { ProviderError } from "../../types.ts";
 import { manifest } from "./manifest.ts";
 
 export { manifest };
+
+/**
+ * Days are the *site's* reporting timezone, not the user's.
+ *
+ * Repeated in every methodology rather than said once, because it is the
+ * answer to "why is this 40 and the dashboard says 41" and nobody reads the
+ * tooltip of the metric next door.
+ */
+const ZONE_NOTE =
+  "Buckets are your Plausible site's reporting timezone, so the figures match its own dashboard.";
 
 const HOST = "plausible.io";
 
@@ -28,14 +32,7 @@ export const credentialSchema = z.object({
 });
 export type PlausibleCredentials = z.infer<typeof credentialSchema>;
 
-/** Which metric each of ours is called in Plausible's own vocabulary. */
-const METRICS: Partial<Record<MetricId, string>> = {
-  visitors: "visitors",
-  pageviews: "pageviews",
-  // Plausible says "visits"; every other connector here says sessions.
-  sessions: "visits",
-  bounce_rate: "bounce_rate",
-};
+const { series } = metricsFor<PlausibleCredentials>();
 
 async function request<T>(
   ctx: AdapterContext,
@@ -143,29 +140,145 @@ function toNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-/** Plausible reports `bounce_rate` as a percentage; a `ratio` here is a fraction. */
-function scale(metric: MetricId, value: number): number {
-  return metric === "bounce_rate" ? value / 100 : value;
+/**
+ * One Plausible metric, which is four metrics minus a name and a scale.
+ *
+ * All four ask the same two or three questions and differ only in what
+ * Plausible calls the metric and whether its number needs dividing. As a
+ * single `case` that handled all four, that sameness was carried by two side
+ * tables — a `METRICS` lookup and a `scale()` keyed on metric id — each of
+ * which had to agree with the manifest and with the other. Here it is one
+ * function, and what differs is its arguments.
+ */
+function statsMetric(options: {
+  id: MetricId;
+  /** What Plausible calls it. It says "visits" where everything else says sessions. */
+  apiMetric: string;
+  label: string;
+  shortLabel: string;
+  unit: "count" | "ratio";
+  granularities: [Granularity, ...Granularity[]];
+  methodology: string;
+  /** Plausible reports `bounce_rate` as a percentage; a `ratio` is a fraction. */
+  scale?: (value: number) => number;
+}) {
+  const scale = options.scale ?? ((value: number) => value);
+
+  /** The single figure for a window, from a query with no time dimension. */
+  const total = async (
+    ctx: AdapterContext,
+    creds: PlausibleCredentials,
+    from: Date,
+    to: Date,
+  ): Promise<number> => {
+    const rows = await query(ctx, creds, { metric: options.apiMetric, from, to });
+    return scale(toNumber(rows[0]?.metrics?.[0]));
+  };
+
+  return series({
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    unit: options.unit,
+    granularities: options.granularities,
+    compare: true,
+    methodology: options.methodology,
+
+    async fetch(ctx, creds, request: MetricRequest): Promise<SeriesResult> {
+      // Asked for separately rather than summed off the chart, for both of the
+      // metrics where those differ: a visitor active on three days is one
+      // unique visitor, and a bounce rate is a ratio, not an addend. Plausible
+      // also warns that `visitors` and `visits` may come from different tables
+      // depending on the query, so its own aggregate is the figure that
+      // matches its own dashboard.
+      const value = await total(ctx, creds, request.from, request.to);
+      const windowMs = request.to.getTime() - request.from.getTime();
+      const previousValue = request.comparePrevious
+        ? await total(ctx, creds, new Date(request.from.getTime() - windowMs), request.from)
+        : null;
+
+      // One row per bucket, bucketed by Plausible itself at the granularity
+      // asked for — so a week is weighted by its own sessions rather than
+      // being the mean of seven daily rates, which is what rolling days up
+      // here would produce. `bucketSum` is then only gap-filling: it sees one
+      // row per bucket, so nothing is added to anything.
+      let points: { t: Date; v: number }[] = [];
+      if (request.wantSeries) {
+        const rows = await query(ctx, creds, {
+          metric: options.apiMetric,
+          from: request.from,
+          to: request.to,
+          dimension: dimensionFor(request.granularity),
+        });
+        points = bucketSum(
+          rows.map((row) => ({
+            at: instantOf(row.dimensions?.[0] ?? "", ctx.timeZone),
+            amount: scale(toNumber(row.metrics?.[0])),
+          })),
+          {
+            from: request.from,
+            to: request.to,
+            granularity: request.granularity,
+            timeZone: ctx.timeZone,
+          },
+        );
+      }
+
+      return { points, value, previousValue };
+    },
+  });
 }
 
-/** The single figure for a window, from a query with no time dimension. */
-async function total(
-  ctx: AdapterContext,
-  creds: PlausibleCredentials,
-  request: MetricRequest,
-  apiMetric: string,
-  from: Date,
-  to: Date,
-): Promise<number> {
-  const rows = await query(ctx, creds, { metric: apiMetric, from, to });
-  return scale(request.metric, toNumber(rows[0]?.metrics?.[0]));
-}
+export const visitors = statsMetric({
+  id: "visitors",
+  apiMetric: "visitors",
+  label: "Unique visitors",
+  shortLabel: "Visitors",
+  unit: "count",
+  granularities: ["hour", "day", "week", "month"],
+  methodology: `Distinct visitors in the window. The headline counts each visitor once across the whole window, so the bars do not add up to it. ${ZONE_NOTE}`,
+});
 
-export const plausible: ProviderAdapter<PlausibleCredentials> = {
+export const pageviews = statsMetric({
+  id: "pageviews",
+  apiMetric: "pageviews",
+  label: "Pageviews",
+  shortLabel: "Views",
+  unit: "count",
+  granularities: ["hour", "day", "week", "month"],
+  methodology: `Total pages viewed in the window, with repeat views by one visitor all counted. ${ZONE_NOTE}`,
+});
+
+export const bounceRate = statsMetric({
+  id: "bounce_rate",
+  apiMetric: "bounce_rate",
+  label: "Bounce rate",
+  shortLabel: "Bounce",
+  unit: "ratio",
+  granularities: ["day", "week", "month"],
+  scale: (value) => value / 100,
+  methodology: `Share of sessions that left after one interaction. Plausible computes each bar over its own bucket, so a week is weighted by its sessions rather than being the mean of seven daily rates. ${ZONE_NOTE}`,
+});
+
+export const sessions = statsMetric({
+  id: "sessions",
+  // Plausible says "visits"; every other connector here says sessions.
+  apiMetric: "visits",
+  label: "Sessions",
+  shortLabel: "Sessions",
+  unit: "count",
+  granularities: ["hour", "day", "week", "month"],
+  methodology: `Visits started in the window, which Plausible calls "visits". A session that spans midnight is counted in the bucket it started in. ${ZONE_NOTE}`,
+});
+
+export const plausible = provider({
   manifest,
   credentialSchema,
+  // Declaration order is the catalogue's order, and now also the order
+  // `availableMetrics` reports.
+  metrics: [visitors, pageviews, bounceRate, sessions],
 
-  async verify(ctx, creds): Promise<VerifyResult> {
+  async verify(ctx, creds) {
     // The site endpoint rather than a stats query: it proves the key, proves
     // this site is on the key's team, and costs nothing in stats quota. A
     // Stats API key can read it on any plan that includes the Stats API.
@@ -183,71 +296,10 @@ export const plausible: ProviderAdapter<PlausibleCredentials> = {
       throw error;
     });
 
-    return {
-      accountLabel: site.domain?.trim() || creds.site_id,
-      currency: null,
-      availableMetrics: Object.keys(METRICS) as MetricId[],
-    };
+    // No `availableMetrics`: it was `Object.keys(METRICS)`, a side table
+    // that had to agree with the manifest and silently did not — it listed
+    // sessions before bounce rate where the manifest has them the other way
+    // round. Derived from the metrics below now, so there is one order.
+    return { accountLabel: site.domain?.trim() || creds.site_id, currency: null };
   },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    const apiMetric = METRICS[request.metric];
-    if (!apiMetric) {
-      throw new ProviderError("unsupported", `Plausible does not provide ${request.metric}.`);
-    }
-
-    // Asked for separately rather than summed off the chart, for both of the
-    // metrics where those differ: a visitor active on three days is one
-    // unique visitor, and a bounce rate is a ratio, not an addend. Plausible
-    // also warns that `visitors` and `visits` may come from different tables
-    // depending on the query, so its own aggregate is the figure that
-    // matches its own dashboard.
-    const value = await total(ctx, creds, request, apiMetric, request.from, request.to);
-    const windowMs = request.to.getTime() - request.from.getTime();
-    const previousValue = request.comparePrevious
-      ? await total(
-          ctx,
-          creds,
-          request,
-          apiMetric,
-          new Date(request.from.getTime() - windowMs),
-          request.from,
-        )
-      : null;
-
-    // One row per bucket, bucketed by Plausible itself at the granularity
-    // asked for — so a week is weighted by its own sessions rather than
-    // being the mean of seven daily rates, which is what rolling days up
-    // here would produce. `bucketSum` is then only gap-filling: it sees one
-    // row per bucket, so nothing is added to anything.
-    let points: { t: Date; v: number }[] = [];
-    if (request.wantSeries) {
-      const rows = await query(ctx, creds, {
-        metric: apiMetric,
-        from: request.from,
-        to: request.to,
-        dimension: dimensionFor(request.granularity),
-      });
-      points = bucketSum(
-        rows.map((row) => ({
-          at: instantOf(row.dimensions?.[0] ?? "", ctx.timeZone),
-          amount: scale(request.metric, toNumber(row.metrics?.[0])),
-        })),
-        {
-          from: request.from,
-          to: request.to,
-          granularity: request.granularity,
-          timeZone: ctx.timeZone,
-        },
-      );
-    }
-
-    return {
-      unit: request.metric === "bounce_rate" ? "ratio" : "count",
-      currency: null,
-      points,
-      value,
-      previousValue,
-    };
-  },
-};
+});

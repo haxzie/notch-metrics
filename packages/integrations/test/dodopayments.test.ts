@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dodopayments } from "../src/providers/dodopayments/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { scalar, stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = { api_key: "dodo_test_abcdefghijklmnopqrst", mode: "live" as const };
 
@@ -208,7 +208,7 @@ describe("dodo payments verify", () => {
       "/subscriptions": { items: [sub({ amount: 100, currency: "EUR" })] },
     });
     const result = await dodopayments.verify(ctx, creds);
-    expect(result.availableMetrics).toEqual([
+    expectMetrics(result.availableMetrics, [
       "revenue",
       "one_time_sales",
       "recent_payments",
@@ -237,7 +237,7 @@ describe("dodo payments verify", () => {
       "/subscriptions": { __status: 403 },
     });
     const result = await dodopayments.verify(ctx, creds);
-    expect(result.availableMetrics).toEqual(["revenue", "one_time_sales", "recent_payments"]);
+    expectMetrics(result.availableMetrics, ["revenue", "one_time_sales", "recent_payments"]);
     expect(result.currency).toBe("USD");
   });
 

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
+import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
+  RawListItem,
   MetricRequest,
   ProviderAdapter,
   RawSeries,
@@ -129,11 +131,267 @@ interface BalanceTransaction {
   type: string;
 }
 
-export const stripe: ProviderAdapter<StripeCredentials> = {
+/**
+ * The newest charges that actually took money.
+ *
+ * Charges rather than balance transactions: a balance transaction knows the
+ * amount and nothing about who paid. Over-fetched by a page so that a run
+ * of failed card attempts does not leave the list short.
+ */
+async function latestCharges(
+  ctx: AdapterContext,
+  creds: StripeCredentials,
+): Promise<RawListItem[]> {
+  const body = await get<StripeList<Charge>>(ctx, creds, "/charges", {
+    limit: RECENT_PAYMENTS_LIMIT * 2,
+  });
+  const rows = body.data
+    .filter((charge) => charge.status === "succeeded")
+    .map((charge) => ({
+      id: charge.id,
+      t: new Date(charge.created * 1000),
+      label:
+        charge.billing_details?.name ||
+        charge.billing_details?.email ||
+        charge.receipt_email ||
+        "Customer",
+      detail: charge.description ?? null,
+      amount: charge.amount,
+      currency: charge.currency.toUpperCase(),
+      status: charge.refunded
+        ? "refunded"
+        : (charge.amount_refunded ?? 0) > 0
+          ? "partially refunded"
+          : charge.status,
+    }));
+  // Sorted, capped and totalled by the shared payments metric.
+  return rows;
+}
+
+function tooLarge(): ProviderError {
+  return new ProviderError(
+    "unsupported",
+    "This account has more subscriptions than we can total live. Stripe Sigma support is coming.",
+  );
+}
+
+/** Minor units of monthly recurring revenue, in the user's preferred currency. */
+async function mrrValue(
+  ctx: AdapterContext,
+  creds: StripeCredentials,
+  request: MetricRequest,
+): Promise<ScalarResult> {
+  const { items, truncated } = await walk<Subscription>(ctx, creds, "/subscriptions", {
+    status: "active",
+    "expand[]": "data.items.data.price",
+  });
+  if (truncated) throw tooLarge();
+
+  const wanted = ctx.preferredCurrency.toLowerCase();
+  let total = 0;
+  let excluded = 0;
+
+  for (const sub of items) {
+    const discount = sub.discounts?.[0]?.coupon?.percent_off ?? 0;
+    for (const item of sub.items.data) {
+      const price = item.price;
+      if (!price?.recurring || price.unit_amount === null) continue;
+      if (price.currency.toLowerCase() !== wanted) {
+        excluded++;
+        continue;
+      }
+      const gross = price.unit_amount * (item.quantity ?? 1);
+      const monthly = toMonthly(gross, price.recurring.interval, price.recurring.interval_count);
+      total += monthly * (1 - discount / 100);
+    }
+  }
+
+  const value = Math.round(total);
+  return {
+    currency: ctx.preferredCurrency,
+    // A snapshot of the book, timestamped at the end of the window rather
+    // than at this instant. `at` is how a scalar says so.
+    at: request.to,
+    value,
+    note:
+      excluded > 0
+        ? `${excluded} subscription item${excluded === 1 ? "" : "s"} in another currency were excluded.`
+        : undefined,
+  };
+}
+
+async function activeCount(
+  ctx: AdapterContext,
+  creds: StripeCredentials,
+  request: MetricRequest,
+): Promise<ScalarResult> {
+  const { items, truncated } = await walk<Subscription>(ctx, creds, "/subscriptions", {
+    status: "active",
+  });
+  if (truncated) throw tooLarge();
+  return { value: items.length, at: request.to };
+}
+
+async function balanceSeries(
+  ctx: AdapterContext,
+  creds: StripeCredentials,
+  request: MetricRequest,
+  type: "charge" | "refund",
+  sign: 1 | -1,
+): Promise<SeriesResult> {
+  const { items, truncated } = await walk<BalanceTransaction>(ctx, creds, "/balance_transactions", {
+    type,
+    "created[gte]": Math.floor(request.from.getTime() / 1000),
+    "created[lte]": Math.floor(request.to.getTime() / 1000),
+  });
+  if (truncated) throw tooLarge();
+
+  const wanted = ctx.preferredCurrency.toLowerCase();
+  const kept = items.filter((t) => t.currency.toLowerCase() === wanted);
+  const excluded = items.length - kept.length;
+
+  const points = bucketSum(
+    kept.map((t) => ({ at: new Date(t.created * 1000), amount: t.amount * sign })),
+    {
+      from: request.from,
+      to: request.to,
+      granularity: request.granularity,
+      timeZone: ctx.timeZone,
+    },
+  );
+
+  const value = points.reduce((sum, p) => sum + p.v, 0);
+  return {
+    currency: ctx.preferredCurrency,
+    points: request.wantSeries ? points : [],
+    value,
+    note:
+      excluded > 0
+        ? `${excluded} transaction${excluded === 1 ? "" : "s"} in another currency were excluded.`
+        : undefined,
+  };
+}
+
+async function subscriptionCounts(
+  ctx: AdapterContext,
+  creds: StripeCredentials,
+  request: MetricRequest,
+  field: "created" | "canceled",
+): Promise<SeriesResult> {
+  const from = Math.floor(request.from.getTime() / 1000);
+  const to = Math.floor(request.to.getTime() / 1000);
+
+  // Stripe can filter subscriptions by `created` but not by `canceled_at`, so
+  // churn pulls cancelled subscriptions and buckets them client-side.
+  const params: Record<string, string | number> =
+    field === "created"
+      ? { status: "all", "created[gte]": from, "created[lte]": to }
+      : { status: "canceled" };
+
+  const { items, truncated } = await walk<Subscription>(ctx, creds, "/subscriptions", params);
+  if (truncated) throw tooLarge();
+
+  const events = items
+    .map((s) => (field === "created" ? s.created : s.canceled_at))
+    .filter((at): at is number => at !== null && at >= from && at <= to)
+    .map((at) => ({ at: new Date(at * 1000), amount: 1 }));
+
+  const points = bucketSum(events, {
+    from: request.from,
+    to: request.to,
+    granularity: request.granularity,
+    timeZone: ctx.timeZone,
+  });
+
+  return { points: request.wantSeries ? points : [], value: events.length };
+}
+
+const { scalar, series } = metricsFor<StripeCredentials>();
+
+export const mrr = scalar({
+  id: "mrr",
+  label: "Monthly recurring revenue",
+  shortLabel: "MRR",
+  unit: "currency",
+  freshnessSeconds: 180,
+  methodology:
+    "Active subscriptions right now, each item normalised to a monthly amount (annual ÷ 12, weekly × 52/12) and reduced by any percentage coupon. A snapshot, not a sum over the window.",
+  fetch: mrrValue,
+});
+
+export const revenue = series({
+  id: "revenue",
+  label: "Revenue",
+  shortLabel: "Revenue",
+  unit: "currency",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Gross charges from balance transactions in the window, before Stripe fees. Refunds are reported separately rather than netted off.",
+  fetch: (ctx, creds, request) => balanceSeries(ctx, creds, request, "charge", 1),
+});
+
+export const activeSubscribers = scalar({
+  id: "active_subscribers",
+  label: "Active subscribers",
+  shortLabel: "Active",
+  unit: "count",
+  freshnessSeconds: 180,
+  methodology: "Subscriptions in Stripe status `active` right now. Trials are not counted.",
+  fetch: activeCount,
+});
+
+export const newSubscribers = series({
+  id: "new_subscribers",
+  label: "New subscribers",
+  shortLabel: "New",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 180,
+  methodology: "Subscriptions created in the window, bucketed by creation time.",
+  fetch: (ctx, creds, request) => subscriptionCounts(ctx, creds, request, "created"),
+});
+
+export const churnedSubscribers = series({
+  id: "churned_subscribers",
+  label: "Churned subscribers",
+  shortLabel: "Churn",
+  unit: "count",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 180,
+  methodology: "Subscriptions cancelled in the window, bucketed by cancellation time.",
+  // Stripe cannot filter subscriptions by `canceled_at`, so this walks the
+  // cancelled ones and buckets them here.
+  fetch: (ctx, creds, request) => subscriptionCounts(ctx, creds, request, "canceled"),
+});
+
+export const refunds = series({
+  id: "refunds",
+  label: "Refunds",
+  shortLabel: "Refunds",
+  unit: "currency",
+  compare: true,
+  granularities: ["day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology: "Refund balance transactions in the window, as a positive amount.",
+  fetch: (ctx, creds, request) => balanceSeries(ctx, creds, request, "refund", -1),
+});
+
+export const payments = recentPaymentsMetric<StripeCredentials>({
+  methodology:
+    "The latest succeeded charges, newest first, with the payer's billing name or receipt email and the charge description. The headline is their total in your currency.",
+  rows: latestCharges,
+});
+
+export const stripe = provider({
+  metrics: [mrr, revenue, activeSubscribers, newSubscribers, churnedSubscribers, refunds, payments],
   manifest,
   credentialSchema,
 
-  async verify(ctx, creds): Promise<VerifyResult> {
+  async verify(ctx, creds) {
     const account = await get<{
       id: string;
       default_currency?: string;
@@ -143,19 +401,27 @@ export const stripe: ProviderAdapter<StripeCredentials> = {
     // A restricted key may read charges but not subscriptions. Narrowing what
     // we offer beats failing the whole connection and telling the user their
     // perfectly good key is broken.
-    const available: MetricId[] = ["revenue", "refunds", "recent_payments"];
+    // Said as what the key *cannot* read rather than built up as what it can:
+    // `provider()` derives the available set from the metrics, so this stops
+    // being a second copy of the catalogue that can fall behind it.
+    const unavailableMetrics: MetricId[] = [];
     try {
       await get<StripeList<Subscription>>(ctx, creds, "/subscriptions", { limit: 1 });
-      available.push("mrr", "active_subscribers", "new_subscribers", "churned_subscribers");
     } catch (error) {
       if (!(error instanceof ProviderError) || error.code !== "auth_failed") throw error;
+      unavailableMetrics.push(
+        "mrr",
+        "active_subscribers",
+        "new_subscribers",
+        "churned_subscribers",
+      );
       ctx.log("stripe key cannot read subscriptions; offering revenue only");
     }
 
     return {
       accountLabel: account.business_profile?.name ?? account.id,
       currency: account.default_currency?.toUpperCase() ?? null,
-      availableMetrics: available,
+      unavailableMetrics,
     };
   },
 
@@ -221,214 +487,4 @@ export const stripe: ProviderAdapter<StripeCredentials> = {
       cursor: body.has_more ? (body.data[body.data.length - 1]?.id ?? null) : null,
     };
   },
-
-  async fetchMetric(ctx, creds, request): Promise<RawSeries> {
-    switch (request.metric) {
-      case "mrr":
-        return mrr(ctx, creds, request);
-      case "active_subscribers":
-        return activeSubscribers(ctx, creds, request);
-      case "revenue":
-        return balanceSeries(ctx, creds, request, "charge", 1);
-      case "refunds":
-        return balanceSeries(ctx, creds, request, "refund", -1);
-      case "new_subscribers":
-        return subscriptionCounts(ctx, creds, request, "created");
-      case "churned_subscribers":
-        return subscriptionCounts(ctx, creds, request, "canceled");
-      case "recent_payments":
-        return latestCharges(ctx, creds);
-      default:
-        // Exhaustive by construction: registry.test.ts asserts every metric the
-        // manifest declares reaches a case above.
-        throw new ProviderError("unsupported", `Stripe cannot produce ${request.metric}`);
-    }
-  },
-};
-
-/**
- * The newest charges that actually took money.
- *
- * Charges rather than balance transactions: a balance transaction knows the
- * amount and nothing about who paid. Over-fetched by a page so that a run
- * of failed card attempts does not leave the list short.
- */
-async function latestCharges(ctx: AdapterContext, creds: StripeCredentials): Promise<RawSeries> {
-  const body = await get<StripeList<Charge>>(ctx, creds, "/charges", {
-    limit: RECENT_PAYMENTS_LIMIT * 2,
-  });
-  const rows = body.data
-    .filter((charge) => charge.status === "succeeded")
-    .map((charge) => ({
-      id: charge.id,
-      t: new Date(charge.created * 1000),
-      label:
-        charge.billing_details?.name ||
-        charge.billing_details?.email ||
-        charge.receipt_email ||
-        "Customer",
-      detail: charge.description ?? null,
-      amount: charge.amount,
-      currency: charge.currency.toUpperCase(),
-      status: charge.refunded
-        ? "refunded"
-        : (charge.amount_refunded ?? 0) > 0
-          ? "partially refunded"
-          : charge.status,
-    }));
-  return recentPayments(ctx, rows);
-}
-
-function tooLarge(): ProviderError {
-  return new ProviderError(
-    "unsupported",
-    "This account has more subscriptions than we can total live. Stripe Sigma support is coming.",
-  );
-}
-
-/** Minor units of monthly recurring revenue, in the user's preferred currency. */
-async function mrr(
-  ctx: AdapterContext,
-  creds: StripeCredentials,
-  request: MetricRequest,
-): Promise<RawSeries> {
-  const { items, truncated } = await walk<Subscription>(ctx, creds, "/subscriptions", {
-    status: "active",
-    "expand[]": "data.items.data.price",
-  });
-  if (truncated) throw tooLarge();
-
-  const wanted = ctx.preferredCurrency.toLowerCase();
-  let total = 0;
-  let excluded = 0;
-
-  for (const sub of items) {
-    const discount = sub.discounts?.[0]?.coupon?.percent_off ?? 0;
-    for (const item of sub.items.data) {
-      const price = item.price;
-      if (!price?.recurring || price.unit_amount === null) continue;
-      if (price.currency.toLowerCase() !== wanted) {
-        excluded++;
-        continue;
-      }
-      const gross = price.unit_amount * (item.quantity ?? 1);
-      const monthly = toMonthly(gross, price.recurring.interval, price.recurring.interval_count);
-      total += monthly * (1 - discount / 100);
-    }
-  }
-
-  const value = Math.round(total);
-  return {
-    unit: "currency",
-    currency: ctx.preferredCurrency,
-    // A snapshot. One point at `to` so a chart has something to draw, but
-    // `supportsSeries` is false on this metric and the app renders a number.
-    points: [{ t: request.to, v: value }],
-    value,
-    previousValue: null,
-    note:
-      excluded > 0
-        ? `${excluded} subscription item${excluded === 1 ? "" : "s"} in another currency were excluded.`
-        : undefined,
-  };
-}
-
-async function activeSubscribers(
-  ctx: AdapterContext,
-  creds: StripeCredentials,
-  request: MetricRequest,
-): Promise<RawSeries> {
-  const { items, truncated } = await walk<Subscription>(ctx, creds, "/subscriptions", {
-    status: "active",
-  });
-  if (truncated) throw tooLarge();
-  return {
-    unit: "count",
-    currency: null,
-    points: [{ t: request.to, v: items.length }],
-    value: items.length,
-    previousValue: null,
-  };
-}
-
-async function balanceSeries(
-  ctx: AdapterContext,
-  creds: StripeCredentials,
-  request: MetricRequest,
-  type: "charge" | "refund",
-  sign: 1 | -1,
-): Promise<RawSeries> {
-  const { items, truncated } = await walk<BalanceTransaction>(ctx, creds, "/balance_transactions", {
-    type,
-    "created[gte]": Math.floor(request.from.getTime() / 1000),
-    "created[lte]": Math.floor(request.to.getTime() / 1000),
-  });
-  if (truncated) throw tooLarge();
-
-  const wanted = ctx.preferredCurrency.toLowerCase();
-  const kept = items.filter((t) => t.currency.toLowerCase() === wanted);
-  const excluded = items.length - kept.length;
-
-  const points = bucketSum(
-    kept.map((t) => ({ at: new Date(t.created * 1000), amount: t.amount * sign })),
-    {
-      from: request.from,
-      to: request.to,
-      granularity: request.granularity,
-      timeZone: ctx.timeZone,
-    },
-  );
-
-  const value = points.reduce((sum, p) => sum + p.v, 0);
-  return {
-    unit: "currency",
-    currency: ctx.preferredCurrency,
-    points: request.wantSeries ? points : [],
-    value,
-    previousValue: null,
-    note:
-      excluded > 0
-        ? `${excluded} transaction${excluded === 1 ? "" : "s"} in another currency were excluded.`
-        : undefined,
-  };
-}
-
-async function subscriptionCounts(
-  ctx: AdapterContext,
-  creds: StripeCredentials,
-  request: MetricRequest,
-  field: "created" | "canceled",
-): Promise<RawSeries> {
-  const from = Math.floor(request.from.getTime() / 1000);
-  const to = Math.floor(request.to.getTime() / 1000);
-
-  // Stripe can filter subscriptions by `created` but not by `canceled_at`, so
-  // churn pulls cancelled subscriptions and buckets them client-side.
-  const params: Record<string, string | number> =
-    field === "created"
-      ? { status: "all", "created[gte]": from, "created[lte]": to }
-      : { status: "canceled" };
-
-  const { items, truncated } = await walk<Subscription>(ctx, creds, "/subscriptions", params);
-  if (truncated) throw tooLarge();
-
-  const events = items
-    .map((s) => (field === "created" ? s.created : s.canceled_at))
-    .filter((at): at is number => at !== null && at >= from && at <= to)
-    .map((at) => ({ at: new Date(at * 1000), amount: 1 }));
-
-  const points = bucketSum(events, {
-    from: request.from,
-    to: request.to,
-    granularity: request.granularity,
-    timeZone: ctx.timeZone,
-  });
-
-  return {
-    unit: "count",
-    currency: null,
-    points: request.wantSeries ? points : [],
-    value: events.length,
-    previousValue: null,
-  };
-}
+});

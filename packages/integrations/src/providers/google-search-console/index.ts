@@ -16,9 +16,10 @@ import type {
   RawSeries,
   VerifyResult,
 } from "../../types.ts";
+import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { ProviderError } from "../../types.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "google-search-console",
   name: "Google Search Console",
   category: "marketing",
@@ -35,51 +36,6 @@ export const manifest: ProviderManifest = {
     selectionLabel: "Which property?",
   },
   fields: [],
-  metrics: [
-    {
-      id: "clicks",
-      label: "Clicks",
-      shortLabel: "Clicks",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Clicks through to the site from Google Search in the window. Search Console data runs two to three days behind, so the newest days read low until they settle.",
-    },
-    {
-      id: "impressions",
-      label: "Impressions",
-      shortLabel: "Impr.",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "Times a result for the site was shown in the window. Two to three days behind.",
-    },
-    {
-      id: "ctr",
-      label: "Click-through rate",
-      shortLabel: "CTR",
-      unit: "ratio",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Clicks divided by impressions over the window, rather than the mean of daily rates, which would weight a quiet day the same as a busy one.",
-    },
-    {
-      id: "average_position",
-      label: "Average position",
-      shortLabel: "Position",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Mean ranking position across impressions in the window, weighted by impressions the way Search Console's own overview is. Lower is better.",
-    },
-  ],
   allowedHosts: ["www.googleapis.com", "searchconsole.googleapis.com", "oauth2.googleapis.com"],
   status: "stable",
   minAppVersion: "0.1.0",
@@ -173,7 +129,191 @@ async function query(
   return body.rows ?? [];
 }
 
-export const googleSearchConsole: ProviderAdapter<GoogleSearchConsoleCredentials> = {
+/** Clicks, impressions and position summed so a rate or a mean can be taken over any span. */
+interface Totals {
+  clicks: number;
+  impressions: number;
+  /** Σ position × impressions, so the mean is weighted the way Google's is. */
+  weightedPosition: number;
+}
+
+function add(into: Totals, row: QueryRow): void {
+  into.clicks += row.clicks;
+  into.impressions += row.impressions;
+  into.weightedPosition += row.position * row.impressions;
+}
+
+/**
+ * All four metrics come from the same rows; the request is identical and
+ * only the arithmetic at the end differs. Rates and means are computed
+ * from the summed components per bucket, never averaged from daily rates.
+ */
+async function performance(
+  ctx: AdapterContext,
+  creds: GoogleSearchConsoleCredentials,
+  request: MetricRequest,
+  /**
+   * The arithmetic that turns summed components into this metric's number.
+   *
+   * Passed in rather than switched on `request.metric`, which is what
+   * `figure()` did — a fifth place the four ids were written out, and one
+   * whose `default` arm was unreachable because the switch above had
+   * already filtered.
+   */
+  figure: (totals: Totals) => number,
+): Promise<SeriesResult> {
+  const windowMs = request.to.getTime() - request.from.getTime();
+  const rows = await query(ctx, creds, request.from, request.to);
+  const previousRows = request.comparePrevious
+    ? await query(
+        ctx,
+        creds,
+        new Date(request.from.getTime() - windowMs),
+        new Date(request.from.getTime() - 1),
+      )
+    : null;
+
+  const points = bucket(rows, figure, request.granularity, request, ctx.timeZone);
+  const sum = (set: QueryRow[]): Totals => {
+    const totals: Totals = { clicks: 0, impressions: 0, weightedPosition: 0 };
+    for (const row of set) add(totals, row);
+    return totals;
+  };
+
+  return {
+    points,
+    value: figure(sum(rows)),
+    previousValue: previousRows ? figure(sum(previousRows)) : null,
+    note: LAG_NOTE,
+  };
+}
+
+/** Gap-filled like `bucketSum`, but each bucket carries components rather than one sum. */
+function bucket(
+  rows: QueryRow[],
+  figure: (totals: Totals) => number,
+  granularity: Granularity,
+  window: { from: Date; to: Date },
+  timeZone: string,
+): { t: Date; v: number }[] {
+  const byBucket = new Map<number, Totals>();
+  for (const row of rows) {
+    const day = dayAt(row.keys[0] ?? "");
+    if (Number.isNaN(day.getTime())) continue;
+    const key = bucketStart(day, granularity, timeZone).getTime();
+    const totals = byBucket.get(key) ?? { clicks: 0, impressions: 0, weightedPosition: 0 };
+    add(totals, row);
+    byBucket.set(key, totals);
+  }
+
+  const points: { t: Date; v: number }[] = [];
+  let cursor = bucketStart(window.from, granularity, timeZone);
+  const end = bucketStart(window.to, granularity, timeZone);
+  for (let i = 0; cursor <= end && i < 1000; i++) {
+    const totals = byBucket.get(cursor.getTime());
+    points.push({ t: new Date(cursor), v: totals ? figure(totals) : 0 });
+    cursor = bucketStart(
+      new Date(cursor.getTime() + stride(granularity) + 1),
+      granularity,
+      timeZone,
+    );
+  }
+  return points;
+}
+
+/** Enough to land in the next bucket; `bucketStart` snaps it back. */
+function stride(granularity: Granularity): number {
+  switch (granularity) {
+    case "hour":
+      return 60 * 60 * 1000;
+    case "day":
+      return 24 * 60 * 60 * 1000;
+    case "week":
+      return 7 * 24 * 60 * 60 * 1000;
+    case "month":
+      return 31 * 24 * 60 * 60 * 1000;
+  }
+}
+
+const { series } = metricsFor<GoogleSearchConsoleCredentials>();
+
+/**
+ * One Search Console metric.
+ *
+ * All four come from the same rows and the same request; only the arithmetic
+ * at the end differs, which is why that arithmetic is the argument. It used
+ * to be a `figure()` switch keyed on metric id — the fourth list of these
+ * four ids in the file.
+ */
+function searchMetric(options: {
+  id: MetricId;
+  label: string;
+  shortLabel: string;
+  unit: "count" | "ratio";
+  methodology: string;
+  figure: (totals: Totals) => number;
+  /** Search Console's average position is 12.3, not 12 — see `MetricFormat`. */
+  format?: { decimals: number; compact: boolean };
+}) {
+  return series({
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    unit: options.unit,
+    granularities: ["day", "week", "month"],
+    compare: true,
+    methodology: options.methodology,
+
+    async fetch(ctx, creds, request: MetricRequest): Promise<SeriesResult> {
+      const result = await performance(ctx, creds, request, options.figure);
+      return options.format ? { ...result, format: options.format } : result;
+    },
+  });
+}
+
+export const clicks = searchMetric({
+  id: "clicks",
+  label: "Clicks",
+  shortLabel: "Clicks",
+  unit: "count",
+  methodology:
+    "Clicks through to the site from Google Search in the window. Search Console data runs two to three days behind, so the newest days read low until they settle.",
+  figure: (totals) => totals.clicks,
+});
+
+export const impressions = searchMetric({
+  id: "impressions",
+  label: "Impressions",
+  shortLabel: "Impr.",
+  unit: "count",
+  methodology: "Times a result for the site was shown in the window. Two to three days behind.",
+  figure: (totals) => totals.impressions,
+});
+
+export const ctr = searchMetric({
+  id: "ctr",
+  label: "Click-through rate",
+  shortLabel: "CTR",
+  unit: "ratio",
+  methodology:
+    "Clicks divided by impressions over the window, rather than the mean of daily rates, which would weight a quiet day the same as a busy one.",
+  // Over the window's components, never the mean of daily rates.
+  figure: (totals) => (totals.impressions === 0 ? 0 : totals.clicks / totals.impressions),
+});
+
+export const averagePosition = searchMetric({
+  id: "average_position",
+  label: "Average position",
+  shortLabel: "Position",
+  unit: "count",
+  methodology:
+    "Mean ranking position across impressions in the window, weighted by impressions the way Search Console's own overview is. Lower is better.",
+  figure: (totals) => (totals.impressions === 0 ? 0 : totals.weightedPosition / totals.impressions),
+  format: { decimals: 1, compact: false },
+});
+
+export const googleSearchConsole = provider({
+  metrics: [clicks, impressions, ctr, averagePosition],
   manifest,
   credentialSchema,
   // Tokens arrive from the OAuth callback and are never typed in. Without
@@ -199,7 +339,7 @@ export const googleSearchConsole: ProviderAdapter<GoogleSearchConsoleCredentials
     },
   }),
 
-  async verify(ctx, creds): Promise<VerifyResult> {
+  async verify(ctx, creds) {
     // The list rather than a query: a query on a site the account cannot
     // see answers 403 like everything else, but the list also catches the
     // site being gone — and it is one call either way.
@@ -210,140 +350,11 @@ export const googleSearchConsole: ProviderAdapter<GoogleSearchConsoleCredentials
         "That Search Console property is not on this Google account any more.",
       );
     }
+    // No `availableMetrics`: it was these four ids written out a second
+    // time, beside the manifest and the switch. Derived from the metrics now.
     return {
       accountLabel: creds.site.replace(/^sc-domain:/, "").replace(/\/$/, ""),
       currency: null,
-      availableMetrics: ["clicks", "impressions", "ctr", "average_position"] as MetricId[],
     };
   },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    switch (request.metric) {
-      case "clicks":
-      case "impressions":
-      case "ctr":
-      case "average_position":
-        return performance(ctx, creds, request);
-      default:
-        throw new ProviderError(
-          "unsupported",
-          `Google Search Console does not provide ${request.metric}.`,
-        );
-    }
-  },
-};
-
-/** Clicks, impressions and position summed so a rate or a mean can be taken over any span. */
-interface Totals {
-  clicks: number;
-  impressions: number;
-  /** Σ position × impressions, so the mean is weighted the way Google's is. */
-  weightedPosition: number;
-}
-
-function add(into: Totals, row: QueryRow): void {
-  into.clicks += row.clicks;
-  into.impressions += row.impressions;
-  into.weightedPosition += row.position * row.impressions;
-}
-
-function figure(metric: MetricId, totals: Totals): number {
-  switch (metric) {
-    case "clicks":
-      return totals.clicks;
-    case "impressions":
-      return totals.impressions;
-    case "ctr":
-      return totals.impressions === 0 ? 0 : totals.clicks / totals.impressions;
-    case "average_position":
-      return totals.impressions === 0 ? 0 : totals.weightedPosition / totals.impressions;
-    default:
-      return 0;
-  }
-}
-
-/**
- * All four metrics come from the same rows; the request is identical and
- * only the arithmetic at the end differs. Rates and means are computed
- * from the summed components per bucket, never averaged from daily rates.
- */
-async function performance(
-  ctx: AdapterContext,
-  creds: GoogleSearchConsoleCredentials,
-  request: MetricRequest,
-): Promise<RawSeries> {
-  const windowMs = request.to.getTime() - request.from.getTime();
-  const rows = await query(ctx, creds, request.from, request.to);
-  const previousRows = request.comparePrevious
-    ? await query(
-        ctx,
-        creds,
-        new Date(request.from.getTime() - windowMs),
-        new Date(request.from.getTime() - 1),
-      )
-    : null;
-
-  const points = bucket(rows, request.metric, request.granularity, request, ctx.timeZone);
-  const sum = (set: QueryRow[]): Totals => {
-    const totals: Totals = { clicks: 0, impressions: 0, weightedPosition: 0 };
-    for (const row of set) add(totals, row);
-    return totals;
-  };
-
-  return {
-    unit: request.metric === "ctr" ? "ratio" : "count",
-    currency: null,
-    points,
-    value: figure(request.metric, sum(rows)),
-    previousValue: previousRows ? figure(request.metric, sum(previousRows)) : null,
-    note: LAG_NOTE,
-    ...(request.metric === "average_position" ? { format: { decimals: 1, compact: false } } : {}),
-  };
-}
-
-/** Gap-filled like `bucketSum`, but each bucket carries components rather than one sum. */
-function bucket(
-  rows: QueryRow[],
-  metric: MetricId,
-  granularity: Granularity,
-  window: { from: Date; to: Date },
-  timeZone: string,
-): { t: Date; v: number }[] {
-  const byBucket = new Map<number, Totals>();
-  for (const row of rows) {
-    const day = dayAt(row.keys[0] ?? "");
-    if (Number.isNaN(day.getTime())) continue;
-    const key = bucketStart(day, granularity, timeZone).getTime();
-    const totals = byBucket.get(key) ?? { clicks: 0, impressions: 0, weightedPosition: 0 };
-    add(totals, row);
-    byBucket.set(key, totals);
-  }
-
-  const points: { t: Date; v: number }[] = [];
-  let cursor = bucketStart(window.from, granularity, timeZone);
-  const end = bucketStart(window.to, granularity, timeZone);
-  for (let i = 0; cursor <= end && i < 1000; i++) {
-    const totals = byBucket.get(cursor.getTime());
-    points.push({ t: new Date(cursor), v: totals ? figure(metric, totals) : 0 });
-    cursor = bucketStart(
-      new Date(cursor.getTime() + stride(granularity) + 1),
-      granularity,
-      timeZone,
-    );
-  }
-  return points;
-}
-
-/** Enough to land in the next bucket; `bucketStart` snaps it back. */
-function stride(granularity: Granularity): number {
-  switch (granularity) {
-    case "hour":
-      return 60 * 60 * 1000;
-    case "day":
-      return 24 * 60 * 60 * 1000;
-    case "week":
-      return 7 * 24 * 60 * 60 * 1000;
-    case "month":
-      return 31 * 24 * 60 * 60 * 1000;
-  }
-}
+});

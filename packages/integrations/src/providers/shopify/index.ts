@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
 import { errorForStatus } from "../../http.ts";
-import { RECENT_PAYMENTS_LIMIT, recentPayments } from "../../list.ts";
+import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
+import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMinorUnits } from "../../normalise.ts";
 import type {
   AdapterContext,
+  RawListItem,
   MetricRequest,
   ProviderAdapter,
   RawSeries,
@@ -427,20 +429,7 @@ function rethrow(error: unknown): never {
   throw error;
 }
 
-export const shopify: ProviderAdapter<ShopifyCredentials> = {
-  manifest,
-  credentialSchema,
-
-  verify(ctx, creds): Promise<VerifyResult> {
-    return verify(ctx, creds).catch(rethrow);
-  },
-
-  fetchMetric(ctx, creds, request): Promise<RawSeries> {
-    return fetchMetric(ctx, creds, request).catch(rethrow);
-  },
-};
-
-async function verify(ctx: AdapterContext, creds: ShopifyCredentials): Promise<VerifyResult> {
+async function verifyToken(ctx: AdapterContext, creds: ShopifyCredentials) {
   // One round trip, tolerating per-field errors: a token missing
   // `read_customers` returns the shop and a null `customersCount` beside an
   // ACCESS_DENIED, and narrowing on that is better than rejecting a key that
@@ -468,40 +457,20 @@ async function verify(ctx: AdapterContext, creds: ShopifyCredentials): Promise<V
     );
   }
 
-  const availableMetrics: MetricId[] = [
+  // Said as what the token *cannot* read. `provider()` derives the available
+  // set from the metrics, so this is no longer a second list of them.
+  const unavailableMetrics: MetricId[] = [
     ...(canReadOrders
-      ? (["revenue", "orders", "average_order_value", "refunds", "recent_payments"] as const)
-      : []),
-    ...(canReadCustomers ? (["customers", "new_customers"] as const) : []),
+      ? []
+      : (["revenue", "orders", "average_order_value", "refunds", "recent_payments"] as const)),
+    ...(canReadCustomers ? [] : (["customers", "new_customers"] as const)),
   ];
 
   return {
     accountLabel: data.shop.name ?? creds.shop_domain.replace(/\.myshopify\.com$/, ""),
     currency: data.shop.currencyCode?.toUpperCase() ?? null,
-    availableMetrics,
+    unavailableMetrics,
   };
-}
-
-async function fetchMetric(
-  ctx: AdapterContext,
-  creds: ShopifyCredentials,
-  request: MetricRequest,
-): Promise<RawSeries> {
-  switch (request.metric) {
-    case "revenue":
-    case "orders":
-    case "average_order_value":
-    case "refunds":
-      return fromOrders(ctx, creds, request);
-    case "recent_payments":
-      return latestOrders(ctx, creds);
-    case "new_customers":
-      return newCustomers(ctx, creds, request);
-    case "customers":
-      return totalCustomers(ctx, creds);
-    default:
-      throw new ProviderError("unsupported", `Shopify does not provide ${request.metric}.`);
-  }
 }
 
 /**
@@ -516,7 +485,18 @@ async function fromOrders(
   ctx: AdapterContext,
   creds: ShopifyCredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+  /**
+   * What this metric wants out of the shared walk.
+   *
+   * `revenue` and `refunds` differ only in which money bag they read;
+   * `orders` counts rows; `average_order_value` is the window's own ratio.
+   * All four were `case` labels falling through to one body that then
+   * switched on `request.metric` twice more.
+   */
+  kind: "money" | "count" | "average",
+  /** Which bag a money metric reads. Ignored by the other two. */
+  bag: (order: OrderNode) => number = (order) => money(order.totalPriceSet)?.amount ?? 0,
+): Promise<SeriesResult> {
   const windowMs = request.to.getTime() - request.from.getTime();
   const from = request.comparePrevious ? new Date(request.from.getTime() - windowMs) : request.from;
 
@@ -524,14 +504,9 @@ async function fromOrders(
   const paid = paidOrders(walked);
   const currency = shopCurrency(paid, ctx.preferredCurrency);
 
-  const amountOf = (order: OrderNode): number => {
-    const bag = request.metric === "refunds" ? order.totalRefundedSet : order.totalPriceSet;
-    return money(bag)?.amount ?? 0;
-  };
-
   const events = paid.map((order) => ({
     at: new Date(order.createdAt),
-    amount: amountOf(order),
+    amount: bag(order),
   }));
 
   const inWindow = (at: Date) => at >= request.from && at <= request.to;
@@ -547,11 +522,9 @@ async function fromOrders(
       timeZone: ctx.timeZone,
     });
 
-  if (request.metric === "orders") {
+  if (kind === "count") {
     const counted = current.map((event) => ({ at: event.at, amount: 1 }));
     return {
-      unit: "count",
-      currency: null,
       points: bucket(counted),
       value: current.length,
       previousValue: request.comparePrevious ? previous.length : null,
@@ -559,14 +532,13 @@ async function fromOrders(
     };
   }
 
-  if (request.metric === "average_order_value") {
+  if (kind === "average") {
     // The headline is the window's own ratio, not the mean of the points: a
     // Tuesday with two orders would otherwise weigh as much as a Black Friday
     // with four hundred.
     const totals = bucket(current);
     const counts = bucket(current.map((event) => ({ at: event.at, amount: 1 })));
     return {
-      unit: "currency",
       currency,
       // Same from, to and granularity, so the two walks produce the same
       // bucket sequence and can be zipped by index.
@@ -581,7 +553,6 @@ async function fromOrders(
   }
 
   return {
-    unit: "currency",
     currency,
     points: bucket(current),
     value: sum(current),
@@ -595,7 +566,10 @@ function divide(total: number, count: number): number {
   return count === 0 ? 0 : Math.round(total / count);
 }
 
-async function latestOrders(ctx: AdapterContext, creds: ShopifyCredentials): Promise<RawSeries> {
+async function latestOrders(
+  ctx: AdapterContext,
+  creds: ShopifyCredentials,
+): Promise<RawListItem[]> {
   // Twice the limit, because the newest orders include the unpaid ones and
   // those are filtered out here rather than by Shopify.
   const data = await graphql<{ orders: { nodes: OrderNode[] } }>(ctx, creds, RECENT_ORDERS, {
@@ -627,16 +601,14 @@ async function latestOrders(ctx: AdapterContext, creds: ShopifyCredentials): Pro
   // currency, and a store's rows are all in the store's. Handing it the
   // store's currency is what keeps the headline from reading zero for a
   // merchant in Berlin whose account preference still says USD.
-  const currency = shopCurrency(paid, ctx.preferredCurrency);
-  const series = recentPayments({ ...ctx, preferredCurrency: currency }, rows);
-  return { ...series, note: currencyNote(currency, ctx.preferredCurrency) };
+  return rows;
 }
 
 async function newCustomers(
   ctx: AdapterContext,
   creds: ShopifyCredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   const windowMs = request.to.getTime() - request.from.getTime();
   const from = request.comparePrevious ? new Date(request.from.getTime() - windowMs) : request.from;
 
@@ -664,8 +636,6 @@ async function newCustomers(
   const current = events.filter((event) => inWindow(event.at));
 
   return {
-    unit: "count",
-    currency: null,
     points: bucketSum(current, {
       from: request.from,
       to: request.to,
@@ -680,7 +650,10 @@ async function newCustomers(
   };
 }
 
-async function totalCustomers(ctx: AdapterContext, creds: ShopifyCredentials): Promise<RawSeries> {
+async function totalCustomers(
+  ctx: AdapterContext,
+  creds: ShopifyCredentials,
+): Promise<ScalarResult> {
   const data = await graphql<{ customersCount: { count: number; precision: string } | null }>(
     ctx,
     creds,
@@ -689,12 +662,7 @@ async function totalCustomers(ctx: AdapterContext, creds: ShopifyCredentials): P
   const count = data.customersCount?.count ?? 0;
 
   return {
-    unit: "count",
-    currency: null,
-    points: [{ t: ctx.now(), v: count }],
     value: count,
-    previousValue: null,
-    asOf: ctx.now(),
     // Shopify stops counting at ten thousand and says so in `precision`.
     // Passing that on matters: the tile is otherwise a store's growth
     // flatlining at exactly 10,000 with no explanation.
@@ -704,3 +672,117 @@ async function totalCustomers(ctx: AdapterContext, creds: ShopifyCredentials): P
         : undefined,
   };
 }
+
+const { scalar, series } = metricsFor<ShopifyCredentials>();
+
+/**
+ * Shopify's throttling arrives as a `Throttled`, not a `ProviderError`, and
+ * every call out of this file has to translate it.
+ *
+ * It used to sit on the adapter's two members. Per metric that would be six
+ * chances to forget the `.catch`, so it is a wrapper instead.
+ */
+function guarded<A extends unknown[], R>(
+  inner: (...args: A) => Promise<R>,
+): (...args: A) => Promise<R> {
+  return (...args) => inner(...args).catch(rethrow);
+}
+
+export const revenue = series({
+  id: "revenue",
+  label: "Sales",
+  shortLabel: "Sales",
+  unit: "currency",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Order totals for orders placed in the window that took payment, in the store's own currency. Gross: a later refund does not remove the order from the day it was placed. The Refunds widget is the other half.",
+  fetch: guarded((ctx, creds, request) => fromOrders(ctx, creds, request, "money")),
+});
+
+export const orders = series({
+  id: "orders",
+  label: "Orders",
+  shortLabel: "Orders",
+  unit: "count",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Orders placed in the window that took payment. Test orders and abandoned or unpaid checkouts are excluded, so this sits below the Shopify admin's own order count when the store has pending orders.",
+  fetch: guarded((ctx, creds, request) => fromOrders(ctx, creds, request, "count")),
+});
+
+export const averageOrderValue = series({
+  id: "average_order_value",
+  label: "Average order value",
+  shortLabel: "AOV",
+  unit: "currency",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  // The headline is the window's own ratio, not the mean of the daily
+  // ones: averaging averages weights a Tuesday with two orders the same
+  // as a Black Friday with four hundred.
+  freshnessSeconds: 300,
+  methodology:
+    "Sales divided by orders over the whole window. Each point is that day's own ratio, so the headline is not the average of the points.",
+  fetch: guarded((ctx, creds, request) => fromOrders(ctx, creds, request, "average")),
+});
+
+export const refunds = series({
+  id: "refunds",
+  label: "Refunds",
+  shortLabel: "Refunds",
+  unit: "currency",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  freshnessSeconds: 60,
+  methodology:
+    "Amounts refunded against orders placed in the window, bucketed by the order's date rather than the refund's. A refund of a much older order is not counted here.",
+  fetch: guarded((ctx, creds, request) =>
+    fromOrders(ctx, creds, request, "money", (order) => money(order.totalRefundedSet)?.amount ?? 0),
+  ),
+});
+
+export const newCustomersMetric = series({
+  id: "new_customers",
+  label: "New customers",
+  shortLabel: "New",
+  unit: "count",
+  compare: true,
+  granularities: ["hour", "day", "week", "month"],
+  freshnessSeconds: 300,
+  methodology:
+    "Customer records created in the window. Shopify creates one at checkout, so a guest who buys twice counts once. Somebody who only signed up for the newsletter counts too.",
+  fetch: guarded(newCustomers),
+});
+
+export const customers = scalar({
+  id: "customers",
+  label: "Customers",
+  shortLabel: "Customers",
+  unit: "count",
+  freshnessSeconds: 300,
+  methodology:
+    "Every customer record on the store right now, which is what the admin's Customers page counts. Shopify reports this as an estimate above ten thousand.",
+  fetch: guarded(totalCustomers),
+});
+
+export const payments = recentPaymentsMetric<ShopifyCredentials>({
+  methodology:
+    "The latest orders that took payment, newest first, with the buyer's name and the first product on the order. The headline is their total in the store's currency.",
+  rows: guarded(latestOrders),
+  // A store sells in one currency, and it is usually not the user's. Totalled
+  // in theirs, every row is excluded and the tile reads zero beside a list of
+  // ten sales.
+  totalIn: (ctx, items) => items.find((item) => item.currency)?.currency ?? ctx.preferredCurrency,
+  note: (ctx, totalledIn) => currencyNote(totalledIn, ctx.preferredCurrency),
+});
+
+export const shopify = provider({
+  manifest,
+  credentialSchema,
+  metrics: [revenue, orders, averageOrderValue, refunds, newCustomersMetric, customers, payments],
+  verify: guarded(verifyToken),
+});

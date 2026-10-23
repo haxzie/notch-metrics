@@ -1,8 +1,7 @@
 import type { ProviderManifest } from "@notch/schemas";
-import { recentPaymentsDescriptor } from "../../list.ts";
 import { paymentReceivedNotification } from "../../notifications.ts";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "paddle",
   name: "Paddle",
   category: "revenue",
@@ -34,71 +33,6 @@ export const manifest: ProviderManifest = {
       ],
       default: "live",
     },
-  ],
-  metrics: [
-    {
-      id: "mrr",
-      label: "Monthly recurring revenue",
-      shortLabel: "MRR",
-      unit: "currency",
-      granularities: ["day", "month"],
-      supportsSeries: false,
-      supportsCompare: false,
-      freshnessSeconds: 180,
-      methodology:
-        "Active subscriptions, each recurring item's unit price times quantity normalised to a month by its billing cycle. Discounts are not applied. A snapshot of the book right now.",
-    },
-    {
-      id: "revenue",
-      label: "Revenue",
-      shortLabel: "Revenue",
-      unit: "currency",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 60,
-      methodology:
-        "Transactions billed in the window that are paid or completed, by their total including tax, before Paddle's fee. Bucketed by billing date.",
-    },
-    {
-      id: "active_subscribers",
-      label: "Active subscriptions",
-      shortLabel: "Active",
-      unit: "count",
-      granularities: ["day", "month"],
-      supportsSeries: false,
-      supportsCompare: false,
-      freshnessSeconds: 180,
-      methodology:
-        "Subscriptions in status `active` right now. Trialing and paused are not counted.",
-    },
-    {
-      id: "new_subscribers",
-      label: "New subscriptions",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 180,
-      methodology:
-        "Subscriptions whose `started_at` falls in the window, in any status. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
-    },
-    {
-      id: "churned_subscribers",
-      label: "Churned subscriptions",
-      shortLabel: "Churn",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      freshnessSeconds: 180,
-      methodology:
-        "Subscriptions whose `canceled_at` falls in the window. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
-    },
-    recentPaymentsDescriptor(
-      "The latest paid or completed transactions by billing date, with the customer's name or email and the first product on the transaction. Totals include tax.",
-    ),
   ],
   notifications: [
     paymentReceivedNotification(

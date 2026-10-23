@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { plausible } from "../src/providers/plausible/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { scalar, stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = { api_key: "plausible-key-0123456789", site_id: "example.com" };
 
@@ -62,7 +62,7 @@ describe("plausible verify", () => {
     const result = await plausible.verify(ctx, creds);
 
     expect(result.accountLabel).toBe("example.com");
-    expect(result.availableMetrics).toEqual(["visitors", "pageviews", "sessions", "bounce_rate"]);
+    expectMetrics(result.availableMetrics, ["visitors", "pageviews", "sessions", "bounce_rate"]);
     // The site endpoint, not a stats query: verifying must not spend quota.
     expect(scalar(ctx.calls[0])).toContain("/api/v1/sites/example.com");
     expect(ctx.calls).toHaveLength(1);

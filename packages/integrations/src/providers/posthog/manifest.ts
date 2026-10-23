@@ -1,6 +1,6 @@
 import type { ProviderManifest } from "@notch/schemas";
 
-export const manifest: ProviderManifest = {
+export const manifest: Omit<ProviderManifest, "metrics"> = {
   id: "posthog",
   name: "PostHog",
   category: "analytics",
@@ -47,61 +47,6 @@ export const manifest: ProviderManifest = {
         { value: "eu", label: "European Union" },
       ],
       default: "us",
-    },
-  ],
-  metrics: [
-    {
-      id: "active_users",
-      label: "Active users",
-      shortLabel: "Users",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "People with at least one event in the window, de-duplicated. The headline counts each person once across the whole window, so the bars do not add up to it: one person on three days is one user and three bars. Days are your PostHog project's timezone, so the figures match its own dashboards.",
-    },
-    {
-      id: "new_users",
-      label: "New users",
-      shortLabel: "New",
-      unit: "count",
-      granularities: ["day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Person profiles PostHog first created in the window. Anonymous visitors who are never identified do not create one, so this counts people PostHog can tell apart rather than every first visit.",
-    },
-    {
-      id: "events",
-      label: "Events",
-      shortLabel: "Events",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "Every event recorded in the window, of every name.",
-    },
-    {
-      id: "pageviews",
-      label: "Pageviews",
-      shortLabel: "Views",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology: "`$pageview` events in the window. Repeat views by one person all count.",
-    },
-    {
-      id: "sessions",
-      label: "Sessions",
-      shortLabel: "Sessions",
-      unit: "count",
-      granularities: ["hour", "day", "week", "month"],
-      supportsSeries: true,
-      supportsCompare: true,
-      methodology:
-        "Distinct `$session_id`s seen in the window. The headline de-duplicates across the whole window, so a session spanning midnight is one session and two bars.",
     },
   ],
   // The private API hosts, not the `*.i.posthog.com` ingestion ones — those

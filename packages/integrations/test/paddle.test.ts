@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { paddle } from "../src/providers/paddle/index.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { scalar, stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = {
   api_key: "pdl_live_apikey_01gtgztp8f4kek3yd4g1wrksa3_q6TGTJyvoIz7LDtXT65bX7_AQO",
@@ -292,7 +292,7 @@ describe("paddle verify", () => {
       "/subscriptions": { __status: 403 },
     });
     const result = await paddle.verify(ctx, creds);
-    expect(result.availableMetrics).toEqual(["revenue", "recent_payments"]);
+    expectMetrics(result.availableMetrics, ["revenue", "recent_payments"]);
   });
 
   it("treats 403 on the first call as a bad key, since Paddle never answers 401", async () => {

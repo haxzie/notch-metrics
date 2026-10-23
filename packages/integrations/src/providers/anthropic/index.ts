@@ -9,6 +9,7 @@ import type {
   RawSeries,
   VerifyResult,
 } from "../../types.ts";
+import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { ProviderError } from "../../types.ts";
 import { manifest } from "./manifest.ts";
 
@@ -146,69 +147,20 @@ function inputTokens(result: UsageResult): number {
   );
 }
 
-export const anthropic: ProviderAdapter<AnthropicCredentials> = {
-  manifest,
-  credentialSchema,
-
-  async verify(ctx, creds): Promise<VerifyResult> {
-    const usage = new URL(`${API}/organizations/usage_report/messages`);
-    usage.searchParams.set("starting_at", new Date(ctx.now().getTime() - DAY_MS).toISOString());
-    usage.searchParams.set("bucket_width", "1d");
-    usage.searchParams.set("limit", "1");
-    if (creds.workspace_id) usage.searchParams.append("workspace_ids[]", creds.workspace_id);
-    await get<Page<UsageResult>>(ctx, creds, usage);
-
-    const available: MetricId[] = ["tokens", "input_tokens", "output_tokens"];
-
-    // Narrowed rather than fatal, as with OpenAI: token volume is useful on its
-    // own, and the two reports are separately available on a scoped key.
-    try {
-      const costs = new URL(`${API}/organizations/cost_report`);
-      // Yesterday 00:00 UTC: the most recent range that is a whole bucket.
-      costs.searchParams.set(
-        "starting_at",
-        new Date(startOfUTCDay(ctx.now()).getTime() - DAY_MS).toISOString(),
-      );
-      costs.searchParams.set("limit", "1");
-      await get<Page<CostResult>>(ctx, creds, costs);
-      available.push("api_spend");
-    } catch (error) {
-      // A permanent refusal narrows; a transient one is fatal.
-      //
-      // `availableMetrics` is written once at connect, so letting a 503 pass
-      // would hide spend until the user reconnected. But re-throwing
-      // everything else meant an optional probe could fail the entire
-      // connection — which is what a malformed cost request did, leaving
-      // Claude unconnectable even though all three token metrics worked.
-      const permanent = new Set(["auth_failed", "bad_response", "unsupported", "not_found"]);
-      if (!(error instanceof ProviderError) || !permanent.has(error.code)) throw error;
-      ctx.log("anthropic cost report refused, narrowing metrics", {
-        code: error.code,
-        message: error.message,
-      });
-    }
-
-    return {
-      // The Admin API exposes no organisation name, so a second Claude
-      // connection is distinguished by its workspace or, failing that, by the
-      // "(2)" `connectionName` appends.
-      accountLabel: creds.workspace_id ?? null,
-      currency: "USD",
-      availableMetrics: available,
-    };
-  },
-
-  async fetchMetric(ctx, creds, request: MetricRequest): Promise<RawSeries> {
-    if (request.metric === "api_spend") return spend(ctx, creds, request);
-    return usage(ctx, creds, request);
-  },
-};
-
 async function usage(
   ctx: AdapterContext,
   creds: AnthropicCredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+  /**
+   * Which of the report's columns this metric is.
+   *
+   * Passed in rather than switched on `request.metric`. The switch had a
+   * `default` arm throwing `unsupported` that was unreachable — `fetchMetric`
+   * had already decided this was a token metric — and the three cases were
+   * the fourth place those three ids were written out.
+   */
+  pick: (result: UsageResult) => number,
+): Promise<SeriesResult> {
   const width = request.granularity === "hour" ? "1h" : "1d";
   const plan = planWalk({
     from: request.from,
@@ -232,19 +184,6 @@ async function usage(
     creds.workspace_id ? [["workspace_ids[]", creds.workspace_id]] : [],
   );
 
-  const pick = (result: UsageResult): number => {
-    switch (request.metric) {
-      case "tokens":
-        return inputTokens(result) + result.output_tokens;
-      case "input_tokens":
-        return inputTokens(result);
-      case "output_tokens":
-        return result.output_tokens;
-      default:
-        throw new ProviderError("unsupported", `Claude does not provide ${request.metric}.`);
-    }
-  };
-
   const events = rows.map((row) => ({ at: row.at, amount: pick(row.result) }));
   return series(ctx, events, request, plan.comparePrevious, null);
 }
@@ -253,7 +192,7 @@ async function spend(
   ctx: AdapterContext,
   creds: AnthropicCredentials,
   request: MetricRequest,
-): Promise<RawSeries> {
+): Promise<SeriesResult> {
   if (request.granularity === "hour") {
     throw new ProviderError(
       "unsupported",
@@ -327,7 +266,7 @@ function series(
   comparePrevious: boolean,
   currency: string | null,
   note?: string,
-): RawSeries {
+): SeriesResult {
   const total = (rows: typeof events) => rows.reduce((sum, row) => sum + row.amount, 0);
 
   const current = events.filter((row) => row.at >= request.from);
@@ -343,11 +282,142 @@ function series(
     : [];
 
   return {
-    unit: currency ? "currency" : "count",
     currency,
     points,
     value: Math.round(total(current)),
     previousValue: comparePrevious ? Math.round(total(previous)) : null,
-    note,
+    ...(note !== undefined ? { note } : {}),
   };
 }
+
+const { series: seriesMetric } = metricsFor<AnthropicCredentials>();
+
+/**
+ * One of the three token metrics.
+ *
+ * All three walk the same usage report and differ only in which of its
+ * columns they add up — which is the argument, where it used to be a `pick`
+ * switch inside `usage`.
+ */
+function tokenMetric(options: {
+  id: MetricId;
+  label: string;
+  shortLabel: string;
+  methodology: string;
+  pick: (result: UsageResult) => number;
+}) {
+  return seriesMetric({
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    unit: "count",
+    // Hourly is real here: the messages report buckets by `1h`. Spend below
+    // cannot, which is why the two declare different sets.
+    granularities: ["hour", "day", "week"],
+    compare: true,
+    freshnessSeconds: 300,
+    methodology: options.methodology,
+    fetch: (ctx, creds, request: MetricRequest) => usage(ctx, creds, request, options.pick),
+  });
+}
+
+export const tokens = tokenMetric({
+  id: "tokens",
+  label: "Tokens",
+  shortLabel: "Tokens",
+  methodology:
+    "Input plus output tokens on Messages requests in the window. Input is uncached input, cache reads and cache writes added together, which is what the Usage page shows. It is not what you were billed, since cache reads cost a tenth of the rest.",
+  pick: (result) => inputTokens(result) + result.output_tokens,
+});
+
+/** `inputTokens` is the helper that sums the cache tiers; hence the suffix. */
+export const inputTokensMetric = tokenMetric({
+  id: "input_tokens",
+  label: "Input tokens",
+  shortLabel: "Input",
+  methodology:
+    "Uncached input, cache reads and both cache-write tiers added together. Each is priced differently; this is the volume, not the bill.",
+  pick: inputTokens,
+});
+
+export const outputTokens = tokenMetric({
+  id: "output_tokens",
+  label: "Output tokens",
+  shortLabel: "Output",
+  methodology:
+    "Output tokens generated on Messages requests in the window. Thinking tokens are output tokens and are counted here.",
+  pick: (result) => result.output_tokens,
+});
+
+export const apiSpend = seriesMetric({
+  id: "api_spend",
+  label: "API spend",
+  shortLabel: "Spend",
+  unit: "currency",
+  // The cost report is daily-only, same as OpenAI's — so `hour` is absent
+  // here where the token metrics above have it, and `24h` is not offered.
+  granularities: ["day", "week"],
+  compare: true,
+  freshnessSeconds: 300,
+  methodology:
+    "Billed cost per day from the cost report: tokens, web search and code execution. Priority Tier is billed differently and is not included, which is Anthropic's own caveat, not ours.",
+  fetch: spend,
+});
+
+export const anthropic = provider({
+  metrics: [tokens, inputTokensMetric, outputTokens, apiSpend],
+  manifest,
+  credentialSchema,
+
+  async verify(ctx, creds) {
+    const usage = new URL(`${API}/organizations/usage_report/messages`);
+    usage.searchParams.set("starting_at", new Date(ctx.now().getTime() - DAY_MS).toISOString());
+    usage.searchParams.set("bucket_width", "1d");
+    usage.searchParams.set("limit", "1");
+    if (creds.workspace_id) usage.searchParams.append("workspace_ids[]", creds.workspace_id);
+    await get<Page<UsageResult>>(ctx, creds, usage);
+
+    // Spend is withheld rather than the three token metrics being listed,
+    // which is the same narrowing stated the other way up: `provider()`
+    // derives what is available from the metrics, so `verify` only has to
+    // say what this key cannot reach.
+    let spendUnavailable = false;
+
+    // Narrowed rather than fatal, as with OpenAI: token volume is useful on its
+    // own, and the two reports are separately available on a scoped key.
+    try {
+      const costs = new URL(`${API}/organizations/cost_report`);
+      // Yesterday 00:00 UTC: the most recent range that is a whole bucket.
+      costs.searchParams.set(
+        "starting_at",
+        new Date(startOfUTCDay(ctx.now()).getTime() - DAY_MS).toISOString(),
+      );
+      costs.searchParams.set("limit", "1");
+      await get<Page<CostResult>>(ctx, creds, costs);
+    } catch (error) {
+      // A permanent refusal narrows; a transient one is fatal.
+      //
+      // `availableMetrics` is written once at connect, so letting a 503 pass
+      // would hide spend until the user reconnected. But re-throwing
+      // everything else meant an optional probe could fail the entire
+      // connection — which is what a malformed cost request did, leaving
+      // Claude unconnectable even though all three token metrics worked.
+      const permanent = new Set(["auth_failed", "bad_response", "unsupported", "not_found"]);
+      if (!(error instanceof ProviderError) || !permanent.has(error.code)) throw error;
+      spendUnavailable = true;
+      ctx.log("anthropic cost report refused, narrowing metrics", {
+        code: error.code,
+        message: error.message,
+      });
+    }
+
+    return {
+      // The Admin API exposes no organisation name, so a second Claude
+      // connection is distinguished by its workspace or, failing that, by the
+      // "(2)" `connectionName` appends.
+      accountLabel: creds.workspace_id ?? null,
+      currency: "USD",
+      ...(spendUnavailable ? { unavailableMetrics: ["api_spend" as MetricId] } : {}),
+    };
+  },
+});

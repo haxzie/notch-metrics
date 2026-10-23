@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { amplitude } from "../src/providers/amplitude/index.ts";
 import { ProviderError } from "../src/types.ts";
-import { scalar, stubContext } from "./helpers.ts";
+import { scalar, stubContext, expectMetrics } from "./helpers.ts";
 
 const creds = {
   api_key: "ampl1tudeapikey0123456789",
@@ -35,7 +35,7 @@ describe("amplitude verify", () => {
     const ctx = stubContext({ "/api/2/users": chart({ "2026-10-05": 7 }) });
     const result = await amplitude.verify(ctx, creds);
 
-    expect(result.availableMetrics).toEqual(["events", "active_users", "new_users"]);
+    expectMetrics(result.availableMetrics, ["events", "active_users", "new_users"]);
     // One day, today, because there is no identity endpoint to ask instead.
     const call = new URL(scalar(ctx.calls[0]));
     expect(call.searchParams.get("start")).toBe("20261005");

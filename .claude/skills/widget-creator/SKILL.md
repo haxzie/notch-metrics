@@ -5,55 +5,87 @@ description: Add or change a widget — a metric an existing provider offers. Us
 
 # Adding a widget
 
-A widget is a **metric on a provider that already exists**. Adding one is four
-edits and no app release:
+A widget is a **metric on a provider that already exists**. Adding one is
+three edits and no app release:
 
 1. `packages/schemas/src/ids.ts` — the `MetricId` enum, if the id is new.
 2. `packages/schemas/src/keywords.ts` — search synonyms, if the id is new.
-3. `packages/integrations/src/providers/<id>/index.ts` — the descriptor in
-   `manifest.metrics`, the id in `verify`'s `availableMetrics`, and a `case`
-   in `fetchMetric`.
+3. `packages/integrations/src/providers/<id>/` — **one definition**: a
+   `scalar`/`series`/`total`/`list` call carrying the descriptor and the
+   `fetch` together, added to the provider's `metrics: [...]`.
 4. A changeset naming `@notch/integrations`.
+
+There is no `availableMetrics` to update and no `fetchMetric` switch to add a
+`case` to. `provider()` derives both from `metrics`, which is why adding one
+is a single place rather than three that could disagree.
 
 Nothing in `apps/mac` changes. The Mac reads the catalogue at runtime, which
 is the whole point of `GET /v1/connectors`.
+
+## Pick the shape first
+
+The factory you call _is_ the shape, and it decides what `fetch` must return
+and which controls the user gets. Four, and the names are the imports:
+
+| Factory  | What it is                              | `fetch` returns                    |
+| -------- | --------------------------------------- | ---------------------------------- |
+| `scalar` | one number for the present, no window   | `{ value }`                        |
+| `series` | a number per bucket over a window       | `{ points, value, previousValue }` |
+| `total`  | one number _for_ a window, with a delta | `{ value, previousValue }`         |
+| `list`   | rows of what just happened              | `{ items }`                        |
+
+Declare `series` and forget `points` and it will not compile. That is the
+point of there being four functions rather than one taking a `shape` field:
+the discriminant is in the name, so inference runs forwards and a mistake in
+`fetch` lands on the wrong field rather than on line one of the literal.
+
+`total` is the one worth reading twice. It is a number over a window that
+cannot be broken down — RevenueCat's revenue comes from an endpoint answering
+one figure per call, so a thirty-point sparkline would be a minute of its rate
+budget; YouTube's subscriber count has a current total from one API and daily
+deltas from another and no way to join them into a line. Both want a Range
+control and a comparison and no chart.
+
+Only `series` and `total` take `granularities`, because they are the only ones
+where a range means anything.
 
 ## The descriptor is a UI contract, not documentation
 
 Every field drives something the user sees. Getting one wrong produces a
 control that lies rather than a build that fails.
 
-| Field             | What it actually does                                              |
-| ----------------- | ------------------------------------------------------------------ |
-| `supportsSeries`  | `false` hides the **Chart** control and the sparkline entirely.    |
-| `supportsCompare` | With `supportsSeries`, decides whether **Range** is shown at all.  |
-| `unit`            | How the number is formatted. `currency` means **minor units**.     |
-| `shortLabel`      | The title on the tile. It has about 14 characters.                 |
-| `label`           | The name in the widget browser and the configure pane's header.    |
-| `methodology`     | Always shown, under Data. This is where "ours differs from theirs" |
-| `granularities`   | **Which ranges the pane offers.** See below — this one bites.      |
-| `keywords`        | Browser search. Central ones are in `keywords.ts`.                 |
+| Field           | What it actually does                                              |
+| --------------- | ------------------------------------------------------------------ |
+| the factory     | Which controls appear at all — see the table above.                |
+| `compare`       | On `series` and `total`: whether a previous-period delta is shown. |
+| `unit`          | How the number is formatted. `currency` means **minor units**.     |
+| `shortLabel`    | The title on the tile. It has about 14 characters.                 |
+| `label`         | The name in the widget browser and the configure pane's header.    |
+| `methodology`   | Always shown, under Data. This is where "ours differs from theirs" |
+| `granularities` | **Which ranges the pane offers.** See below — this one bites.      |
+| `keywords`      | Browser search. Central ones are in `keywords.ts`.                 |
 
-**The rule that matters:** `supportsSeries: false` **and**
-`supportsCompare: false` means the configure pane shows no Range and no Chart,
-because neither changes anything. Both flags false is correct for a snapshot —
-a count of what exists right now, with no history behind it. 19 of the 64
-metrics are in that category.
+**The rule that matters:** a `scalar` shows no Range and no Chart, because
+neither changes anything. That is correct for a count of what exists right
+now, with no history behind it.
 
 Get this wrong in the generous direction and the user gets a range picker that
-does nothing, which is what GitHub's stargazers shipped with.
+does nothing, which is what GitHub's stargazers shipped with. The old encoding
+let you: `supportsSeries` and `supportsCompare` were two booleans, and nothing
+stopped a snapshot declaring a window.
 
 ## Is it a snapshot or a series?
 
 Ask what the provider's API can actually answer, not what sounds better.
 
 - **Snapshot** — "stargazers right now", "active subscriptions", "open
-  conversations". The API returns one number for the present. Both flags
-  `false`. Return `points: [{ t: ctx.now(), v: value }]` — one point, at now.
-  A flat line invented from a single reading looks like data and is not.
+  conversations". The API returns one number for the present. `scalar`, and
+  return `{ value }`: the one point at `now` is synthesised for you, which is
+  what stops a flat line being invented from a single reading.
 - **Series** — "revenue in the window", "signups per day". The API can be
-  asked for a range. Both flags `true`, and `granularities` lists what the
-  provider can bucket by.
+  asked for a range. `series`, and `granularities` lists what the provider can
+  bucket by.
+- **Neither** — a window total with no breakdown. `total`. See above.
 
 MRR is a snapshot even though it sounds like a rate: it is the current
 subscriptions normalised to a month, not a sum over a window.
@@ -141,9 +173,10 @@ could not serve came back as errors on the tile. It is load-bearing now, and
 a wrong declaration is a missing control or a broken one rather than a
 stale comment.
 
-On a _snapshot_ it is still noise: with both flags false there is no Range
-row to populate. Leave an existing one alone; do not add them to a new
-snapshot.
+On a `scalar` or a `list` the field does not exist to get wrong: the factory
+does not take it, and the catalogue emits every bucket so that an installed
+app's `clampRange()` — which runs whether the Range row is shown or not — has
+nothing to rewrite.
 
 **A new `MetricId` is a wire enum.** Swift decodes unknown enum values with a
 fallback, so an old app will not break — but the id is in `packages/schemas`
@@ -151,9 +184,12 @@ for a reason and the Swift side has hand-written models. Change a wire shape
 and you owe `pnpm contracts`, the Swift structs, and all three committed
 together. See `AGENTS.md`.
 
-**`availableMetrics` is per connection, not per provider.** `verify` returns
-what _this_ account can actually read. A metric in the manifest but missing
-from `availableMetrics` is offered and then fails.
+**Narrowing is per connection, and stated as a negative.** A Stripe key
+without the Subscriptions permission can still do revenue. `verify` returns
+`unavailableMetrics` — what _this_ account cannot read — and `provider()`
+subtracts it from the metrics. Returning the available set was how that list
+drifted from the manifest: four connectors had a `verify` whose order did not
+match their own catalogue, and two listed ids in a different order again.
 
 ## Checking it
 
@@ -171,8 +207,9 @@ NOTCH_DEBUG_EXPAND=1 NOTCH_DEBUG_CONFIG=<metric-id> \
   apps/mac/build/export/NotchMetrics.app/Contents/MacOS/NotchMetrics
 ```
 
-A snapshot should show **no Range row and no Chart row** — only the
-methodology under Data. Anything else means the flags and the data disagree.
+A `scalar` should show **no Range row and no Chart row** — only the
+methodology under Data. A `total` should show a Range and no Chart. Anything
+else means the shape and the data disagree.
 
 To sweep every metric for that disagreement at once:
 

@@ -1,3 +1,4 @@
+import { expect } from "vitest";
 import { DEFAULT_GRANULARITY, RANGE_DURATION_MS, TimeRange } from "@notch/schemas";
 import type { AdapterContext, HttpResponse, ProviderAdapter } from "../src/types.ts";
 
@@ -175,4 +176,18 @@ export async function refusedOfferedRanges<Credentials extends Record<string, un
   }
 
   return refused;
+}
+
+/**
+ * `availableMetrics` as a set, which is what it is.
+ *
+ * Nothing reads the order — the app looks metrics up by id to grey a row out
+ * — and while each `verify` wrote the array by hand, the order it happened to
+ * use was a property of that hand-written list rather than of the connector.
+ * Several of them did not match their own manifest. Derived from the metrics
+ * now, so asserting a sequence here would pin the catalogue's order to a test
+ * about credentials.
+ */
+export function expectMetrics(actual: readonly string[], expected: readonly string[]): void {
+  expect([...actual].sort()).toEqual([...expected].sort());
 }
