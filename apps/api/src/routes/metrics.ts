@@ -41,6 +41,7 @@ metrics.get("/query", async (c) => {
       timeZone: user.timezone,
       preferredCurrency: user.preferredCurrency,
       telemetry: c.get("telemetry"),
+      background: (work: Promise<unknown>) => c.executionCtx.waitUntil(work),
     },
     parsed.data,
   );
@@ -71,6 +72,10 @@ metrics.post("/batch", async (c) => {
     timeZone: user.timezone,
     preferredCurrency: user.preferredCurrency,
     telemetry: c.get("telemetry"),
+    // A number whose TTL has lapsed is served from the row we already read and
+    // refreshed after the response goes out. The notch paints in one round
+    // trip; the fresher figure arrives on the next poll.
+    background: (work: Promise<unknown>) => c.executionCtx.waitUntil(work),
   };
 
   const results = await queryMetrics(options, parsed.data.requests);

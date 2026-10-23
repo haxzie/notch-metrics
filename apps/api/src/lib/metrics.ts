@@ -1,7 +1,6 @@
 import { and, eq, lt, sql } from "drizzle-orm";
 import { getAdapter, manifests } from "@notch/integrations";
 import {
-  DEFAULT_GRANULARITY,
   RANGE_DURATION_MS,
   type Granularity,
   type MetricQuery,
@@ -20,69 +19,31 @@ import { notifyBroken } from "./slack.ts";
 import { emitConnectionBroken } from "./notifications.ts";
 import { callRecorder, recordEvent } from "./events.ts";
 import type { RequestTelemetry } from "./telemetry.ts";
+import {
+  asStale,
+  cacheKey,
+  type CachedRow,
+  freshnessFor,
+  granularityFor,
+  readCache,
+  STALE_FACTOR,
+  writeCache,
+} from "./metric-cache.ts";
+
+// Re-exported because the cache policy moved out of this file and tests, the
+// cron and the routes all still ask this module for it.
+export { cacheKey, freshnessFor, WARM_INTERVAL_SECONDS } from "./metric-cache.ts";
 
 /**
- * How long a computed envelope stays fresh.
+ * The breaker's ceiling.
  *
- * Coarser granularities change more slowly, so there is no reason to re-walk
- * Stripe's subscription list every five minutes for a monthly figure.
+ * `MIN_CALL_SPACING_MS` used to live here too, with an index and a column
+ * behind it — and nothing ever read either. Two D1 writes per fetch bought a
+ * throttle that did not exist. Spacing between calls to one provider belongs
+ * in the HTTP layer where the calls are, not in a row that has to be fetched
+ * to be obeyed; `integration.next_allowed_at` is left in the schema, unwritten,
+ * because dropping a column is not an additive migration.
  */
-const TTL_SECONDS: Record<Granularity, number> = {
-  hour: 300,
-  day: 900,
-  week: 3600,
-  month: 3600,
-};
-
-/**
- * Past its TTL but within this multiple, a row is still served — flagged
- * `stale` — while a refresh runs behind it. Yesterday's MRR greyed out is a
- * better dashboard than a spinner for as long as a provider is down.
- */
-const STALE_FACTOR = 4;
-
-/**
- * How long this metric's envelope stays fresh.
- *
- * The bucket decides by default, and a metric may overrule it. The bucket is
- * a good proxy for how fast a *number* moves and a poor one for a feed: a CI
- * list arrives in a daily bucket like everything else, and holding it for the
- * daily fifteen minutes means a tile reporting a build that has since gone
- * red. Read from the manifest rather than a table here, so the connector that
- * knows how fast its data moves is the thing that says so.
- */
-function freshnessFor(provider: string, metric: string, granularity: Granularity): number {
-  // `getAdapter` throws for a provider that is no longer in the registry, and
-  // a row can name one. That case already has an answer further down — an
-  // error result, not a 500 — so it must not be turned into one here.
-  const descriptor = manifests()
-    .find((m) => m.id === provider)
-    ?.metrics.find((m) => m.id === metric);
-  return descriptor?.freshnessSeconds ?? TTL_SECONDS[granularity];
-}
-
-export function cacheKey(q: MetricQuery, granularity: Granularity): string {
-  const base = `${q.integrationId}:${q.metric}:${granularity}:${q.range}`;
-
-  // Sorted, so two orderings of the same widget are one entry rather than two.
-  // Being in the key at all is not a cache-efficiency question: one GitHub
-  // connection now serves a tile per repository, so two widgets differing only
-  // by `repository` would otherwise share an entry and serve each other's star
-  // count — wrong, plausible, and silent.
-  const params = Object.entries(q.params ?? {})
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([k, v]) => `${k}=${v}`)
-    .join(",");
-
-  // Appended only when there are some, so every widget that predates
-  // parameters keeps the exact key it already has. A trailing separator would
-  // orphan every cached metric in the estate on the deploy that shipped this,
-  // and every notch would go to its provider at once to refill.
-  return params ? `${base}:${params}` : base;
-}
-
-/** Spacing between outbound calls for one integration, and the breaker's ceiling. */
-const MIN_CALL_SPACING_MS = 2_000;
 const MAX_BREAKER_MS = 6 * 60 * 60 * 1000;
 
 export interface FetchOptions {
@@ -93,6 +54,14 @@ export interface FetchOptions {
   preferredCurrency: string;
   /** Skip the cache entirely. Used by `/refresh`, which is rate-limited hard. */
   force?: boolean;
+  /**
+   * Somewhere to put a refresh that the caller is not waiting for —
+   * `executionCtx.waitUntil` on a request. Absent on the cron, which has no
+   * request to hang work off and awaits the refresh instead.
+   */
+  background?: (work: Promise<unknown>) => void;
+  /** Which path is computing, for the cache row's provenance. */
+  source?: "request" | "warm";
   /**
    * The request this fetch belongs to, when there is one. Null from the
    * cron, which has no request and no id to attach anything to.
@@ -158,24 +127,107 @@ export async function queryMetrics(
   );
 }
 
+/**
+ * Computes in flight, by cache key, so one number is fetched once.
+ *
+ * A batch asking for the same key twice — two tiles on the same metric and
+ * range, which is a normal thing to have — used to be two walks of the same
+ * provider list, serialised behind each other. So did a read racing the
+ * background refresh it had itself kicked off.
+ *
+ * Module scope, so the map lives as long as the isolate and no longer. An
+ * entry is removed the moment its promise settles; nothing is cached here,
+ * only *shared*.
+ */
+const inFlight = new Map<string, Promise<MetricResult>>();
+
+function share(key: string, work: () => Promise<MetricResult>): Promise<MetricResult> {
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  const promise = work().finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
+/**
+ * One number, from the cache if there is one at all.
+ *
+ * The shape of this is the whole performance story, so it is worth being
+ * explicit about the three cases:
+ *
+ *   fresh    — served, no provider call, one D1 read.
+ *   expired  — served *immediately* with a refresh started behind it, and
+ *              flagged `stale` only once that refresh has had a window to
+ *              land and has not.
+ *   cold     — computed inline. The only slow path, once per key, ever.
+ *
+ * It used to be two cases: fresh, or wait for the provider. A tile whose TTL
+ * had lapsed by one second paid the same eight seconds as a tile that had
+ * never been fetched — with the number it was about to show sitting in the
+ * row it had just read. Stale-serving existed, but only as a fallback for a
+ * provider that *failed*, which is the rarer half of the problem.
+ */
 export async function queryMetric(
   options: FetchOptions,
   query: MetricQuery,
 ): Promise<MetricResult> {
   const { db } = options;
-  const granularity = query.granularity ?? DEFAULT_GRANULARITY[query.range];
+  const granularity = granularityFor(query);
   const key = cacheKey(query, granularity);
   const now = Math.floor(Date.now() / 1000);
 
-  const [cached] = await db
-    .select()
-    .from(metricCache)
-    .where(and(eq(metricCache.cacheKey, key), eq(metricCache.userId, options.userId)))
-    .limit(1);
+  const cached = options.force ? null : await readCache(db, options.userId, key);
 
-  if (cached && !options.force && cached.expiresAt > now) {
-    return JSON.parse(cached.payload) as MetricResult;
+  if (cached && cached.expiresAt > now) return cached.payload;
+
+  if (cached?.payload.ok) {
+    // The TTL that was actually applied when this row was written, rather
+    // than what the manifest says today: reading the integration row to
+    // recompute it would put a second D1 round trip on the path whose entire
+    // purpose is to answer without one.
+    const appliedTtl = Math.max(cached.expiresAt - cached.computedAt, 1);
+    // One extra TTL to be refreshed in, then the badge. `stale` means "this is
+    // the last value we could fetch" — the notch dims the figure and puts a
+    // clock on the tile — so a number that expired ninety seconds ago with a
+    // refresh already running behind it must *not* carry it. Past the grace
+    // window the refresh has had its chance and the badge is the truth.
+    const graceUntil = cached.expiresAt + appliedTtl;
+    const servableUntil = cached.expiresAt + appliedTtl * STALE_FACTOR;
+
+    if (now < servableUntil) {
+      const refresh = () => share(`${options.userId}:${key}`, () => compute());
+      if (!options.background) {
+        // No execution context, which means the cron — and for the cron the
+        // refresh *is* the work, so it is awaited rather than dropped.
+        return refresh();
+      }
+      options.background(refresh());
+      return now < graceUntil ? cached.payload : (asStale(cached.payload) ?? cached.payload);
+    }
   }
+
+  return share(`${options.userId}:${key}`, () => compute());
+
+  async function compute(): Promise<MetricResult> {
+    return computeMetric(options, query, { granularity, key, cached });
+  }
+}
+
+/**
+ * Goes to the provider, normalises, caches, and records the attempt.
+ *
+ * Everything slow is in here, and `queryMetric` above decides how often it is
+ * reached. Split out so that decision is readable in one screen rather than
+ * interleaved with four hundred lines of fetching.
+ */
+async function computeMetric(
+  options: FetchOptions,
+  query: MetricQuery,
+  context: { granularity: Granularity; key: string; cached: CachedRow | null },
+): Promise<MetricResult> {
+  const { db } = options;
+  const { granularity, key, cached } = context;
+  const now = Math.floor(Date.now() / 1000);
 
   const [row] = await db
     .select()
@@ -203,10 +255,8 @@ export async function queryMetric(
 
   const staleFallback = (): MetricResult | null => {
     if (!cached) return null;
-    const payload = JSON.parse(cached.payload) as MetricResult;
-    if (!payload.ok) return null;
     if (cached.expiresAt + ttlSeconds * STALE_FACTOR < now) return null;
-    return { ok: true, series: { ...payload.series, stale: true } };
+    return asStale(cached.payload);
   };
 
   // A revoked key is not retried. Polling it every five minutes forever is how
@@ -272,7 +322,11 @@ export async function queryMetric(
           granularity,
           from,
           to,
-          comparePrevious: true,
+          // Asked for only when the metric can answer it. `true` regardless is
+          // what made a 30-day revenue tile fetch sixty days of payments to
+          // produce a delta, on metrics whose descriptor says there is no
+          // delta to produce.
+          comparePrevious: supportsCompare(row.provider, query.metric),
           wantSeries: query.series,
           params: query.params ?? {},
         },
@@ -323,29 +377,15 @@ export async function queryMetric(
     };
 
     const result: MetricResult = { ok: true, series };
-    const expiresAt = now + ttlSeconds;
 
-    await db
-      .insert(metricCache)
-      .values({
-        cacheKey: key,
-        userId: options.userId,
-        integrationId: row.id,
-        payload: JSON.stringify(result),
-        etag: `"${now}-${row.id}"`,
-        computedAt: now,
-        expiresAt,
-        source: options.force ? "request" : "request",
-      })
-      .onConflictDoUpdate({
-        target: metricCache.cacheKey,
-        set: {
-          payload: JSON.stringify(result),
-          computedAt: now,
-          expiresAt,
-          etag: `"${now}-${row.id}"`,
-        },
-      });
+    await writeCache(db, {
+      key,
+      userId: options.userId,
+      integrationId: row.id,
+      result,
+      ttlSeconds,
+      source: options.source ?? "request",
+    });
 
     await db
       .update(integrationTable)
@@ -359,7 +399,6 @@ export async function queryMetric(
         disabledUntil: 0,
         lastErrorCode: null,
         status: "ok",
-        nextAllowedAt: Date.now() + MIN_CALL_SPACING_MS,
       })
       .where(eq(integrationTable.id, row.id));
 
@@ -408,6 +447,15 @@ export async function queryMetric(
   }
 }
 
+/** Whether this metric's descriptor says a previous-period figure exists. */
+function supportsCompare(provider: string, metric: string): boolean {
+  const descriptor = manifests()
+    .find((m) => m.id === provider)
+    ?.metrics.find((m) => m.id === metric);
+  // Unknown descriptors keep the old behaviour: a metric the registry cannot
+  // describe is not a metric to start withholding inputs from.
+  return descriptor?.supportsCompare ?? true;
+}
 /**
  * Consecutive `auth_failed` results from the data path before the whole
  * connection is declared broken.
@@ -449,7 +497,6 @@ async function recordFailure(
       lastErrorCode: mapped.code,
       lastErrorAt: new Date(),
       status: broken ? "auth_failed" : row.status,
-      nextAllowedAt: Date.now() + MIN_CALL_SPACING_MS,
     })
     .where(eq(integrationTable.id, row.id));
 
@@ -475,4 +522,4 @@ export async function sweepCache(db: Database): Promise<void> {
   await db.delete(metricCache).where(lt(metricCache.expiresAt, cutoff));
 }
 
-export const INTERNALS = { TTL_SECONDS, STALE_FACTOR, sql };
+export const INTERNALS = { STALE_FACTOR, sql };

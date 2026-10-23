@@ -21,6 +21,8 @@ import {
 } from "./lib/notifications.ts";
 import { adapterContext } from "./lib/adapter.ts";
 import { openFreshCredentials } from "./lib/token-refresh.ts";
+import { widgetWarmTargets, type WarmTarget } from "./lib/warm.ts";
+import { DEFAULT_GRANULARITY } from "@notch/schemas";
 
 /**
  * Runs every five minutes. Warms caches so the notch opens instantly, and
@@ -71,8 +73,21 @@ const NOTIFY_BUDGET = 20;
  */
 const METRICS_PER_INTEGRATION = 4;
 
+/**
+ * The window a notification's metric is warmed over.
+ *
+ * Subscriptions compare a threshold against the latest value, not against a
+ * range somebody picked in the notch, so one window serves them all.
+ */
+const NOTIFY_RANGE = "30d" as const;
+
 async function refreshMetrics(db: Database, env: Env): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
+
+  // One query for the whole tick. Every visible tile in the estate is at most
+  // a few hundred rows, and asking per integration would be a round trip per
+  // connection to learn something a single select already knows.
+  const widgetTargets = await widgetWarmTargets(db);
 
   // Integrations a *visible widget* points at, union those an *enabled
   // subscription* points at. Nobody's notch shows a number they removed, and
@@ -141,17 +156,29 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
       // A subscription's own metrics first, so the per-integration cap can
       // never starve a notification of the input it needs. A cold widget just
       // opens a beat slower; a starved notification fails silently.
+      //
+      // Subscriptions are named by metric and carry their own params, so they
+      // are warmed at the default window. Widgets are named by *key* — their
+      // own granularity and range — because that is what the notch will read.
       const required = requiredMetrics(row.provider, subs);
-      const metrics = [
-        ...required,
-        ...(row.enabledMetrics ?? []).filter((m) => !required.includes(m)),
-      ].filter(
-        // A subscription carries its own params, so unlike a widget-scoped
-        // metric it *is* warmable from here.
-        (m) => !widgetScoped(m) || required.includes(m),
-      );
+      const targets: WarmTarget[] = [
+        ...required.map((metric) => ({
+          integrationId: row.id,
+          metric,
+          granularity: DEFAULT_GRANULARITY[NOTIFY_RANGE],
+          range: NOTIFY_RANGE,
+          params: paramsFor(row.provider, metric, subs),
+        })),
+        ...(widgetTargets.get(row.id) ?? []).filter(
+          (target) =>
+            !required.includes(target.metric) &&
+            // A subscription carries its own params, so unlike a widget-scoped
+            // metric it *is* warmable from here.
+            !widgetScoped(target.metric),
+        ),
+      ];
 
-      for (const metric of metrics.slice(0, METRICS_PER_INTEGRATION)) {
+      for (const target of targets.slice(0, METRICS_PER_INTEGRATION)) {
         const result = await queryMetric(
           {
             db,
@@ -159,14 +186,22 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
             userId: row.userId,
             timeZone: owner.timezone,
             preferredCurrency: owner.preferredCurrency,
-            force: true,
+            source: "warm",
+            // A notification's own metric is refetched unconditionally; a
+            // widget's is not. The difference is what each one is for: an
+            // alert is a claim about *now*, and evaluating it against a row a
+            // user's poll happened to write four minutes ago adds that long to
+            // every alert. A tile is a glance, and a four-minute-old figure is
+            // the normal case rather than a defect.
+            force: required.includes(target.metric),
           },
           {
             integrationId: row.id,
-            metric: metric as never,
-            range: "30d",
+            metric: target.metric as never,
+            granularity: target.granularity,
+            range: target.range,
             series: true,
-            params: paramsFor(row.provider, metric, subs),
+            params: target.params,
           },
         );
 
@@ -174,10 +209,10 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
         // cache read, no integration read. Its own catch inside the per-row
         // try, for the same reason the loop is awaited-with-per-item-catch — a
         // bad descriptor must not abort the rest of the tick.
-        const relevant = subs.filter((s) => metricFor(row.provider, s) === metric);
+        const relevant = subs.filter((s) => metricFor(row.provider, s) === target.metric);
         if (relevant.length > 0) {
-          await evaluate({ db, row, owner, subs: relevant, metric, result }).catch((e) =>
-            logError(`cron.notify.${row.id}`, e),
+          await evaluate({ db, row, owner, subs: relevant, metric: target.metric, result }).catch(
+            (e) => logError(`cron.notify.${row.id}`, e),
           );
         }
       }
