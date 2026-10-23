@@ -1,6 +1,6 @@
 {
   "name": "@notch/mac",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "description": "Version-only shim. Exists so changesets can version the Swift app alongside the TypeScript packages; scripts/sync-mac-version.mjs turns this version into Config/Version.xcconfig. Deliberately has no build/test scripts, so turbo never tries to drive Xcode."
 }
