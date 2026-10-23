@@ -18,16 +18,20 @@ describe("cache freshness", () => {
     );
   });
 
-  it("still honours a descriptor that asks for longer than the floor", () => {
-    // A monthly bucket's default is an hour, which is well above the floor and
-    // must survive the clamp — the clamp is a floor, not a replacement.
-    expect(freshnessFor("stripe", "mrr", "month")).toBeGreaterThan(WARM_INTERVAL_SECONDS);
+  it("pins a declared freshness to the floor exactly, rather than above it", () => {
+    // Worth knowing while reading the manifests: every `freshnessSeconds` in
+    // the repository today is 60, 180 or 300, so the clamp puts all of them on
+    // the tick. The field still says what the connector *wants*, and starts
+    // mattering again the moment the tick moves or a connector asks for more.
+    expect(freshnessFor("dodopayments", "one_time_sales", "day")).toBe(WARM_INTERVAL_SECONDS);
   });
 
-  it("falls back to the bucket for a provider the registry does not know", () => {
-    expect(freshnessFor("not-a-provider", "revenue", "week")).toBeGreaterThanOrEqual(
-      WARM_INTERVAL_SECONDS,
-    );
+  it("leaves a bucket that is already longer than the floor alone", () => {
+    // The clamp is a floor, not a replacement. A metric with no declared
+    // freshness takes its bucket — an hour for a monthly figure, fifteen
+    // minutes for a daily one — and both have to survive.
+    expect(freshnessFor("not-a-provider", "revenue", "month")).toBe(3600);
+    expect(freshnessFor("not-a-provider", "revenue", "day")).toBe(900);
   });
 });
 
