@@ -22,8 +22,6 @@ export const MARKS: ReadonlySet<string> = new Set([
   "github",
   "google-analytics",
   "google-search-console",
-  "hubspot",
-  "intercom",
   "lemonsqueezy",
   "mixpanel",
   "openai",

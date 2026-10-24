@@ -19,7 +19,7 @@ const MARKS: { id: ProviderId; left: number; top: number; size: number; tilt: nu
   // Left band.
   { id: "github", left: 12, top: 4, size: 46, tilt: 7 },
   { id: "stripe", left: 3, top: 20, size: 64, tilt: -9 },
-  { id: "hubspot", left: 14, top: 36, size: 40, tilt: -7 },
+  { id: "anthropic", left: 14, top: 36, size: 40, tilt: -7 },
   { id: "shopify", left: 9, top: 68, size: 56, tilt: -5 },
   { id: "plausible", left: 2, top: 86, size: 44, tilt: 10 },
   // Right band.

@@ -44,8 +44,6 @@ const BRANDS = {
   "google-analytics": "Google Analytics",
   "google-search-console": "Google Search Console",
   youtube: "YouTube",
-  hubspot: "HubSpot",
-  intercom: "Intercom",
   github: "GitHub",
 };
 

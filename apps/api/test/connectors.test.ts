@@ -58,7 +58,6 @@ describe("the connector catalogue", () => {
       "revenue",
       "analytics",
       "marketing",
-      "crm",
       "developer",
       "ai",
     ]);
@@ -66,7 +65,6 @@ describe("the connector catalogue", () => {
       "Revenue",
       "Product analytics",
       "Marketing & SEO",
-      "CRM",
       "Developer",
       "AI",
     ]);

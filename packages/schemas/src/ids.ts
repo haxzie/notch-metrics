@@ -37,9 +37,6 @@ export const ProviderId = z.enum([
   // Marketing and SEO
   "google-search-console",
   "youtube",
-  // CRM
-  "hubspot",
-  "intercom",
   // Developer
   "github",
   // AI
@@ -55,21 +52,13 @@ export type ProviderId = z.infer<typeof ProviderId>;
  * "where do my signups come from" should find one short list, not eleven
  * categories of one.
  */
-export const ConnectorCategory = z.enum([
-  "revenue",
-  "analytics",
-  "marketing",
-  "crm",
-  "developer",
-  "ai",
-]);
+export const ConnectorCategory = z.enum(["revenue", "analytics", "marketing", "developer", "ai"]);
 export type ConnectorCategory = z.infer<typeof ConnectorCategory>;
 
 export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
   revenue: "Revenue",
   analytics: "Product analytics",
   marketing: "Marketing & SEO",
-  crm: "CRM",
   developer: "Developer",
   ai: "AI",
 };
@@ -169,13 +158,6 @@ export const MetricId = z.enum([
   "api_requests",
   "api_spend",
   "followers",
-  // CRM
-  "contacts",
-  "new_contacts",
-  "open_deals",
-  "won_deals",
-  "pipeline_value",
-  "open_conversations",
 ]);
 export type MetricId = z.infer<typeof MetricId>;
 

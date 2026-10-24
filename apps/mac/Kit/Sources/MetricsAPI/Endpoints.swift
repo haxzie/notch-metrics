@@ -65,7 +65,7 @@ public struct ConnectorOAuth: Codable, Sendable, Hashable {
 public struct ProviderManifest: Codable, Sendable, Identifiable, Hashable {
     public let id: String
     public let name: String
-    /// "revenue" | "analytics" | "marketing" | "crm". A plain string with a
+    /// "revenue" | "analytics" | "marketing" | "developer" | "ai". A plain string with a
     /// fallback rather than an enum, so a category added on the server does
     /// not make the whole catalogue fail to decode.
     public let category: String

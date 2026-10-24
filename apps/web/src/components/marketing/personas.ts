@@ -5,9 +5,12 @@
  * every one is a plausible setup rather than a showcase of everything: a
  * founder's notch has revenue on it, not GitHub stars.
  *
- * The Sales layout leans on connectors that are still marked "Soon" in the
- * catalogue. That is deliberate but worth knowing: it shows where the product
- * is going, and the connector wall below says what is live.
+ * There was a fourth, Sales, until HubSpot and Intercom were removed. It was
+ * nine-tenths those two, and the note here used to say that leaning on
+ * connectors marked "Soon" was deliberate — it showed where the product was
+ * going. With them gone it showed where it is not, so the layout went with
+ * them rather than being rebuilt out of revenue widgets the Founders layout
+ * already covers.
  */
 export type WidgetSpan = "1x1" | "2x1" | "2x2";
 
@@ -64,8 +67,6 @@ const gsc = {
   accent: "#4285F4",
   colour: "#7aa9ff",
 };
-const hubspot = { provider: "hubspot", name: "HubSpot", accent: "#FF7A59" };
-const intercom = { provider: "intercom", name: "Intercom", accent: "#1F8DED", colour: "#5fb0ff" };
 
 export const PERSONAS: Persona[] = [
   {
@@ -210,55 +211,6 @@ export const PERSONAS: Persona[] = [
         bars: [58, 61, 66, 70, 74, 80, 86],
       },
       { ...plausible, label: "Bounce", value: "41%" },
-    ],
-  },
-  {
-    id: "sales",
-    label: "Sales",
-    widgets: [
-      {
-        ...hubspot,
-        label: "Pipeline",
-        span: "2x2",
-        value: "$1.24M",
-        delta: "+$86k this week",
-        bars: [40, 46, 44, 52, 58, 61, 70],
-        colour: "#ff9b7f",
-      },
-      { ...hubspot, label: "Deals won", value: "17" },
-      { ...hubspot, label: "New leads", value: "92" },
-      {
-        ...intercom,
-        label: "Open conversations",
-        span: "2x2",
-        rows: [
-          ["Acme Corp", "2m"],
-          ["Northwind", "9m"],
-          ["Globex", "14m"],
-          ["Initech", "31m"],
-          ["Umbrella", "1h"],
-        ],
-      },
-      { ...intercom, label: "First reply", value: "4m" },
-      { ...hubspot, label: "Meetings", value: "11" },
-      {
-        ...stripe,
-        label: "Invoices paid · 7d",
-        span: "2x1",
-        value: "$68k",
-        delta: "+14% vs last week",
-        bars: [50, 44, 61, 58, 72, 69, 88],
-      },
-      { ...stripe, label: "Overdue", value: "3" },
-      {
-        ...intercom,
-        label: "CSAT",
-        span: "2x1",
-        value: "96%",
-        delta: "+2 pts this month",
-        bars: [88, 90, 89, 92, 93, 95, 96],
-      },
-      { ...hubspot, label: "Win rate", value: "31%" },
     ],
   },
 ];

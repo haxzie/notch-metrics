@@ -128,13 +128,7 @@
                       "output_tokens",
                       "api_requests",
                       "api_spend",
-                      "followers",
-                      "contacts",
-                      "new_contacts",
-                      "open_deals",
-                      "won_deals",
-                      "pipeline_value",
-                      "open_conversations"
+                      "followers"
                     ]
                   },
                   "comparator": {

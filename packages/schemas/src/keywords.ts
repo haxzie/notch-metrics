@@ -46,13 +46,6 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   ad_revenue: ["adsense", "ads", "earnings", "payout", "monetisation", "monetization"],
   rpm: ["revenue per mille", "per thousand", "earnings", "cpm", "monetisation"],
 
-  contacts: ["crm", "leads", "people", "customers"],
-  new_contacts: ["leads", "crm", "acquisition", "signups"],
-  open_deals: ["pipeline", "opportunities", "crm", "sales"],
-  won_deals: ["closed", "sales", "crm", "revenue"],
-  pipeline_value: ["pipeline", "forecast", "crm", "sales"],
-  open_conversations: ["support", "tickets", "inbox", "chats"],
-
   tokens: ["llm", "ai", "usage", "consumption", "context", "prompt"],
   input_tokens: ["prompt", "llm", "ai", "context", "usage"],
   output_tokens: ["completion", "generated", "llm", "ai", "usage"],

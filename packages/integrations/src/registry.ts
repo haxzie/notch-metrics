@@ -24,9 +24,7 @@ import { googleAnalytics } from "./providers/google-analytics/index.ts";
 import { googleSearchConsole } from "./providers/google-search-console/index.ts";
 import { youtube } from "./providers/youtube/index.ts";
 
-// CRM
-import { hubspot } from "./providers/hubspot/index.ts";
-import { intercom } from "./providers/intercom/index.ts";
+// Developer
 import { github } from "./providers/github/index.ts";
 
 // AI
@@ -66,8 +64,6 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   "google-analytics": googleAnalytics,
   "google-search-console": googleSearchConsole,
   youtube,
-  hubspot,
-  intercom,
   github,
   openai,
   anthropic,
@@ -160,9 +156,8 @@ export function catalogue(): { category: ConnectorCategory; connectors: Provider
     revenue: 0,
     analytics: 1,
     marketing: 2,
-    crm: 3,
-    developer: 4,
-    ai: 5,
+    developer: 3,
+    ai: 4,
   };
   const order = (Object.keys(position) as ConnectorCategory[]).sort(
     (a, b) => position[a] - position[b],

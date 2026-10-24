@@ -95,10 +95,6 @@ public enum AppCatalog {
         MetricApp(
             id: "youtube", name: "YouTube", symbol: "play.rectangle.fill", accentHex: "FF0000"),
         MetricApp(
-            id: "hubspot", name: "HubSpot", symbol: "person.crop.circle.badge.checkmark", accentHex: "FF7A59"),
-        MetricApp(
-            id: "intercom", name: "Intercom", symbol: "message.fill", accentHex: "1F8DED"),
-        MetricApp(
             id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right",
             accentHex: "F0F6FC"),
         // Apps with no connector in the registry, which is why they are down
