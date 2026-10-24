@@ -31,6 +31,11 @@ let package = Package(
         .testTarget(name: "NotchUITests", dependencies: ["NotchUI"]),
         .testTarget(name: "MetricsAPITests", dependencies: ["MetricsAPI"]),
         .testTarget(name: "UpdaterTests", dependencies: ["Updater"]),
+        // Owns the plugin-manifest fixture that ContractTests defers to it.
+        // That deferral was a promise nothing kept: this target did not exist,
+        // so `contracts/fixtures/plugin-manifest.json` was decoded by nobody
+        // and the manifest could have drifted from the schema unnoticed.
+        .testTarget(name: "PluginRuntimeTests", dependencies: ["PluginRuntime"]),
         // Decodes the committed contracts/fixtures/*.json. This is what fails,
         // by name, when the Worker's wire shape drifts from these structs.
         //

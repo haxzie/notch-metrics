@@ -64,6 +64,30 @@ public enum TimeRange: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// How long the range is, for the one caller that has to say so itself.
+    ///
+    /// Mirrors `RANGE_DURATION_MS` in `packages/schemas`, and exists for the
+    /// same reason `defaultGranularity` does: a widget normally sends a range
+    /// and lets the server derive the window, so the Mac never needed this.
+    /// A **local** metric has no server to derive anything — whoever runs the
+    /// plugin must hand it a `from` and a `to`, and they have to be the same
+    /// window the Worker would have chosen or the two paths disagree about
+    /// what "30d" means.
+    ///
+    /// `.year` is 365 days, not twelve calendar months, exactly as the table
+    /// in `packages/schemas` has it. Approximating it differently here would
+    /// be a day's drift that only shows up at the end of February.
+    public var duration: TimeInterval {
+        let day: TimeInterval = 24 * 60 * 60
+        switch self {
+        case .day: return day
+        case .week: return 7 * day
+        case .month: return 30 * day
+        case .quarter: return 90 * day
+        case .year: return 365 * day
+        }
+    }
+
     public var label: String {
         switch self {
         case .day: "24 hours"

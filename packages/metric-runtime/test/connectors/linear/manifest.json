@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "linear",
+  "name": "Linear",
+  "description": "Issues and cycle progress from a Linear workspace.",
+  "appId": "linear",
+  "auth": [
+    { "key": "api_key", "label": "API key", "type": "secret", "required": true },
+    { "key": "team", "label": "Team key", "type": "string", "required": false }
+  ],
+  "allowedHosts": ["api.linear.app"],
+  "metrics": [
+    {
+      "id": "open_issues",
+      "label": "Open issues",
+      "shortLabel": "Issues",
+      "unit": "count",
+      "shape": { "kind": "scalar" },
+      "methodology": "Issues in an unstarted or started state right now."
+    },
+    {
+      "id": "completed",
+      "label": "Completed",
+      "shortLabel": "Done",
+      "unit": "count",
+      "shape": { "kind": "series", "granularities": ["day", "week"], "compare": true },
+      "methodology": "Issues moved to a completed state in the window."
+    },
+    {
+      "id": "recent",
+      "label": "Recent issues",
+      "shortLabel": "Recent",
+      "unit": "count",
+      "shape": { "kind": "list", "limit": 5 },
+      "methodology": "The five most recently updated issues."
+    }
+  ],
+  "refreshIntervalSeconds": 300,
+  "timeoutMs": 8000,
+  "entry": "connector.mjs",
+  "createdAt": "2026-10-24T12:00:00.000Z",
+  "updatedAt": "2026-10-24T12:00:00.000Z"
+}

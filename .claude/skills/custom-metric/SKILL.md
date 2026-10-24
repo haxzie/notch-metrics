@@ -11,7 +11,7 @@ a schedule and draws the number in the notch. Nothing is uploaded: the code,
 the keys and the results stay on the machine.
 
 ```bash
-claude mcp add notch-metrics -- npx -y notch-metrics-mcp
+claude mcp add notch-metrics -- npx -y @notchmetrics/mcp
 ```
 
 ## The workflow

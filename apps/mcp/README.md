@@ -4,7 +4,7 @@ An MCP server that lets Claude Code — or any MCP client — author custom metr
 for the [Notch Metrics](https://notchmetrics.com) macOS app.
 
 ```bash
-claude mcp add notch-metrics -- npx -y notch-metrics-mcp
+claude mcp add notch-metrics -- npx -y @notchmetrics/mcp
 ```
 
 A custom metric is one ES module stored on your Mac under

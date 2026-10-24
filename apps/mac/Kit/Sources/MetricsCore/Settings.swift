@@ -22,10 +22,16 @@ public struct AppSettings: Codable, Sendable, Equatable {
     /// Zero as well, so it closes the moment the pointer leaves.
     public var collapseDelayMilliseconds: Int = 0
     public var reduceMotionOverride: Bool? = nil
-    /// Plugins are not executed until the user enables them here. An agent can
-    /// drop a file into Application Support; it should not thereby start making
-    /// network calls.
-    public var approvedPluginIDs: Set<String> = []
+    /// Plugins the user has enabled, each pinned to the digest that was
+    /// approved. An agent can drop a file into Application Support; it should
+    /// not thereby start making network calls.
+    ///
+    /// A map rather than the `Set<String>` this was, because a set approves an
+    /// **id** and the contents behind an id can be rewritten afterwards — by
+    /// the same agent, including its `allowedHosts`. Pinning the digest means
+    /// a rewrite has to be approved again, which is the only version of this
+    /// gate that holds for longer than a moment.
+    public var approvedPlugins: [String: String] = [:]
     public var checkForUpdatesAutomatically: Bool = true
 
     // MARK: Notifications
@@ -80,7 +86,12 @@ public struct AppSettings: Codable, Sendable, Equatable {
         // Genuinely optional rather than defaulted: nil means "follow the
         // system", which is not the same as either true or false.
         reduceMotionOverride = try? c.decodeIfPresent(Bool.self, forKey: .reduceMotionOverride)
-        approvedPluginIDs = value(.approvedPluginIDs, fallback.approvedPluginIDs)
+        // No migration from the old `approvedPluginIDs`, deliberately. Those
+        // recorded an id and no digest, so honouring one would mean approving
+        // whatever happens to be on disk now — the exact thing the digest
+        // exists to prevent. Re-approval costs a toggle, and the custom-metric
+        // path has never shipped, so in practice there is nothing to migrate.
+        approvedPlugins = value(.approvedPlugins, fallback.approvedPlugins)
         checkForUpdatesAutomatically = value(
             .checkForUpdatesAutomatically, fallback.checkForUpdatesAutomatically)
         alertBannerSeconds = value(.alertBannerSeconds, fallback.alertBannerSeconds)

@@ -1,0 +1,18 @@
+{
+  "extends": "@notch/typescript-config/node.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    // Both kept on, which is what emits a publishable artefact from sources
+    // written in the monorepo's style: the `.ts` extensions the rest of this
+    // repo relies on are rewritten to `.js` on the way out, so the package on
+    // npm imports files that exist.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src"]
+}

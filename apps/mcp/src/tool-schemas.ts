@@ -1,14 +1,19 @@
 import { z } from "zod";
 
 /**
- * Tool input shapes, written in zod 3.
+ * Tool input shapes, declared separately from `@notch/schemas`.
  *
- * The MCP SDK converts these to JSON Schema and is pinned to zod 3, while
- * `@notch/schemas` is zod 4 — the two are structurally different types and
- * passing one where the other is expected does not compile. So the wire shape
- * is declared here for the SDK, and the *authoritative* validation still
- * happens inside each handler with `PluginManifest.parse`. The duplication is
- * small, deliberate, and guarded by a test that round-trips one through the
+ * Not a zod-version split any more. The whole workspace is on zod 4 — the SDK
+ * accepts `^3.25 || ^4.0`, and the version skew this file used to describe is
+ * what made the published bundle fail on its first run: inlined zod-4 schemas
+ * resolving `zod` to the server's own zod 3, where `z.url()` does not exist.
+ *
+ * They stay separate because they answer different questions. This is the
+ * shape the SDK advertises to an agent: tolerant, with every field the agent
+ * may supply and none of the ones we fill in. The *authoritative* validation
+ * still happens inside each handler with `PluginManifest.parse`, which
+ * applies the defaults and rejects what this deliberately lets through. The
+ * duplication is small and guarded by a test that round-trips one through the
  * other.
  */
 export const granularity = z.enum(["hour", "day", "week", "month"]);

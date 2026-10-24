@@ -9,4 +9,5 @@ export * from "./widget.ts";
 export * from "./billing.ts";
 export * from "./account.ts";
 export * from "./plugin.ts";
+export * from "./connector.ts";
 export * from "./updates.ts";

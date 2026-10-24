@@ -15,6 +15,9 @@ final class AppEnvironment {
     let layoutModel: NotchLayoutModel
     let notch: NotchWindowController
     let plugins: PluginRegistry
+    /// Per-plugin cadence. Separate from the metric poll because a local
+    /// metric is a process against somebody's own API, not a row in a batch.
+    private let pluginSchedule = PluginScheduler()
     let secrets: any SecretStore
     let auth: AuthStore
     let api: APIClient
@@ -280,7 +283,7 @@ final class AppEnvironment {
         }
 
         settings = await settingsStore.current
-        plugins.setApproved(settings.approvedPluginIDs)
+        plugins.setApproved(settings.approvedPlugins)
         plugins.start()
 
         // Demo mode takes screenshots and must not reach the network; the
@@ -805,10 +808,21 @@ final class AppEnvironment {
         // connecting, while one that has accounts needs a choice. Both used
         // to read "Connect Stripe", which is the wrong instruction for the
         // second and the reason a signed-in notch could look signed out.
-        let fetchable = Set(widgets.map(\.id))
+        // Custom metrics are answered below, by the runner rather than the
+        // Worker, so they are not "unfetchable" — they were, for as long as
+        // this sweep was the only thing that saw them, which is why a local
+        // metric showed "Connect custom" forever.
+        var fetchable = Set(widgets.map(\.id))
+        fetchable.formUnion(
+            layoutModel.layout.widgets.filter { $0.kind == .customMetric }.map(\.id))
         for widget in layoutModel.layout.widgets where !fetchable.contains(widget.id) {
             states[widget.id] = setupState(for: widget)
         }
+
+        // Alongside the batch, not after it. A slow plugin must not hold up
+        // every provider tile in the notch, and the two paths write disjoint
+        // widgets so there is nothing to order between them.
+        Task { await refreshPlugins() }
 
         guard !widgets.isEmpty else {
             // Not `placeholderStates`: that answers for every widget at once
@@ -1086,6 +1100,106 @@ final class AppEnvironment {
         notch.update(states: states)
     }
 
+    /// Runs the local metrics that are due and paints what they return.
+    ///
+    /// This is the half that never existed. `PluginRunner` had no callers at
+    /// all, so a custom metric could be written, approved and listed, and
+    /// still never produce a number — the refresh loop only ever spoke to the
+    /// Worker.
+    ///
+    /// Deliberately not inside the provider batch. These are separate
+    /// processes against separate APIs on separate schedules; the only thing
+    /// the two paths share is where the answer lands.
+    private func refreshPlugins() async {
+        let widgets = layoutModel.layout.widgets.filter { $0.kind == .customMetric }
+        guard !widgets.isEmpty else { return }
+
+        // Keyed by plugin id, because several widgets may read the same
+        // metric at different ranges and each needs its own answer.
+        let byID = Dictionary(plugins.plugins.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        await pluginSchedule.retain(ids: Set(byID.keys))
+
+        let runner: PluginRunner
+        do {
+            runner = try PluginRunner(secrets: secrets)
+        } catch {
+            // No Node, or no runner script. Every local tile says the same
+            // thing, because the remedy is the same for all of them and it is
+            // the user's to apply.
+            let reason = Self.pluginSetupFailure(error)
+            for widget in widgets { states[widget.id] = .failed(reason: reason) }
+            notch.update(states: states)
+            return
+        }
+
+        let runnable = widgets.compactMap { widget -> (NotchWidget, LoadedPlugin)? in
+            guard let id = widget.customMetricId, let plugin = byID[id] else { return nil }
+            return (widget, plugin)
+        }
+
+        // A plugin not yet approved, or rewritten since, is not a failure —
+        // it is a question for the user, and the tile says so rather than
+        // reporting an error nobody caused.
+        for (widget, plugin) in runnable {
+            switch plugin.state {
+            case .pendingApproval: states[widget.id] = .needsSetup("Enable in Settings")
+            case .modified: states[widget.id] = .needsSetup("Changed — review it")
+            case .invalid(let reason): states[widget.id] = .failed(reason: reason)
+            case .ready: break
+            }
+        }
+
+        let due = await pluginSchedule.due(runnable.map(\.1))
+        let dueIDs = Set(due.map(\.id))
+        guard !dueIDs.isEmpty else {
+            notch.update(states: states)
+            return
+        }
+
+        // Serially, on purpose. Each run is a process, and a notch full of
+        // local metrics starting six Node processes at once on battery is the
+        // opposite of the "lightweight" this is supposed to be.
+        for (widget, plugin) in runnable where dueIDs.contains(plugin.id) {
+            guard let manifest = plugin.manifest else { continue }
+            do {
+                let value = try await runner.run(plugin)
+                await pluginSchedule.recordRun(plugin)
+                states[widget.id] = .value(
+                    value.series(manifest: manifest, window: .of(widget.range)))
+            } catch {
+                // Recorded even on failure: a metric whose API is down must
+                // not be retried every tick.
+                await pluginSchedule.recordRun(plugin)
+                states[widget.id] = .failed(reason: Self.pluginFailure(error))
+            }
+        }
+        notch.update(states: states)
+    }
+
+    /// What a tile says when the runner could not start at all.
+    static func pluginSetupFailure(_ error: any Error) -> String {
+        guard let error = error as? PluginRunnerError else { return "Could not start" }
+        switch error {
+        case .nodeMissing: return "Node not found"
+        case .nodeTooOld: return "Node too old"
+        case .runnerMissing: return "Runner missing"
+        default: return "Could not start"
+        }
+    }
+
+    /// What a tile says when one run failed. Short enough for a notch tile —
+    /// the detail is in the plugin's own log.
+    static func pluginFailure(_ error: any Error) -> String {
+        guard let error = error as? PluginRunnerError else { return "Failed" }
+        switch error {
+        case .timedOut: return PluginFailureCode.timeout.shortReason
+        case .failed(let code, _): return code.shortReason
+        case .unreadableOutput: return "Bad output"
+        case .spawnFailed: return "Could not start"
+        case .nodeMissing, .nodeTooOld, .runnerMissing: return Self.pluginSetupFailure(error)
+        }
+    }
+
     /// What a widget with no usable account should say.
     ///
     /// Only ever a verdict once the connections are in. Before that the tile
@@ -1119,7 +1233,7 @@ final class AppEnvironment {
         Task {
             await settingsStore.update(mutate)
             settings = await settingsStore.current
-            plugins.setApproved(settings.approvedPluginIDs)
+            plugins.setApproved(settings.approvedPlugins)
             notch.apply(settings: settings)
             updates.automatic = settings.checkForUpdatesAutomatically
         }

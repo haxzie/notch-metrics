@@ -16,7 +16,8 @@
     "clean": "rm -rf .turbo node_modules *.tsbuildinfo"
   },
   "dependencies": {
-    "zod": "^4.1.5"
+    "zod": "^4.1.5",
+    "@notchmetrics/core": "workspace:*"
   },
   "devDependencies": {
     "@notch/typescript-config": "workspace:*",

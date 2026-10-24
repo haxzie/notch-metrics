@@ -44,6 +44,17 @@ targets:
     platform: macOS
     sources:
       - path: App
+      # The metric runner, as a resource rather than a compiled source.
+      #
+      # An esbuild bundle (~800 KB) executed by the user's Node — see
+      # `packages/metric-runtime/build.mjs` for why it is not the 61 MB Bun
+      # executable it used to be. `buildPhase: resources` keeps it out of the
+      # compile step; `optional: true` so a checkout that has not run
+      # `pnpm runner` still builds, and `PluginRunner` reports a missing
+      # runner at launch rather than xcodegen failing here.
+      - path: ../../packages/metric-runtime/dist/runner.mjs
+        buildPhase: resources
+        optional: true
     # NOTE: deliberately no MARKETING_VERSION / CURRENT_PROJECT_VERSION under
     # `settings` here. A target build setting *overrides* an xcconfig value, so
     # setting them would make the app ship whatever is written here while

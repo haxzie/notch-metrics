@@ -37,7 +37,14 @@ struct AppSettingsTests {
         #expect(settings.hoverDwellMilliseconds == 80)
         #expect(settings.collapseDelayMilliseconds == 120)
         #expect(settings.checkForUpdatesAutomatically == false)
-        #expect(settings.approvedPluginIDs == ["github-stars"])
+
+        // ...and the one preference that deliberately does *not* carry over.
+        // `approvedPluginIDs` recorded an id with no digest, so honouring it
+        // would approve whatever is on disk now rather than what the user
+        // actually said yes to. Re-approval is a toggle; silently blessing
+        // rewritten code is not recoverable. Every other value above still
+        // survives, which is what this test is really guarding.
+        #expect(settings.approvedPlugins == [:])
 
         // And the preferences that file has never heard of take their defaults.
         #expect(settings.alertBannersEnabled == true)
@@ -56,7 +63,7 @@ struct AppSettingsTests {
         var settings = AppSettings()
         settings.alertSound = .glass
         settings.alertBannerSeconds = 9
-        settings.approvedPluginIDs = ["a", "b"]
+        settings.approvedPlugins = ["a": "deadbeef", "b": "cafebabe"]
         settings.reduceMotionOverride = true
 
         let again = try JSONDecoder().decode(

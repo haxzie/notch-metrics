@@ -86,7 +86,7 @@ Those become custom metrics: one JavaScript module on your own machine that
 returns a number. The code, the keys and the results stay local. The runner
 has no `fetch`, only a hardened HTTP helper bound to the hostnames you listed,
 and secrets live in the macOS Keychain. Write one by hand, or point Claude at
-our [MCP server](https://www.npmjs.com/package/notch-metrics-mcp) and describe
+our [MCP server](https://www.npmjs.com/package/@notchmetrics/mcp) and describe
 the number you want.
 
 A custom metric is contained, not sandboxed. It names the hosts it may reach

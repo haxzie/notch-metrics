@@ -3,6 +3,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   executeMetric,
+  listConnectors,
+  promoteStagedConnector,
+  readConnector,
+  removeConnector,
+  runConnector,
+  verifyConnector,
+  writeConnector,
   lintSource,
   listMetrics,
   metricsRoot,
@@ -11,10 +18,16 @@ import {
   removeMetric,
   writeMetric,
 } from "@notch/metric-runtime";
-import { PluginManifest } from "@notch/schemas";
+import { LocalConnectorManifest, PluginManifest } from "@notch/schemas";
 import type * as z4 from "zod/v4";
 import { RUNTIME_DOCS } from "./runtime-docs.ts";
 import { manifestInput, type ManifestInput } from "./tool-schemas.ts";
+import {
+  connectorManifestInput,
+  fillConnector,
+  type ConnectorManifestInput,
+} from "./connector-schemas.ts";
+import { CONNECTOR_DOCS } from "./connector-docs.ts";
 import { deleteSecrets, hasSecret, readSecret, setSecret } from "./secrets.ts";
 
 const API_URL = process.env.NOTCH_API_URL ?? "https://api.notchmetrics.com";
@@ -333,6 +346,230 @@ server.tool(
         deleted: id,
         removedSecrets: keys,
         note: "Any widget pointing at this metric will show as unavailable until the user removes it.",
+      });
+    } catch (error) {
+      return problem(error instanceof Error ? error.message : String(error));
+    }
+  },
+);
+
+// ── Connectors ──────────────────────────────────────────────────────────────
+//
+// A connector is one app, its credential, and every metric it offers. The
+// single-metric tools above remain for a one-off number; this is the unit for
+// "I have an API key and I want six tiles from it".
+
+server.tool(
+  "describe_connector_runtime",
+  "Read this before writing a connector. The module contract, the four metric shapes, the credential rules and the host allowlist.",
+  {},
+  () => text(CONNECTOR_DOCS),
+);
+
+server.tool(
+  "list_connectors",
+  "Every connector registered on this machine, and any whose manifest no longer parses.",
+  {},
+  async () => {
+    const { ok, broken } = await listConnectors();
+    return text({
+      connectors: await Promise.all(
+        ok.map(async ({ manifest }) => ({
+          id: manifest.id,
+          name: manifest.name,
+          metrics: manifest.metrics.map((metric) => metric.id),
+          allowedHosts: manifest.allowedHosts,
+          credentials: await Promise.all(
+            manifest.auth.map(async (field) => ({
+              key: field.key,
+              required: field.required,
+              configured: await hasSecret(manifest.id, field.key),
+            })),
+          ),
+        })),
+      ),
+      broken,
+    });
+  },
+);
+
+server.tool(
+  "get_connector",
+  "The manifest and source of one registered connector.",
+  { id: z.string() },
+  async ({ id }) => {
+    try {
+      return text(await readConnector(id));
+    } catch (error) {
+      return problem(error instanceof Error ? error.message : String(error));
+    }
+  },
+);
+
+/**
+ * Stages a candidate, verifies the credential, fetches every metric once, and
+ * promotes only if something worked.
+ *
+ * The same shape as `create_metric`: nothing reaches the live directory until
+ * it has produced a real answer, so a broken rewrite cannot blank a working
+ * set of tiles.
+ */
+async function registerConnector(
+  input: ConnectorManifestInput,
+  source: string,
+  credentials: Record<string, string> | undefined,
+  mode: "register" | "refresh",
+) {
+  const findings = lintSource(source, "connector");
+  const blocking = findings.filter((finding) => finding.severity === "error");
+  // The credential-shape refusal is the highest-value check in the design:
+  // pasting the key into the file is the natural thing to do with one.
+  if (blocking.some((finding) => !finding.message.includes("fetchMetric"))) {
+    return problem(blocking.map((finding) => finding.message).join("\n"));
+  }
+
+  let manifest: LocalConnectorManifest;
+  try {
+    manifest = LocalConnectorManifest.parse(fillConnector(input));
+  } catch (error) {
+    return problem(error instanceof Error ? error.message : String(error));
+  }
+
+  const existing = await listConnectors();
+  const known = existing.ok.some(({ manifest: m }) => m.id === manifest.id);
+  if (mode === "register" && known) {
+    return problem(`${manifest.id} is already registered. Use refresh_connector to replace it.`);
+  }
+  if (mode === "refresh" && !known) {
+    return problem(`${manifest.id} is not registered yet. Use register_connector.`);
+  }
+
+  for (const [key, value] of Object.entries(credentials ?? {})) {
+    await setSecret(manifest.id, key, value);
+  }
+
+  const supplied: Record<string, string> = {};
+  for (const field of manifest.auth) {
+    const value = await readSecret(manifest.id, field.key);
+    if (value !== null) supplied[field.key] = value;
+  }
+
+  const dir = await writeConnector(manifest, source, { staging: true });
+
+  const verified = await verifyConnector({ dir, manifest, credentials: supplied });
+  if (!verified.ok) {
+    return problem(
+      `The credential did not verify, so nothing was registered.\n${verified.code}: ${verified.message}\n` +
+        (verified.httpCalls.some((call) => call.blocked)
+          ? `Blocked hosts: ${verified.httpCalls
+              .filter((c) => c.blocked)
+              .map((c) => c.host)
+              .join(", ")}. Add them to allowedHosts.`
+          : ""),
+    );
+  }
+
+  const now = new Date();
+  const run = await runConnector({
+    dir,
+    manifest,
+    credentials: supplied,
+    requests: manifest.metrics.map((metric) => ({
+      metric: metric.id,
+      params: {},
+      range: "30d",
+      granularity: "day",
+      from: new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString(),
+      to: now.toISOString(),
+      comparePrevious: true,
+    })),
+  });
+
+  if (!run.ok) {
+    return problem(
+      `No metric produced a number, so nothing was registered.\n` +
+        run.outcomes
+          .filter((outcome) => !outcome.ok)
+          .map((outcome) => `${outcome.metric}: ${outcome.ok ? "" : outcome.message}`)
+          .join("\n"),
+    );
+  }
+
+  const live = await promoteStagedConnector(manifest.id);
+
+  return text({
+    registered: live,
+    account: verified.result?.accountLabel ?? null,
+    metrics: run.outcomes.map((outcome) =>
+      outcome.ok
+        ? { metric: outcome.metric, value: outcome.result.value }
+        : { metric: outcome.metric, failed: outcome.message },
+    ),
+    warnings: findings.filter((finding) => finding.severity === "warning").map((f) => f.message),
+    nextStep: manifest.auth.some((field) => field.required && !supplied[field.key])
+      ? "Set the remaining credentials with set_connector_credential, then enable it in Notch Metrics → Settings."
+      : "Tell the user to enable it in Notch Metrics → Settings. A new connector does not run until they do.",
+  });
+}
+
+server.tool(
+  "register_connector",
+  "Registers a new connector: one app, its credentials and its metrics. Stages, verifies the credential, fetches every metric once, and publishes only if that worked.",
+  {
+    manifest: connectorManifestInput,
+    source: z.string(),
+    credentials: z.record(z.string(), z.string()).optional(),
+  },
+  ({ manifest, source, credentials }) =>
+    registerConnector(manifest, source, credentials, "register"),
+);
+
+server.tool(
+  "refresh_connector",
+  "Replaces a registered connector with a rebuilt one. The live copy is untouched unless the new build verifies and returns a number. The user must re-approve it, because approval is pinned to the contents.",
+  {
+    manifest: connectorManifestInput,
+    source: z.string(),
+    credentials: z.record(z.string(), z.string()).optional(),
+  },
+  ({ manifest, source, credentials }) =>
+    registerConnector(manifest, source, credentials, "refresh"),
+);
+
+server.tool(
+  "set_connector_credential",
+  "Stores one declared credential in the macOS Keychain. The value never touches disk and is never echoed back.",
+  { id: z.string(), key: z.string(), value: z.string() },
+  async ({ id, key, value }) => {
+    try {
+      const { manifest } = await readConnector(id);
+      if (!manifest.auth.some((field) => field.key === key)) {
+        return problem(
+          `${id} does not declare a credential called ${key}. It declares: ${manifest.auth.map((f) => f.key).join(", ") || "none"}.`,
+        );
+      }
+      await setSecret(id, key, value);
+      return text({ ok: true, id, key, configured: true });
+    } catch (error) {
+      return problem(error instanceof Error ? error.message : String(error));
+    }
+  },
+);
+
+server.tool(
+  "delete_connector",
+  "Removes a connector and its stored credentials.",
+  { id: z.string(), confirm: z.literal(true) },
+  async ({ id }) => {
+    try {
+      const { manifest } = await readConnector(id);
+      const keys = manifest.auth.map((field) => field.key);
+      await deleteSecrets(id, keys);
+      await removeConnector(id);
+      return text({
+        deleted: id,
+        removedCredentials: keys,
+        note: "Any widget pointing at this connector will show as unavailable until the user removes it.",
       });
     } catch (error) {
       return problem(error instanceof Error ? error.message : String(error));

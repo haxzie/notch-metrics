@@ -11,13 +11,26 @@ const run = promisify(execFile);
  * through `/usr/bin/security`. Documented here because it is the single shared
  * contract between a published npm package and a signed .app.
  *
+ * The names are the **app's**, not this server's, and they have to be read off
+ * the Swift side to stay right: `KeychainSecretStore` defaults its service to
+ * `AppPaths.bundleIdentifier`, and `SecretKey.plugin(id, name)` builds the
+ * account. This file used to invent its own pair — service
+ * `app.notchmetrics.plugin.<id>`, account `<KEY>` — which parses fine, writes
+ * fine, and produces an item the app never looks up. `set_metric_secret` then
+ * reported success while every run failed on a missing required secret.
+ *
  * An `npx`-installed server is not signed with the app's team id, so it cannot
  * share a Keychain access group. The consequence is a one-time authorisation
  * prompt per plugin, which is accepted for v1; a local socket on the app is the
  * cleaner answer and is deferred.
  */
-export function service(pluginId: string): string {
-  return `app.notchmetrics.plugin.${pluginId}`;
+
+/** `AppPaths.bundleIdentifier`. One item namespace for the whole app. */
+const SERVICE = "com.notchmetrics.app";
+
+/** `SecretKey.plugin(_:_:)` on the Swift side. */
+export function account(pluginId: string, key: string): string {
+  return `plugin.${pluginId}.${key}`;
 }
 
 export async function setSecret(pluginId: string, key: string, value: string): Promise<void> {
@@ -29,9 +42,9 @@ export async function setSecret(pluginId: string, key: string, value: string): P
     "add-generic-password",
     "-U", // update in place rather than erroring on a second set
     "-s",
-    service(pluginId),
+    SERVICE,
     "-a",
-    key,
+    account(pluginId, key),
     "-w",
     value,
   ]);
@@ -40,7 +53,13 @@ export async function setSecret(pluginId: string, key: string, value: string): P
 /** Existence only. The value is never read back into this process. */
 export async function hasSecret(pluginId: string, key: string): Promise<boolean> {
   try {
-    await run("/usr/bin/security", ["find-generic-password", "-s", service(pluginId), "-a", key]);
+    await run("/usr/bin/security", [
+      "find-generic-password",
+      "-s",
+      SERVICE,
+      "-a",
+      account(pluginId, key),
+    ]);
     return true;
   } catch {
     return false;
@@ -52,9 +71,9 @@ export async function readSecret(pluginId: string, key: string): Promise<string 
     const { stdout } = await run("/usr/bin/security", [
       "find-generic-password",
       "-s",
-      service(pluginId),
+      SERVICE,
       "-a",
-      key,
+      account(pluginId, key),
       "-w",
     ]);
     return stdout.trim();
@@ -68,9 +87,9 @@ export async function deleteSecrets(pluginId: string, keys: string[]): Promise<v
     await run("/usr/bin/security", [
       "delete-generic-password",
       "-s",
-      service(pluginId),
+      SERVICE,
       "-a",
-      key,
+      account(pluginId, key),
     ]).catch(() => undefined);
   }
 }

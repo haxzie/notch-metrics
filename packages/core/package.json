@@ -1,0 +1,47 @@
+{
+  "name": "@notchmetrics/core",
+  "version": "0.1.0",
+  "description": "Types and schemas for writing a local Notch Metrics connector.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haxzie/notch-metrics.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "notch-metrics",
+    "connector",
+    "metrics",
+    "macos"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf .turbo node_modules dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@notch/typescript-config": "workspace:*",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

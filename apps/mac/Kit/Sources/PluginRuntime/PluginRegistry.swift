@@ -9,6 +9,15 @@ public enum PluginState: Sendable, Equatable {
     /// with the user's API keys and nobody having said yes.
     case pendingApproval
     case ready
+    /// Approved once, and the bytes on disk are no longer the bytes that were
+    /// approved.
+    ///
+    /// Not an error and not a silent re-approval. The installed copy lives in
+    /// a directory the user owns, so anything able to write there once can
+    /// write there again — and approving a metric approves its `allowedHosts`
+    /// and its secrets as much as its code. A rewrite therefore asks again
+    /// rather than inheriting the yes it was given for different contents.
+    case modified
     case invalid(reason: String)
 }
 
@@ -17,8 +26,11 @@ public struct LoadedPlugin: Sendable, Identifiable, Equatable {
     public let directory: URL
     public let manifest: PluginManifest?
     public let state: PluginState
-    /// Changes when the manifest or entry file changes, so cached results can
-    /// be invalidated when an agent edits a plugin while the app is running.
+    /// A stable SHA-256 over the manifest and the entry — see `PluginDigest`.
+    ///
+    /// Stable is the operative word. This used to be built from
+    /// `Data.hashValue`, which Swift seeds per process, so it changed on every
+    /// launch and could not be compared with anything recorded earlier.
     public let contentHash: String
 
     public var displayName: String { manifest?.name ?? id }
@@ -31,16 +43,18 @@ public final class PluginRegistry {
     public private(set) var plugins: [LoadedPlugin] = []
 
     private let root: URL
-    private var approved: Set<String>
+    /// id → the digest that was approved. Not a set of ids: approval is of
+    /// *contents*, which is the whole of `PluginState.modified`.
+    private var approved: [String: String]
     private var watcher: DirectoryWatcher?
 
-    public init(root: URL = AppPaths.metrics, approved: Set<String> = []) {
+    public init(root: URL = AppPaths.metrics, approved: [String: String] = [:]) {
         self.root = root
         self.approved = approved
     }
 
-    public func setApproved(_ ids: Set<String>) {
-        approved = ids
+    public func setApproved(_ digestsByID: [String: String]) {
+        approved = digestsByID
         reload()
     }
 
@@ -48,6 +62,11 @@ public final class PluginRegistry {
         reload()
         // Agents write these files while the app is running — live reload is
         // the entire point of the MCP workflow, not a nicety.
+        // The watch is no longer live *reload* — an installed copy is not
+        // meant to change under a running app, and the MCP workflow rewrites
+        // through register/refresh, which is an explicit act. It stays
+        // because it is how a rewrite is *noticed*: a rescan recomputes the
+        // digest, and a plugin whose bytes moved stops being `.ready`.
         watcher = DirectoryWatcher(url: root) { [weak self] in
             Task { @MainActor in self?.reload() }
         }
@@ -61,7 +80,7 @@ public final class PluginRegistry {
         plugins = Self.scan(root: root, approved: approved)
     }
 
-    static func scan(root: URL, approved: Set<String>) -> [LoadedPlugin] {
+    static func scan(root: URL, approved: [String: String]) -> [LoadedPlugin] {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(
             at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
@@ -102,12 +121,22 @@ public final class PluginRegistry {
                     state: .invalid(reason: "\(manifest.entry) is missing."), contentHash: "")
             }
 
+            // The digest covers the manifest as well as the code, because
+            // approving a metric approves which hosts it may reach.
+            let digest = PluginDigest.of(manifest: data, entry: entry)
+            let state: PluginState
+            switch approved[id] {
+            case nil: state = .pendingApproval
+            case digest: state = .ready
+            default: state = .modified
+            }
+
             return LoadedPlugin(
                 id: id,
                 directory: directory,
                 manifest: manifest,
-                state: approved.contains(id) ? .ready : .pendingApproval,
-                contentHash: "\(data.hashValue)-\(entry.hashValue)"
+                state: state,
+                contentHash: digest
             )
         }
         .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }

@@ -14,7 +14,7 @@ faq:
   - question: Can Claude write a Notch Metrics custom metric for me?
     answer: >-
       Yes. Add the Notch Metrics MCP server with `claude mcp add notch-metrics
-      -- npx -y notch-metrics-mcp`, then describe the number you want. The
+      -- npx -y @notchmetrics/mcp`, then describe the number you want. The
       agent reads the runtime contract, writes the module, test-runs it, and
       publishes only if it returns a valid result.
   - question: Where are custom metric secrets stored?
@@ -118,7 +118,7 @@ someone's API docs, which is exactly the work worth handing off. We publish
 an MCP server for it:
 
 ```bash
-claude mcp add notch-metrics -- npx -y notch-metrics-mcp
+claude mcp add notch-metrics -- npx -y @notchmetrics/mcp
 ```
 
 Then describe the number you want. The useful shape of the conversation is:
@@ -152,5 +152,5 @@ The failures cluster into three kinds, and each one reports itself by name.
 - **Bad result**: the return value failed validation. The message names the
   field. Almost always a string where a number belongs, or money as a float.
 
-Start with [the MCP server](https://www.npmjs.com/package/notch-metrics-mcp)
+Start with [the MCP server](https://www.npmjs.com/package/@notchmetrics/mcp)
 and one number you check too often.

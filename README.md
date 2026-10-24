@@ -13,7 +13,7 @@ untouched.
 | `apps/mac`                | The macOS app. Swift 6, SwiftUI, XcodeGen.                      |
 | `apps/api`                | Hono on Cloudflare Workers. D1, R2, Better Auth, Dodo Payments. |
 | `apps/web`                | Next.js on Workers through OpenNext.                            |
-| `apps/mcp`                | `notch-metrics-mcp` — lets an agent write custom metrics.       |
+| `apps/mcp`                | `@notchmetrics/mcp` — lets an agent write custom metrics.       |
 | `packages/schemas`        | The zod wire contracts, and the fixtures Swift decodes.         |
 | `packages/integrations`   | Provider adapters. Adding one needs no app release.             |
 | `packages/metric-runtime` | The custom-metric contract, executor and runner binary.         |

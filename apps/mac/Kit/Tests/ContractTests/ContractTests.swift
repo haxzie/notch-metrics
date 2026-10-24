@@ -39,7 +39,9 @@ struct ContractTests {
 
         // Fixtures the Swift app deliberately does not decode: it never reads
         // a provider manifest list off disk, and the plugin manifest is
-        // covered separately in PluginRuntime.
+        // covered separately in `PluginRuntimeTests`. That deferral was empty
+        // for a while — the target did not exist, so "covered separately"
+        // meant covered nowhere.
         let notDecodedHere: Set<String> = ["provider-manifest-list", "integration", "plugin-manifest"]
         let decoded: Set<String> = [
             "metric-series", "metric-series-empty", "metric-series-no-currency",

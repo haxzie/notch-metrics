@@ -131,66 +131,7 @@ function buildContext(
       logs.push(fields ? `${message} ${JSON.stringify(fields)}` : message);
     },
 
-    async http(
-      url: string,
-      init: { method?: string; headers?: Record<string, string>; body?: string } = {},
-    ) {
-      let target = url;
-
-      for (let hop = 0; ; hop++) {
-        const verdict = checkHost(target, manifest.allowedHosts);
-        if (!verdict.allowed) {
-          httpCalls.push({
-            host: safeHost(target),
-            method: init.method ?? "GET",
-            status: null,
-            ms: 0,
-            blocked: true,
-          });
-          throw new PolicyError(verdict.reason);
-        }
-
-        const started = Date.now();
-        const response = await fetch(target, {
-          method: init.method ?? "GET",
-          headers: init.headers,
-          body: init.body,
-          // Manual, and the host is re-checked on every hop. `fetch` re-sends
-          // request headers across a same-protocol redirect, so a server that
-          // 302s off-allowlist would otherwise be handed the plugin's API key.
-          redirect: "manual",
-          signal,
-        });
-
-        if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get("location");
-          if (!location || hop >= MAX_REDIRECTS) throw new PolicyError("too many redirects");
-          target = new URL(location, target).toString();
-          continue;
-        }
-
-        httpCalls.push({
-          host: safeHost(target),
-          method: init.method ?? "GET",
-          status: response.status,
-          ms: Date.now() - started,
-          blocked: false,
-        });
-
-        const text = await response.text();
-        if (text.length > MAX_RESPONSE_BYTES) {
-          throw new PolicyError(`${safeHost(target)} returned more than 4 MB`);
-        }
-
-        return {
-          ok: response.ok,
-          status: response.status,
-          headers: Object.fromEntries(response.headers.entries()),
-          json: async () => JSON.parse(text) as unknown,
-          text: async () => text,
-        };
-      }
-    },
+    http: allowlistedHttp({ allowedHosts: manifest.allowedHosts, signal, httpCalls }),
 
     cache: {
       async get<T>(key: string): Promise<T | null> {
@@ -247,4 +188,85 @@ export async function executeStored(
     secrets,
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
+}
+
+/**
+ * The only way a plugin or a connector reaches the network.
+ *
+ * Extracted so the two execution paths share one implementation rather than
+ * two that agree today. This is the security-critical code in the runner —
+ * https only, the private-address block, the allowlist, a manual redirect
+ * with the host re-checked on every hop, and a response cap — and a second
+ * copy of it is a second place for one of those to be forgotten.
+ *
+ * The redirect handling is the subtle part. `fetch` re-sends request headers
+ * across a same-protocol redirect, so a server that 302s to a host outside
+ * the allowlist would be handed the user's API key by the runtime, with none
+ * of our code involved.
+ */
+export function allowlistedHttp(options: {
+  allowedHosts: string[];
+  signal: AbortSignal;
+  httpCalls: PluginHttpCall[];
+}) {
+  return async function http(
+    url: string,
+    init: { method?: string; headers?: Record<string, string>; body?: string } = {},
+  ) {
+    let target = url;
+
+    for (let hop = 0; ; hop++) {
+      const verdict = checkHost(target, options.allowedHosts);
+      if (!verdict.allowed) {
+        options.httpCalls.push({
+          host: safeHost(target),
+          method: init.method ?? "GET",
+          status: null,
+          ms: 0,
+          blocked: true,
+        });
+        throw new PolicyError(verdict.reason);
+      }
+
+      const started = Date.now();
+      const response = await fetch(target, {
+        method: init.method ?? "GET",
+        headers: init.headers,
+        body: init.body,
+        // Manual, and the host is re-checked on every hop. `fetch` re-sends
+        // request headers across a same-protocol redirect, so a server that
+        // 302s off-allowlist would otherwise be handed the plugin's API key.
+        redirect: "manual",
+        signal: options.signal,
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || hop >= MAX_REDIRECTS) throw new PolicyError("too many redirects");
+        target = new URL(location, target).toString();
+        continue;
+      }
+
+      options.httpCalls.push({
+        host: safeHost(target),
+        method: init.method ?? "GET",
+        status: response.status,
+        ms: Date.now() - started,
+        blocked: false,
+      });
+
+      const text = await response.text();
+      if (text.length > MAX_RESPONSE_BYTES) {
+        throw new PolicyError(`${safeHost(target)} returned more than 4 MB`);
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        json: async () => JSON.parse(text) as unknown,
+        text: async () => text,
+      };
+    }
+  };
 }

@@ -20,8 +20,15 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PLUGIN_EXIT, PluginManifest, PluginRunInput } from "@notch/schemas";
+import { lintSource } from "./lint.ts";
+import {
+  LocalConnectorManifest,
+  PLUGIN_EXIT,
+  PluginManifest,
+  PluginRunInput,
+} from "@notch/schemas";
 import { executeMetric } from "./execute.ts";
+import { runConnector, verifyConnector, type MetricRequest } from "./connector.ts";
 import { listMetrics } from "./store.ts";
 
 const EXIT_FOR_CODE: Record<string, number> = {
@@ -66,8 +73,18 @@ async function main(): Promise<number> {
 
   const dir = arg("dir");
   if (!dir) {
-    process.stderr.write("usage: notch-metric-runner <run|check|list> --dir <path>\n");
+    process.stderr.write(
+      "usage: notch-metric-runner <run|check|list|connect|fetch> --dir <path>\n",
+    );
     return PLUGIN_EXIT.validation;
+  }
+
+  // Connectors are a different manifest and a different entry, so they branch
+  // before the plugin manifest is parsed — a connector's manifest.json is not
+  // a `PluginManifest` and reporting it as a broken one would be a confusing
+  // way to say "wrong command".
+  if (command === "connect" || command === "fetch") {
+    return await connectorCommand(command, dir);
   }
 
   let manifest;
@@ -91,7 +108,13 @@ async function main(): Promise<number> {
     // Shape only, no network. What the Settings pane's "validate" button runs,
     // and what CI can run over a fixture without reaching the internet.
     const source = await readFile(join(dir, manifest.entry), "utf8");
-    const exports = /export\s+(async\s+)?function\s+fetchMetric/.test(source);
+    // The same check `lintSource` makes, through the same function — these
+    // were two copies of one regex, and only one of them learned that a
+    // bundler writes `export { fetchMetric }` rather than
+    // `export async function fetchMetric`.
+    const exports = lintSource(source).every(
+      (finding) => finding.severity !== "error" || !finding.message.includes("fetchMetric"),
+    );
     process.stdout.write(`${JSON.stringify({ ok: exports, manifest })}\n`);
     return exports ? PLUGIN_EXIT.ok : PLUGIN_EXIT.validation;
   }
@@ -149,3 +172,78 @@ main()
     process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
     process.exit(PLUGIN_EXIT.runtime);
   });
+
+/**
+ * `connect` proves the credential; `fetch` returns several metrics at once.
+ *
+ * Both read one JSON object on stdin — `{"credentials":{…},"requests":[…]}` —
+ * for the same reason the plugin path does: argv is world-readable through
+ * `ps`, and the environment is inherited by anything the connector spawns.
+ *
+ * One process answers every requested metric. A connector with six tiles was
+ * otherwise six launches a tick.
+ */
+async function connectorCommand(command: "connect" | "fetch", dir: string): Promise<number> {
+  let manifest;
+  try {
+    manifest = LocalConnectorManifest.parse(
+      JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")),
+    );
+  } catch (error) {
+    process.stdout.write(
+      `${JSON.stringify({
+        ok: false,
+        code: "manifest",
+        message: error instanceof Error ? error.message : String(error),
+        durationMs: 0,
+        httpCalls: [],
+        logs: [],
+      })}\n`,
+    );
+    return PLUGIN_EXIT.validation;
+  }
+
+  const stdin = await readStdin();
+  let input: { credentials?: Record<string, string>; requests?: MetricRequest[] };
+  try {
+    input = stdin ? (JSON.parse(stdin) as typeof input) : {};
+  } catch {
+    process.stderr.write('stdin must be one JSON object: {"credentials":{…},"requests":[…]}\n');
+    return PLUGIN_EXIT.validation;
+  }
+
+  // The connector's own output must not reach stdout, which carries the one
+  // result line. Reassigned rather than deleted, so `console.log` still works.
+  const toStderr = (...args: unknown[]) => {
+    process.stderr.write(
+      `${args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ")}\n`,
+    );
+  };
+  console.log = toStderr;
+  console.info = toStderr;
+  console.warn = toStderr;
+  console.error = toStderr;
+  console.debug = toStderr;
+
+  const credentials = input.credentials ?? {};
+
+  if (command === "connect") {
+    const outcome = await verifyConnector({ dir, manifest, credentials });
+    process.stdout.write(`${JSON.stringify(outcome)}\n`);
+    return outcome.ok
+      ? PLUGIN_EXIT.ok
+      : (EXIT_FOR_CODE[outcome.code ?? "runtime"] ?? PLUGIN_EXIT.runtime);
+  }
+
+  const result = await runConnector({
+    dir,
+    manifest,
+    credentials,
+    requests: input.requests ?? [],
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  // Exit 0 whenever *anything* succeeded. A connector where one metric's
+  // endpoint is down is not a failed run, and treating it as one would blank
+  // five working tiles.
+  return result.ok ? PLUGIN_EXIT.ok : PLUGIN_EXIT.runtime;
+}
