@@ -23,6 +23,19 @@ command -v xcodegen >/dev/null || { echo "::error::xcodegen is not installed. br
 
 node "$ROOT/scripts/sync-mac-version.mjs"
 node "$ROOT/scripts/sync-mac-config.mjs"
+
+# The metric runner, before xcodegen, because project.yml copies it in as a
+# resource and declares it `optional` — a missing bundle is a warning there,
+# not an error. Built here so that cannot quietly ship an app whose custom
+# metrics have nothing to run: `PluginRunner` would throw `runnerMissing` and
+# every local tile would read "Runner missing".
+echo "==> building the metric runner"
+(cd "$ROOT" && pnpm --filter @notch/metric-runtime build >/dev/null)
+[ -f "$ROOT/packages/metric-runtime/dist/runner.mjs" ] || {
+  echo "::error::the runner did not build; custom metrics would not run in this app"
+  exit 1
+}
+
 (cd "$MAC" && xcodegen generate)
 
 mkdir -p "$BUILD"
