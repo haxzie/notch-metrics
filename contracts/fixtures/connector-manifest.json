@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "linear",
+  "name": "Linear",
+  "description": "Issues and cycle progress from a Linear workspace.",
+  "appId": "custom",
+  "author": "claude-code",
+  "version": "1.2.0",
+  "icon": {
+    "type": "symbol",
+    "name": "chart.bar.doc.horizontal",
+    "tint": "#5E6AD2"
+  },
+  "hostCredentials": [],
+  "auth": [
+    {
+      "key": "api_key",
+      "label": "API key",
+      "type": "secret",
+      "required": true,
+      "help": "A personal API key from Linear settings."
+    }
+  ],
+  "allowedHosts": [
+    "api.linear.app"
+  ],
+  "metrics": [
+    {
+      "id": "open_issues",
+      "label": "Open issues",
+      "shortLabel": "Open",
+      "unit": "count",
+      "shape": {
+        "kind": "scalar"
+      },
+      "methodology": "Issues in the team's backlog and started states."
+    }
+  ],
+  "refreshIntervalSeconds": 900,
+  "timeoutMs": 8000,
+  "entry": "connector.mjs",
+  "createdAt": "2026-10-05T12:00:00.000Z",
+  "updatedAt": "2026-10-05T12:00:00.000Z"
+}

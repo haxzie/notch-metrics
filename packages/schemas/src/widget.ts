@@ -6,7 +6,25 @@ import { MetricParams } from "./metric.ts";
 export const WidgetKind = z.enum(["provider_metric", "custom_metric", "divider"]);
 export type WidgetKind = z.infer<typeof WidgetKind>;
 
-export const ChartKind = z.enum(["none", "sparkline", "bars"]);
+/**
+ * How a tile draws its number.
+ *
+ * `gauge` is the odd one out: `sparkline` and `bars` draw a series under the
+ * headline figure and need points, where a gauge draws the figure itself as a
+ * share of its maximum and needs no history. Only meaningful for a metric with
+ * a known ceiling — a `ratio`, where the bound is 1.0 by definition.
+ */
+export const ChartKind = z.enum([
+  "none",
+  "sparkline",
+  "bars",
+  "gauge",
+  // Distributions: one list's categories drawn against each other. `bars` is
+  // a time series — one bar per bucket — which is a different question.
+  "split",
+  "ranked",
+  "pie",
+]);
 export type ChartKind = z.infer<typeof ChartKind>;
 
 /**

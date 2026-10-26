@@ -17,7 +17,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "clean": "turbo run clean",
-    "contracts": "pnpm --filter @notch/schemas emit",
+    "contracts": "turbo run emit --filter=@notch/schemas",
     "runner": "pnpm --filter @notch/metric-runtime build",
     "db:generate": "pnpm --filter @notch/db generate",
     "db:migrate": "pnpm --filter @notch/api migrate",

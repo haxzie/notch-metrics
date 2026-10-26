@@ -19,6 +19,7 @@ const BY_NAME: Record<string, z.ZodType> = {
   "widget-layout": S.WidgetLayout,
   "latest-json": S.LatestJson,
   "plugin-manifest": S.PluginManifest,
+  "connector-manifest": S.LocalConnectorManifest,
   "notification-feed": S.NotificationFeed,
   "notification-feed-empty": S.NotificationFeed,
   "notification-feed-truncated": S.NotificationFeed,

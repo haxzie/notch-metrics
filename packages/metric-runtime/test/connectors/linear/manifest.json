@@ -5,8 +5,18 @@
   "description": "Issues and cycle progress from a Linear workspace.",
   "appId": "linear",
   "auth": [
-    { "key": "api_key", "label": "API key", "type": "secret", "required": true },
-    { "key": "team", "label": "Team key", "type": "string", "required": false }
+    {
+      "key": "api_key",
+      "label": "API key",
+      "type": "secret",
+      "required": true
+    },
+    {
+      "key": "team",
+      "label": "Team key",
+      "type": "string",
+      "required": false
+    }
   ],
   "allowedHosts": ["api.linear.app"],
   "metrics": [
@@ -15,7 +25,9 @@
       "label": "Open issues",
       "shortLabel": "Issues",
       "unit": "count",
-      "shape": { "kind": "scalar" },
+      "shape": {
+        "kind": "scalar"
+      },
       "methodology": "Issues in an unstarted or started state right now."
     },
     {
@@ -23,7 +35,11 @@
       "label": "Completed",
       "shortLabel": "Done",
       "unit": "count",
-      "shape": { "kind": "series", "granularities": ["day", "week"], "compare": true },
+      "shape": {
+        "kind": "series",
+        "granularities": ["day", "week"],
+        "compare": true
+      },
       "methodology": "Issues moved to a completed state in the window."
     },
     {
@@ -31,8 +47,22 @@
       "label": "Recent issues",
       "shortLabel": "Recent",
       "unit": "count",
-      "shape": { "kind": "list", "limit": 5 },
+      "shape": {
+        "kind": "list",
+        "limit": 5
+      },
       "methodology": "The five most recently updated issues."
+    },
+    {
+      "id": "echo_credentials",
+      "label": "Echo credentials",
+      "shortLabel": "Creds",
+      "unit": "count",
+      "shape": {
+        "kind": "list",
+        "limit": 10
+      },
+      "methodology": "Which credential keys the filter let through."
     }
   ],
   "refreshIntervalSeconds": 300,

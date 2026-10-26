@@ -52,6 +52,16 @@ export interface ConnectorContext {
 
 /** What one metric is being asked for. */
 export interface MetricRequest {
+  /**
+   * Who asked. Opaque to the connector, echoed back on the outcome.
+   *
+   * One widget per request. Two widgets can ask for the **same metric with
+   * different params** — one npm package per tile — and nothing else in a
+   * request or an outcome tells them apart: `metric` is identical for both.
+   * Without this the caller has to match answers by position, which is a
+   * silent wrong number the day anything reorders.
+   */
+  id: string;
   /** The `id` of one of the manifest's declared metrics. */
   metric: string;
   /** Whatever the widget supplied for this metric's declared `params`. */

@@ -31,6 +31,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   MeResponse: S.MeResponse,
   DesktopTokenResponse: S.DesktopTokenResponse,
   PluginManifest: S.PluginManifest,
+  LocalConnectorManifest: S.LocalConnectorManifest,
   PluginRunResult: S.PluginRunResult,
   LatestJson: S.LatestJson,
   Notification: S.Notification,
@@ -525,6 +526,41 @@ const FIXTURES: Record<string, unknown> = {
     createdAt: AT,
     updatedAt: AT,
   },
+  "connector-manifest": {
+    schemaVersion: 1,
+    id: "linear",
+    name: "Linear",
+    description: "Issues and cycle progress from a Linear workspace.",
+    appId: "custom",
+    author: "claude-code",
+    version: "1.2.0",
+    icon: { type: "symbol", name: "chart.bar.doc.horizontal", tint: "#5E6AD2" },
+    auth: [
+      {
+        key: "api_key",
+        label: "API key",
+        type: "secret",
+        required: true,
+        help: "A personal API key from Linear settings.",
+      },
+    ],
+    allowedHosts: ["api.linear.app"],
+    metrics: [
+      {
+        id: "open_issues",
+        label: "Open issues",
+        shortLabel: "Open",
+        unit: "count",
+        shape: { kind: "scalar" },
+        methodology: "Issues in the team's backlog and started states.",
+      },
+    ],
+    refreshIntervalSeconds: 900,
+    timeoutMs: 8000,
+    entry: "connector.mjs",
+    createdAt: AT,
+    updatedAt: AT,
+  },
 };
 
 const FIXTURE_SCHEMA: Record<keyof typeof FIXTURES & string, z.ZodType> = {
@@ -540,6 +576,7 @@ const FIXTURE_SCHEMA: Record<keyof typeof FIXTURES & string, z.ZodType> = {
   "widget-layout": S.WidgetLayout,
   "latest-json": S.LatestJson,
   "plugin-manifest": S.PluginManifest,
+  "connector-manifest": S.LocalConnectorManifest,
   "notification-feed": S.NotificationFeed,
   "notification-feed-empty": S.NotificationFeed,
   "notification-feed-truncated": S.NotificationFeed,

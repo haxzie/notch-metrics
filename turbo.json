@@ -9,6 +9,7 @@
       "outputs": [".next/**", "!.next/cache/**", "dist/**", "out/**", ".open-next/**"]
     },
     "emit": {
+      "dependsOn": ["^build"],
       "outputs": ["../../contracts/**"]
     },
     "test": {

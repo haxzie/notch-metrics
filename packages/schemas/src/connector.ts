@@ -13,6 +13,8 @@
 export {
   AppId as ConnectorAppId,
   AuthField as ConnectorAuthField,
+  ConnectorIconSpec,
+  HostCredential,
   ConnectorId,
   LocalConnectorManifest,
   LocalListItem,

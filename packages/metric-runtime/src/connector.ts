@@ -5,6 +5,7 @@ import {
   LocalMetricOutcome,
   LocalMetricResult,
   LocalVerifyResult,
+  type ConnectorMetricRequest,
   type PluginHttpCall,
 } from "@notch/schemas";
 import { allowlistedHttp, PolicyError } from "./execute.ts";
@@ -38,16 +39,14 @@ export interface ConnectorModule {
   fetchMetric?: (ctx: ConnectorContext, request: MetricRequest) => Promise<unknown>;
 }
 
-export interface MetricRequest {
-  metric: string;
-  /** Whatever the widget supplied for this metric's declared `params`. */
-  params: Record<string, string>;
-  range: string;
-  granularity: string;
-  from: string;
-  to: string;
-  comparePrevious: boolean;
-}
+/**
+ * Re-exported, not redeclared.
+ *
+ * This was a second copy of the same interface, which is how the contract
+ * grew a request `id` in `@notchmetrics/core` while the runner — the one
+ * thing that has to echo it — kept a shape that had never heard of it.
+ */
+export type MetricRequest = ConnectorMetricRequest;
 
 export interface ConnectorRunOptions {
   dir: string;
@@ -87,7 +86,16 @@ function buildContext(options: {
 }): ConnectorContext {
   // Filtered to what the manifest declares and frozen, so a credential the
   // connector never asked for is not quietly readable by its code.
-  const declared = new Set(options.manifest.auth.map((field) => field.key));
+  //
+  // `hostCredentials` counts as declared: those are named in the manifest too,
+  // just supplied by the app rather than typed by the user. Leaving them out
+  // of this set stripped them before the connector ran — the filter is what
+  // decides what "declared" means, and it only knew about one of the two
+  // places a manifest declares a credential.
+  const declared = new Set<string>([
+    ...options.manifest.auth.map((field) => field.key),
+    ...(options.manifest.hostCredentials ?? []),
+  ]);
   const credentials = Object.freeze(
     Object.fromEntries(Object.entries(options.credentials).filter(([key]) => declared.has(key))),
   );
@@ -259,6 +267,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
         ok: false,
         outcomes: options.requests.map((request) => ({
           ok: false as const,
+          id: request.id,
           metric: request.metric,
           code: "runtime" as const,
           message: "The entry file must export a `fetchMetric(ctx, request)` function.",
@@ -276,6 +285,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
       if (!descriptor) {
         outcomes.push({
           ok: false,
+          id: request.id,
           metric: request.metric,
           code: "unsupported",
           message: `${options.manifest.name} does not declare ${request.metric}.`,
@@ -288,6 +298,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
       if (controller.signal.aborted) {
         outcomes.push({
           ok: false,
+          id: request.id,
           metric: request.metric,
           code: "timeout",
           message: "The connector ran out of time before this metric.",
@@ -316,6 +327,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
           const issue = parsed.error.issues[0];
           outcomes.push({
             ok: false,
+            id: request.id,
             metric: request.metric,
             code: "bad_result",
             message:
@@ -323,10 +335,11 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
           });
           continue;
         }
-        outcomes.push({ ok: true, metric: request.metric, result: parsed.data });
+        outcomes.push({ ok: true, id: request.id, metric: request.metric, result: parsed.data });
       } catch (error) {
         outcomes.push({
           ok: false,
+          id: request.id,
           metric: request.metric,
           code: codeFor(error, controller.signal),
           message: messageOf(error),
@@ -348,6 +361,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
       ok: false,
       outcomes: options.requests.map((request) => ({
         ok: false as const,
+        id: request.id,
         metric: request.metric,
         code: codeFor(error, controller.signal),
         message: messageOf(error),

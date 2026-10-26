@@ -184,7 +184,11 @@
       "enum": [
         "none",
         "sparkline",
-        "bars"
+        "bars",
+        "gauge",
+        "split",
+        "ranked",
+        "pie"
       ]
     },
     "visible": {

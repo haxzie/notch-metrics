@@ -27,8 +27,12 @@ function only<T>(values: T[]): T {
   return first;
 }
 
+let nextRequestId = 0;
+
 function request(metric: string): MetricRequest {
   return {
+    // A different id each time, as the app gives each widget its own.
+    id: `w_${(nextRequestId += 1)}`,
     metric,
     params: {},
     range: "7d",
@@ -142,6 +146,77 @@ describe("running a connector", () => {
     expect(result.outcomes[0]?.ok).toBe(true);
     expect(result.outcomes[1]?.ok).toBe(false);
     expect(result.outcomes[2]?.ok).toBe(true);
+  });
+
+  it("answers one outcome per request, in order, even for the same metric twice", async () => {
+    // The property the Mac side matches answers by. Two widgets can ask for
+    // the same metric with different params — one npm package per tile — and
+    // nothing in an outcome distinguishes them except its position, because
+    // `metric` is identical for both. Keying answers by metric id instead
+    // made the second overwrite the first and showed one package's number on
+    // both tiles.
+    const requests = [
+      { ...request("open_issues"), params: { team: "ENG" } },
+      { ...request("completed") },
+      { ...request("open_issues"), params: { team: "OPS" } },
+    ];
+    const result = await runConnector({ dir, manifest, credentials, requests });
+
+    expect(result.outcomes).toHaveLength(3);
+    expect(result.outcomes.map((o) => o.metric)).toEqual([
+      "open_issues",
+      "completed",
+      "open_issues",
+    ]);
+    // The part that matters: each answer names the request it belongs to, so
+    // two widgets on the same metric are told apart by something other than
+    // where they happen to sit in the array.
+    expect(result.outcomes.map((o) => o.id)).toEqual(requests.map((r) => r.id));
+  });
+
+  it("still answers one per request when one of them fails", async () => {
+    // Position has to hold through a failure too, or every answer after the
+    // broken one lands on the wrong tile.
+    const result = await runConnector({
+      dir,
+      manifest,
+      credentials,
+      requests: [request("open_issues"), request("explodes"), request("recent")],
+    });
+    expect(result.outcomes.map((o) => o.metric)).toEqual(["open_issues", "explodes", "recent"]);
+  });
+
+  it("passes through a host credential the manifest declares", async () => {
+    // Host credentials are declared in the manifest too, just supplied by the
+    // app rather than typed by the user. The filter only knew about `auth`,
+    // so it stripped them before the connector ran and every metric failed
+    // with "no sign-in available" while the app had happily handed one over.
+    const result = await runConnector({
+      dir,
+      manifest: { ...manifest, hostCredentials: ["claude_code_oauth"] },
+      credentials: { ...credentials, claude_code_oauth: "oat-visible" },
+      requests: [request("echo_credentials")],
+    });
+    const outcome = only(result.outcomes);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    // The connector echoes the credential keys it can see.
+    expect(outcome.result.items?.map((i) => i.label)).toContain("claude_code_oauth");
+  });
+
+  it("does not pass through a host credential the manifest omits", async () => {
+    // The other half, and the one that matters: declaring nothing means
+    // receiving nothing, however much the caller supplies.
+    const result = await runConnector({
+      dir,
+      manifest: { ...manifest, hostCredentials: [] },
+      credentials: { ...credentials, claude_code_oauth: "oat-hidden" },
+      requests: [request("echo_credentials")],
+    });
+    const outcome = only(result.outcomes);
+    if (!outcome.ok) return;
+    expect(outcome.result.items?.map((i) => i.label)).not.toContain("claude_code_oauth");
+    expect(JSON.stringify(result)).not.toContain("oat-hidden");
   });
 
   it("refuses a metric the manifest does not declare", async () => {

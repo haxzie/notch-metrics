@@ -176,48 +176,224 @@ export const LocalMetricDescriptor = z.object({
 });
 export type LocalMetricDescriptor = z.infer<typeof LocalMetricDescriptor>;
 
-export const LocalConnectorManifest = z.object({
-  schemaVersion: z.literal(1),
-  id: ConnectorId,
-  name: z.string().min(1).max(60),
-  description: z.string().max(400),
-  /** Which app this is, for the mark and the grouping. */
-  appId: AppId.default("custom"),
-  author: z.string().optional(),
+/**
+ * How a custom app says what it looks like.
+ *
+ * A tagged union rather than three optional fields: an app declaring both a
+ * symbol and an emoji would otherwise be a question with no answer, and the
+ * tag is what lets a future arm be added without the app guessing.
+ */
+export const ConnectorIconSpec = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("symbol"),
+    /**
+     * An SF Symbol name, as it appears in Apple's SF Symbols app —
+     * `chart.bar.fill`, `shippingbox`, `person.2`.
+     */
+    name: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(
+        /^[a-z0-9]+(\.[a-z0-9]+)*$/,
+        "An SF Symbol name is lower-case words separated by dots.",
+      ),
+    /** A hex tile colour behind the glyph. Defaults to the Custom accent. */
+    tint: z
+      .string()
+      .regex(/^#?[0-9a-fA-F]{6}$/)
+      .optional(),
+  }),
+  z.object({
+    type: z.literal("emoji"),
+    /** One emoji. Grapheme clusters vary in code-point length, hence 8. */
+    value: z.string().min(1).max(8),
+  }),
+  z.object({
+    type: z.literal("app"),
+    /**
+     * An app Notch Metrics already ships a mark for — `anthropic`, `github`,
+     * `stripe`. The icon *and* the tile colour come from that one place, so a
+     * connector built against a known service looks like that service without
+     * shipping a copy of its logo that drifts from ours.
+     *
+     * An id we have no mark for falls back to the generic custom mark. It
+     * does not grant anything: the Settings row still shows the app's own
+     * name and the hosts it reaches.
+     */
+    appId: AppId,
+  }),
+  z.object({
+    type: z.literal("file"),
+    path: z
+      .string()
+      .regex(
+        /^[a-z0-9][a-z0-9._-]{0,39}\.(png|svg)$/,
+        "An icon file is a name inside the connector directory, ending .png or .svg.",
+      ),
+  }),
+]);
+export type ConnectorIconSpec = z.infer<typeof ConnectorIconSpec>;
 
+/**
+ * A credential the **app** holds and hands to a connector, rather than one the
+ * user types in.
+ *
+ * The narrow exception to "credentials come from the connect form". Some
+ * things worth measuring are already authenticated on the machine, and the
+ * token rotates far too often to paste: a Claude Code OAuth access token lasts
+ * about eight hours, so a form field for it would mean re-pasting three times
+ * a day.
+ *
+ * An app only receives one if its manifest asks for it by name, and the
+ * Settings row says which — it is visible beside the host allowlist, not
+ * ambient. The connector never learns where the token came from or how it is
+ * stored.
+ */
+export const HostCredential = z.enum([
   /**
-   * What the connect sheet asks for.
-   *
-   * `AuthField.type` includes `secret`, so a token renders masked without this
-   * schema needing to say so twice. Every value is held in the macOS Keychain
-   * and handed to the runner on stdin — never argv, never the environment,
-   * never the manifest.
+   * The Claude Code subscription OAuth token, for `api.anthropic.com`'s
+   * `/api/oauth/usage` endpoint. Arrives as `ctx.credentials.claude_code_oauth`.
    */
-  auth: z.array(AuthField).default([]),
+  "claude_code_oauth",
+]);
+export type HostCredential = z.infer<typeof HostCredential>;
 
-  /**
-   * Every host this connector may reach. Exact names, or one leading `*.`.
-   *
-   * No bare `*`. A connector that may call anywhere is one that can post the
-   * credential it was handed to a pastebin, and "it needs the whole internet"
-   * is never true of a number.
-   */
-  allowedHosts: z
-    .array(
-      z.string().regex(/^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/),
-    )
-    .nonempty(),
+export const LocalConnectorManifest = z
+  .object({
+    schemaVersion: z.literal(1),
+    id: ConnectorId,
+    name: z.string().min(1).max(60),
+    description: z.string().max(400),
+    /** Which app this is, for the mark and the grouping. */
+    appId: AppId.default("custom"),
+    author: z.string().optional(),
 
-  metrics: z.array(LocalMetricDescriptor).nonempty(),
+    /**
+     * The author's own version, shown in the Custom Apps list.
+     *
+     * Ours to display, never ours to compare: the app does not upgrade a
+     * connector, so this exists so a person can tell which build of their own
+     * code is installed. Defaulted rather than required, because a connector
+     * written in an afternoon should not have to invent a release process.
+     */
+    version: z
+      .string()
+      .regex(/^\d+\.\d+\.\d+$/, "A version is three dot-separated numbers, like 1.0.0.")
+      .default("1.0.0"),
 
-  /** The app floors this at 60s regardless of what the manifest asks for. */
-  refreshIntervalSeconds: z.number().int().min(60).max(86_400).default(300),
-  timeoutMs: z.number().int().min(1_000).max(20_000).default(8_000),
-  entry: z.literal("connector.mjs"),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
+    /**
+     * The app's icon, declared in the manifest rather than shipped beside it.
+     *
+     * Three arms, because the author is usually an agent writing one JSON file.
+     * Requiring a PNG meant every agent-authored app fell back to the generic
+     * mark — an LLM can name an SF Symbol far more easily than it can draw a
+     * square image.
+     *
+     * - `symbol` names an **SF Symbol**, which is what most apps should use:
+     *   it is vector, it matches the rest of the interface, and it needs no
+     *   file. An unknown name renders the generic mark rather than a blank.
+     * - `emoji` is the one-character escape hatch.
+     * - `file` is for a real logo, as a **file name** inside the connector
+     *   directory — never a path and never a URL. A path would escape the
+     *   directory with `../`, and a URL would make the settings pane fetch an
+     *   attacker-chosen host on render, before the user has approved anything.
+     */
+    icon: ConnectorIconSpec.optional(),
+
+    /**
+     * How this app authenticates, when it does at all.
+     *
+     * - `none` — a free or public API, or an app that holds its own credential
+     *   in its code. Nothing is asked of the user and no Keychain entry is
+     *   read. This is the arm that was missing: an app needing no key still had
+     *   to declare an empty `auth` and hope every surface read that as "ask for
+     *   nothing" rather than "not configured yet".
+     * - `api_key` — the user supplies the fields in `auth`.
+     *
+     * There is no OAuth arm and there will not be: a refresh needs a client
+     * secret, and a client secret on a laptop is a published client secret.
+     *
+     * Optional, and derived from `auth` when omitted, so an existing manifest
+     * keeps working. Declaring `none` alongside fields is refused below rather
+     * than silently resolved — two sources disagreeing about whether a
+     * credential is needed is how a tile ends up waiting for one for ever.
+     */
+    authMode: z.enum(["none", "api_key"]).optional(),
+
+    /**
+     * Credentials the app supplies, named by the manifest.
+     *
+     * Separate from `auth`, which is what the *user* is asked for. An app can
+     * declare both: a host token for one API and a key the user supplies for
+     * another. Declaring one here does not make `authMode` `api_key` — the
+     * user is still asked for nothing.
+     */
+    hostCredentials: z.array(HostCredential).default([]),
+
+    /**
+     * What the app asks the user for.
+     *
+     * `AuthField.type` includes `secret`, so a token renders masked without this
+     * schema needing to say so twice. Every value is held in the macOS Keychain
+     * and handed to the runner on stdin — never argv, never the environment,
+     * never the manifest.
+     *
+     * Rendered as a form **in the app**, not through a browser. A local app has
+     * no redirect URI and nothing to redirect to.
+     */
+    auth: z.array(AuthField).default([]),
+
+    /**
+     * Every host this connector may reach. Exact names, or one leading `*.`.
+     *
+     * No bare `*`. A connector that may call anywhere is one that can post the
+     * credential it was handed to a pastebin, and "it needs the whole internet"
+     * is never true of a number.
+     */
+    allowedHosts: z
+      .array(
+        z
+          .string()
+          .regex(/^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/),
+      )
+      .nonempty(),
+
+    metrics: z.array(LocalMetricDescriptor).nonempty(),
+
+    /** The app floors this at 60s regardless of what the manifest asks for. */
+    refreshIntervalSeconds: z.number().int().min(60).max(86_400).default(300),
+    timeoutMs: z.number().int().min(1_000).max(20_000).default(8_000),
+    entry: z.literal("connector.mjs"),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .superRefine((manifest, ctx) => {
+    if (manifest.authMode === "none" && manifest.auth.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["authMode"],
+        message:
+          'An app declaring authMode "none" must declare no auth fields. Drop the fields, or set authMode to "api_key".',
+      });
+    }
+  });
 export type LocalConnectorManifest = z.infer<typeof LocalConnectorManifest>;
+
+/**
+ * Whether this app asks the user for anything.
+ *
+ * Derived rather than read straight off `authMode`, because the field is
+ * optional: a manifest written before it existed says what it needs through
+ * `auth` alone.
+ */
+export function requiresCredentials(manifest: {
+  authMode?: "none" | "api_key";
+  auth: unknown[];
+}): boolean {
+  if (manifest.authMode === "none") return false;
+  return manifest.auth.length > 0;
+}
 
 /**
  * What `verify(ctx, credentials)` must return.
@@ -286,9 +462,16 @@ export type LocalMetricResult = z.infer<typeof LocalMetricResult>;
  * blank the other five.
  */
 export const LocalMetricOutcome = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true), metric: LocalMetricId, result: LocalMetricResult }),
+  z.object({
+    ok: z.literal(true),
+    /** The `id` of the request this answers. See `MetricRequest.id`. */
+    id: z.string(),
+    metric: LocalMetricId,
+    result: LocalMetricResult,
+  }),
   z.object({
     ok: z.literal(false),
+    id: z.string(),
     metric: LocalMetricId,
     code: z.enum(["unsupported", "policy", "timeout", "runtime", "bad_result"]),
     message: z.string(),
