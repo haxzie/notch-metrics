@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/", label: "Home" },
   { href: "/#pricing", label: "Pricing" },
   { href: "/sources", label: "Sources" },
+  { href: "/docs", label: "Docs" },
   { href: "/blog", label: "Blog" },
   { href: "/login", label: "Sign in" },
 ];
@@ -17,7 +18,7 @@ export function SiteNav() {
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-5">
-      <nav className="border-ink/[0.07] bg-paper/75 pointer-events-auto relative flex h-14 w-full max-w-3xl items-center justify-between rounded-full border pl-5 pr-2 shadow-[0_8px_30px_-12px_rgba(11,10,14,0.18)] backdrop-blur-xl">
+      <nav className="border-ink/[0.07] bg-paper/75 pointer-events-auto relative flex h-14 w-full max-w-4xl items-center justify-between rounded-full border pl-5 pr-2 shadow-[0_8px_30px_-12px_rgba(11,10,14,0.18)] backdrop-blur-xl">
         <Link href="/" className="flex w-fit items-center gap-2.5 text-[15px] font-semibold">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" width={24} height={24} />
@@ -34,7 +35,7 @@ export function SiteNav() {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className={`rounded-full px-3.5 py-2 text-[14px] transition ${
+                  className={`whitespace-nowrap rounded-full px-3 py-2 text-[14px] transition ${
                     active ? "text-ink" : "text-ink/55 hover:text-ink"
                   }`}
                 >

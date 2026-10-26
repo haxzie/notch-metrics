@@ -1,6 +1,7 @@
 import { allPosts, formatDate, type Post } from "@/lib/blog";
 import { allLibraryEntries, type LibraryEntry } from "@/lib/library";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
+import { allDocs } from "@/lib/docs";
 import { metricPages, sourcePages } from "@/lib/sources";
 import { allTools } from "@/lib/tools";
 
@@ -37,6 +38,12 @@ const PAGES: { path: string; title: string; description: string }[] = [
     title: "Sources",
     description:
       "Every service Notch Metrics reads a number from, and every number it reports, with how each one is calculated.",
+  },
+  {
+    path: "/docs",
+    description:
+      "What a widget is, the seven shapes a tile draws, and how to build a custom app that runs on your own Mac against your own key.",
+    title: "Custom apps and widgets",
   },
   {
     path: "/free-tools",
@@ -112,6 +119,17 @@ export function llmsIndex(): string {
       ({ manifest, metric, path }) =>
         `- [${manifest.name} ${metric.label.toLowerCase()}](${absoluteUrl(path)}): ${metric.methodology}`,
     ),
+    "",
+    "## Documentation",
+    "",
+    // Linked, not inlined. The whole of it is served as one file built for
+    // this exact case, and repeating it here would be the same text twice in
+    // the corpus with no way to tell which copy is current.
+    `Every page below is also available as one file, with the manifest schema and the runtime contract, at ${SITE_URL}/docs/llms.txt.`,
+    "",
+    ...allDocs()
+      .filter((doc) => !doc.draft)
+      .map((doc) => `- [${doc.title}](${absoluteUrl(`/docs/${doc.slug}`)}): ${doc.summary}`),
     "",
     "## Free tools",
     "",

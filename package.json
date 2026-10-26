@@ -35,7 +35,8 @@
     "version": "changeset version && node scripts/sync-mac-version.mjs && pnpm install --lockfile-only && pnpm format",
     "release": "changeset publish",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css,yml,yaml}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,css,yml,yaml}\""
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,css,yml,yaml}\"",
+    "docs:reference": "node scripts/sync-docs-reference.mjs"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",

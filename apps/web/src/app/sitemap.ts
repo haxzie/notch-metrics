@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { allPosts, lastModified } from "@/lib/blog";
 import { LEGAL_UPDATED } from "@/lib/legal";
+import { allDocs } from "@/lib/docs";
 import { allLibraryEntries } from "@/lib/library";
 import { SITE_URL } from "@/lib/site";
 import { metricPages, sourcePages } from "@/lib/sources";
@@ -27,6 +28,8 @@ export const dynamic = "force-static";
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = allPosts().filter((post) => !post.draft);
   const library = allLibraryEntries().filter((entry) => !entry.draft);
+  const docs = allDocs().filter((doc) => !doc.draft);
+  const newestDoc = [...docs].sort((a, b) => lastModified(b).localeCompare(lastModified(a)))[0];
   const sources = sourcePages();
   const metrics = metricPages();
   const tools = allTools();
@@ -89,6 +92,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: lastModified(entry),
       changeFrequency: "yearly" as const,
       priority: 0.5,
+    })),
+    {
+      url: `${SITE_URL}/docs`,
+      lastModified: newestDoc ? lastModified(newestDoc) : undefined,
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
+    ...docs.map((doc) => ({
+      url: `${SITE_URL}/docs/${doc.slug}`,
+      lastModified: lastModified(doc),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
     })),
     {
       url: `${SITE_URL}/changelog`,
