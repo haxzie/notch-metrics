@@ -285,8 +285,8 @@ async function save(
     warnings,
     nextStep:
       manifest.secrets.length > 0 && !secrets
-        ? `Set each declared secret with set_metric_secret, then ask the user to enable "${manifest.name}" in Notch Metrics → Settings → Custom Metrics.`
-        : `Ask the user to enable "${manifest.name}" in Notch Metrics → Settings → Custom Metrics. A new metric is not executed until they do.`,
+        ? `Set each declared secret with set_metric_secret, then ask the user to enable "${manifest.name}" in Notch Metrics → Settings → Custom Apps.`
+        : `Ask the user to enable "${manifest.name}" in Notch Metrics → Settings → Custom Apps. A new metric is not executed until they do.`,
   });
 }
 

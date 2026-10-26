@@ -135,7 +135,7 @@ Then describe the number you want. The useful shape of the conversation is:
 5. **`set_metric_secret`** for each declared secret.
 
 One thing to remember afterwards: a new metric does not run until you enable
-it in **Settings → Custom Metrics**. That is intentional. A tool that can
+it in **Settings → Custom Apps**. That is intentional. A tool that can
 write an executable module to your disk should not also be able to start it
 running on a schedule without you looking at it first.
 

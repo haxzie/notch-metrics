@@ -89,6 +89,78 @@ the only ones where a range means anything.
 \`granularities\` is a promise. Declaring \`month\` means the pane offers "12m"
 and your code must answer it; declaring too few silently hides a range.
 
+## How a list is drawn
+
+A \`list\` metric's rows can be drawn as a **distribution** — the categories
+against each other — rather than as text. The user picks, but the shapes are
+worth knowing when you decide what to return:
+
+- **ranked** — one labelled bar per category, largest first. The default, and
+  the one that survives long names.
+- **split** — one bar divided into coloured segments. Fits a single row.
+- **pie** — the whole as a circle. Wants a square tile.
+
+All three need a magnitude per row. Put it in \`amount\` where there is a real
+number; a figure inside \`detail\` is read as a fallback. A list with neither
+is drawn as equal slices, which says these are the categories without
+inventing weights.
+
+## Where a field belongs
+
+Two places, and the split is not a style preference — it decides what the user
+can change and how often the app asks.
+
+**\`auth\` is app level, and holds credentials only.** What proves who you
+are: a token, a key, an account subdomain. Asked once, stored in the Keychain,
+shared by every metric the app offers.
+
+**\`params\` is metric level, and holds values.** What says *which thing* to
+measure: a package name, a repository, a project id. Asked per widget, stored
+in the layout, and sent to \`fetchMetric\` as \`request.params\`.
+
+The test is whether two tiles could reasonably want different answers. A
+package name belongs in \`params\` — one app should serve a tile for \`zod\`
+and a tile for \`react\` at once. Putting it in \`auth\` locks the whole app
+to one package and makes an identifier look like a secret.
+
+\`\`\`json
+"authMode": "none",
+"auth": [],
+"metrics": [{
+  "id": "downloads",
+  "params": [{ "key": "package", "label": "Package", "type": "string",
+               "required": true, "placeholder": "zod" }]
+}]
+\`\`\`
+
+## Authentication
+
+There is no OAuth and there will not be: a refresh needs a client secret, and
+a client secret on a laptop is a published client secret.
+
+A **free or public API needs no credentials at all**. Say so:
+
+\`\`\`json
+"authMode": "none", "auth": []
+\`\`\`
+
+That is also the right mode for an app that holds its own credential in its
+code. Nothing is asked of the user, no Keychain entry is read, and the
+Settings row says "No credentials needed" rather than showing an empty form.
+
+Otherwise declare what the user must supply:
+
+\`\`\`json
+"authMode": "api_key",
+"auth": [{ "key": "api_key", "label": "API key", "type": "secret", "required": true }]
+\`\`\`
+
+Declaring \`none\` alongside fields is refused rather than silently resolved.
+
+The fields are rendered as a **form inside the app**, in Settings → Custom
+Apps. Credentials belong to the app, not to a widget: one key answers every
+metric behind it, so they are asked for once.
+
 ## Credentials
 
 Declare them, never write them into the file:
@@ -122,6 +194,40 @@ add that host rather than guessing.
 
 Integer **minor units** plus an ISO 4217 code. Never a float. A \`currency\`
 metric returning \`20.69\` renders as 20 cents.
+
+## The icon
+
+Declare it in the manifest. Do not ship a PNG unless the app has a real logo —
+you almost certainly want a symbol:
+
+\`\`\`json
+"icon": { "type": "symbol", "name": "shippingbox.fill", "tint": "#FF6B00" }
+\`\`\`
+
+\`name\` is an **SF Symbol** — the names in Apple's SF Symbols app, lower-case
+words separated by dots: \`chart.bar.fill\`, \`person.2\`, \`cart\`,
+\`shippingbox\`. A name this macOS does not have falls back to the generic
+mark, so prefer long-standing ones over the newest additions. \`tint\` is the
+tile behind the glyph and defaults to the Custom accent.
+
+Building against a service Notch Metrics already knows? Borrow its mark — the
+icon *and* the tile colour come from one place, so it looks like that service
+without shipping a logo of your own that drifts from ours:
+
+\`\`\`json
+"icon": { "type": "app", "appId": "anthropic" }
+\`\`\`
+
+The other arms:
+
+\`\`\`json
+"icon": { "type": "emoji", "value": "📦" }
+"icon": { "type": "file", "path": "icon.png" }
+\`\`\`
+
+\`file\` is a **file name inside the connector directory** — never a path and
+never a URL. Omit \`icon\` entirely and the app draws its generic \`{}\` mark,
+which is fine but makes every custom app look alike in the notch.
 
 ## Registering
 

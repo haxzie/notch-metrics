@@ -91,6 +91,6 @@ Exact hostnames, or one leading \`*.\` matching exactly one more label. No bare
 3. \`create_metric\` — it stages, runs the metric, and only publishes if it
    produced a valid result.
 4. \`set_metric_secret\` for each declared secret.
-5. Tell the user to enable it in Notch Metrics → Settings → Custom Metrics. A
+5. Tell the user to enable it in Notch Metrics → Settings → Custom Apps. A
    new metric is not executed until they do.
 `.trim();
