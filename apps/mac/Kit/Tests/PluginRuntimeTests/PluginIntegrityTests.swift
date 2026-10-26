@@ -140,3 +140,80 @@ struct PluginIntegrityTests {
         #expect(found.first { $0.id == "forks" }?.state == .pendingApproval)
     }
 }
+
+/// Noticing that an agent has written a metric.
+///
+/// The MCP server writes into this directory while the app is running, so an
+/// arrival happens *to* the app. Without this the metric sits in a folder
+/// nobody is looking at while the agent says "enable it in Settings".
+@MainActor
+struct PluginArrivalTests {
+    @Test("the first scan announces nothing")
+    func firstScanIsSilent() throws {
+        let root = try PluginIntegrityTests.temporaryRoot()
+        _ = try PluginIntegrityTests.makePlugin(in: root, id: "stars")
+
+        var announced: [[String]] = []
+        let registry = PluginRegistry(root: root)
+        registry.onAdded = { announced.append($0.map(\.id)) }
+        registry.reload()
+
+        // Everything is new at launch. A stack of banners for metrics
+        // installed weeks ago is what teaches people to ignore banners.
+        #expect(announced.isEmpty)
+    }
+
+    @Test("a metric written while the app is running is announced once")
+    func arrivalIsAnnounced() throws {
+        let root = try PluginIntegrityTests.temporaryRoot()
+        let registry = PluginRegistry(root: root)
+        var announced: [[String]] = []
+        registry.onAdded = { announced.append($0.map(\.id)) }
+        registry.reload()
+
+        _ = try PluginIntegrityTests.makePlugin(in: root, id: "stars")
+        registry.reload()
+        #expect(announced == [["stars"]])
+
+        // ...and not again on the next scan, which FSEvents fires freely.
+        registry.reload()
+        #expect(announced == [["stars"]])
+    }
+
+    @Test("a rewrite is not an arrival")
+    func rewriteIsNotAnArrival() throws {
+        let root = try PluginIntegrityTests.temporaryRoot()
+        _ = try PluginIntegrityTests.makePlugin(in: root, id: "stars")
+        let registry = PluginRegistry(root: root)
+        var announced: [[String]] = []
+        registry.onAdded = { announced.append($0.map(\.id)) }
+        registry.reload()
+
+        // `refresh_metric` rewrites the same id. That is a change to something
+        // the user already knows about, and it has its own signal: the tile
+        // stops being ready and says so.
+        _ = try PluginIntegrityTests.makePlugin(
+            in: root, id: "stars",
+            body: "export async function fetchMetric() { return { value: 2 } }")
+        registry.reload()
+        #expect(announced.isEmpty)
+    }
+
+    @Test("several at once are announced together")
+    func batched() throws {
+        let root = try PluginIntegrityTests.temporaryRoot()
+        let registry = PluginRegistry(root: root)
+        var announced: [[String]] = []
+        registry.onAdded = { announced.append($0.map(\.id)) }
+        registry.reload()
+
+        _ = try PluginIntegrityTests.makePlugin(in: root, id: "stars")
+        _ = try PluginIntegrityTests.makePlugin(in: root, id: "forks")
+        registry.reload()
+
+        // One callback, not two — so the banner can say "2 widgets added"
+        // rather than shoving two cards past the user in a second.
+        #expect(announced.count == 1)
+        #expect(Set(announced[0]) == ["stars", "forks"])
+    }
+}

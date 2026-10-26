@@ -47,6 +47,16 @@ public enum AppPaths {
 
     /// Where the MCP server writes custom metrics and the app watches.
     public static var metrics: URL { support.appendingPathComponent("metrics", isDirectory: true) }
+
+    /// Installed custom apps — one directory per connector.
+    ///
+    /// Separate from `metrics` rather than mixed in with it. A connector
+    /// directory holds a different manifest shape, and a scanner that had to
+    /// sniff which kind it was looking at would report every connector as a
+    /// broken metric while the two formats overlap.
+    public static var connectors: URL {
+        support.appendingPathComponent("connectors", isDirectory: true)
+    }
     public static var logs: URL { support.appendingPathComponent("logs", isDirectory: true) }
     public static var pluginLogs: URL { logs.appendingPathComponent("plugins", isDirectory: true) }
 
@@ -54,7 +64,7 @@ public enum AppPaths {
     public static var updates: URL { caches.appendingPathComponent("Updates", isDirectory: true) }
 
     public static func ensureDirectories() throws {
-        for url in [support, metrics, logs, pluginLogs, metricCache, updates] {
+        for url in [support, metrics, connectors, logs, pluginLogs, metricCache, updates] {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }

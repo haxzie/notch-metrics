@@ -16,6 +16,16 @@ public struct PluginManifest: Codable, Sendable, Hashable, Identifiable {
     public let name: String
     public let shortLabel: String
     public let description: String
+    /// Which app this metric belongs to, for the mark and the grouping.
+    ///
+    /// Optional here while it is defaulted in the schema, so a manifest
+    /// written before it existed still decodes. It was missing from this
+    /// mirror entirely for a while: the schema carried it, the agent could
+    /// set it, and the app dropped it on the floor — every MCP-authored
+    /// metric showed as "Custom" however it described itself.
+    public let appId: String?
+    /// Shown when `appId` is not one the app already knows.
+    public let appName: String?
     public let unit: MetricUnit
     public let currency: String?
     public let format: MetricFormat

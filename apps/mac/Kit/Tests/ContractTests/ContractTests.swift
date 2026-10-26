@@ -42,7 +42,9 @@ struct ContractTests {
         // covered separately in `PluginRuntimeTests`. That deferral was empty
         // for a while — the target did not exist, so "covered separately"
         // meant covered nowhere.
-        let notDecodedHere: Set<String> = ["provider-manifest-list", "integration", "plugin-manifest"]
+        let notDecodedHere: Set<String> = [
+            "provider-manifest-list", "integration", "plugin-manifest", "connector-manifest",
+        ]
         let decoded: Set<String> = [
             "metric-series", "metric-series-empty", "metric-series-no-currency",
             "metric-series-list", "metric-series-ci", "metric-error", "metric-batch",

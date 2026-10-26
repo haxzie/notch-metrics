@@ -85,3 +85,117 @@ struct WidgetAppTests {
 
 
 }
+
+/// A custom app's icon, which cannot be in the asset catalogue.
+struct CustomAppIconTests {
+    @Test("a local id with no override still resolves to Custom, not to unknown")
+    func localFallsBackToCustom() {
+        // The registry rescans asynchronously and a widget is drawn before it
+        // finishes, so this gap is reached on every launch. Grey "app.dashed"
+        // there would be a visible flicker on something already known to be
+        // custom.
+        let app = AppCatalog.resolve("local.npm-stats")
+        #expect(app.symbol == AppCatalog.resolve(AppCatalog.customId).symbol)
+        #expect(app.accentHex == AppCatalog.resolve(AppCatalog.customId).accentHex)
+    }
+
+    @Test("an unknown id that is not local keeps the generic treatment")
+    func othersAreUnchanged() {
+        // The fallback is scoped to the `local.` prefix. A typo in a served
+        // app id must not silently render as a custom app.
+        #expect(AppCatalog.resolve("not-a-real-app").symbol == "app.dashed")
+    }
+
+    @Test("an override carries the declared icon through to every surface")
+    func overrideCarriesIcon() {
+        let overrides = [
+            "local.npm-stats": MetricApp(
+                id: "local.npm-stats", name: "npm stats", symbol: "curlybraces",
+                accentHex: "D819C2",
+                customIcon: .symbol(name: "shippingbox", tint: "#FF6B00"))
+        ]
+        let app = AppCatalog.resolve("local.npm-stats", overrides: overrides)
+        #expect(app.name == "npm stats")
+        #expect(app.customIcon == .symbol(name: "shippingbox", tint: "#FF6B00"))
+    }
+
+    @Test("an app with no icon reports none rather than a blank one")
+    func noIconIsNil() {
+        // Nil, so `ConnectorIcon` falls through to the asset catalogue and
+        // then to the symbol.
+        #expect(AppCatalog.resolve(AppCatalog.customId).customIcon == nil)
+        #expect(AppCatalog.resolve(AppCatalog.customId).customIconFile == nil)
+    }
+
+    @Test("a file icon resolves inside its own directory, and only there")
+    func fileIconIsContained() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("icon-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("png".utf8).write(to: root.appendingPathComponent("logo.png"))
+
+        #expect(CustomAppIcon.file(name: "logo.png").fileURL(in: root)?.lastPathComponent
+            == "logo.png")
+        // Refused before the file system is asked, so a name that escapes the
+        // directory cannot be read even if it got past the schema.
+        #expect(CustomAppIcon.file(name: "../../etc/passwd").fileURL(in: root) == nil)
+        // Named but absent resolves to nothing rather than a URL that fails to
+        // decode into a broken-image box.
+        #expect(CustomAppIcon.file(name: "missing.png").fileURL(in: root) == nil)
+        // The other arms have no file at all.
+        #expect(CustomAppIcon.emoji("📦").fileURL(in: root) == nil)
+        #expect(CustomAppIcon.symbol(name: "shippingbox", tint: nil).fileURL(in: root) == nil)
+    }
+
+    @Test("a borrowed mark names the app it belongs to")
+    func borrowedMark() {
+        // The icon and the tile colour both come from that one app, so a
+        // connector built against a known service looks like that service
+        // without shipping a copy of its logo that drifts from ours.
+        #expect(CustomAppIcon.app(id: "anthropic").borrowedAppId == "anthropic")
+
+        // The other arms borrow nothing, and must not be mistaken for an app
+        // id — looking one up would resolve to the grey unknown app.
+        #expect(CustomAppIcon.symbol(name: "gauge", tint: nil).borrowedAppId == nil)
+        #expect(CustomAppIcon.emoji("📦").borrowedAppId == nil)
+        #expect(CustomAppIcon.file(name: "logo.png").borrowedAppId == nil)
+        #expect(CustomAppIcon.unknown.borrowedAppId == nil)
+    }
+
+    @Test("Claude resolves to the mark and colour the app already ships")
+    func claudeIsKnown() {
+        // What "the right icon and colour" actually resolves to. The mark is
+        // in the asset catalogue as connector-anthropic; this pins the id and
+        // the accent that find it.
+        let claude = AppCatalog.resolve("anthropic")
+        #expect(claude.name == "Claude")
+        #expect(claude.accentHex == "D97757")
+    }
+
+    @Test("a borrowed mark brings its colours, not just its logo")
+    func borrowedColours() {
+        // The bug this pins: the icon resolved the borrowed mark while the
+        // colour stayed the generic Custom magenta, so a Claude logo sat on a
+        // pink tile and drew a pink gauge. Two callers built this struct and
+        // only one of them knew about the borrow.
+        let claude = MetricApp.custom(
+            id: "local.claude-usage", name: "Claude usage",
+            icon: .app(id: "anthropic"))
+        #expect(claude.accentHex == AppCatalog.resolve("anthropic").accentHex)
+        #expect(claude.accentHex != AppCatalog.resolve(AppCatalog.customId).accentHex)
+        // The name stays the custom app's own: borrowing a mark is not
+        // claiming to be that app.
+        #expect(claude.name == "Claude usage")
+    }
+
+    @Test("an app borrowing nothing keeps the Custom colours")
+    func unborrowedKeepsGeneric() {
+        let generic = AppCatalog.resolve(AppCatalog.customId)
+        for icon in [CustomAppIcon.symbol(name: "gauge", tint: nil), .emoji("📦"), .unknown] {
+            let app = MetricApp.custom(id: "local.x", name: "X", icon: icon)
+            #expect(app.accentHex == generic.accentHex)
+            #expect(app.symbol == generic.symbol)
+        }
+        #expect(MetricApp.custom(id: "local.x", name: "X", icon: nil).accentHex == generic.accentHex)
+    }
+}

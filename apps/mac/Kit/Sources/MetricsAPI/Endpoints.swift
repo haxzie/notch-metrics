@@ -123,11 +123,34 @@ public struct AuthField: Codable, Sendable, Hashable {
     /// unfamiliar type still renders something usable, where an unfamiliar flag
     /// would render a secret in plain text.
     public var isSecret: Bool { type == "secret" }
+
+    /// Public so the Custom category can build fields from a local manifest;
+    /// the memberwise initialiser is internal however public the properties.
+    public init(
+        key: String, label: String, type: String, required: Bool,
+        placeholder: String? = nil, help: String? = nil, pattern: String? = nil,
+        options: [AuthFieldOption]? = nil, default: String? = nil
+    ) {
+        self.key = key
+        self.label = label
+        self.type = type
+        self.required = required
+        self.placeholder = placeholder
+        self.help = help
+        self.pattern = pattern
+        self.options = options
+        self.default = `default`
+    }
 }
 
 public struct AuthFieldOption: Codable, Sendable, Hashable {
     public let value: String
     public let label: String
+
+    public init(value: String, label: String) {
+        self.value = value
+        self.label = label
+    }
 }
 
 public struct MetricDescriptor: Codable, Sendable, Hashable, Identifiable {
@@ -156,6 +179,39 @@ public struct MetricDescriptor: Codable, Sendable, Hashable, Identifiable {
     /// most metrics have no page of their own and fall back to the
     /// connector's `dashboardUrl`. See `WidgetLink`.
     public let linkTemplate: String?
+
+    /// Whether this metric answers with rows rather than a figure.
+    ///
+    /// Optional on the wire, like `keywords` and `params`. The gallery used to
+    /// infer this from a hardcoded table of metric ids, which worked while
+    /// every metric shipped with the app — a custom app's list metric can
+    /// never be in that table, so every one of them previewed as a number.
+    public let isList: Bool?
+
+    /// Public for the same reason `ConnectorCategoryGroup`'s is: a struct's
+    /// memberwise initialiser is internal however public its properties are,
+    /// and the Custom category is built outside this module from manifests on
+    /// the user's own disk rather than decoded from the server.
+    public init(
+        id: String, label: String, shortLabel: String, unit: MetricUnit,
+        granularities: [Granularity], supportsSeries: Bool, supportsCompare: Bool,
+        keywords: [String]? = nil, help: String? = nil, params: [AuthField]? = nil,
+        methodology: String, linkTemplate: String? = nil, isList: Bool? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.shortLabel = shortLabel
+        self.unit = unit
+        self.granularities = granularities
+        self.supportsSeries = supportsSeries
+        self.supportsCompare = supportsCompare
+        self.keywords = keywords
+        self.help = help
+        self.params = params
+        self.methodology = methodology
+        self.linkTemplate = linkTemplate
+        self.isList = isList
+    }
 }
 
 public struct Integration: Codable, Sendable, Identifiable, Hashable {
@@ -306,8 +362,61 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
     /// Empty when signed out — the catalogue is readable either way.
     public let connections: [ConnectorConnection]
 
+    /// What a custom app declared it looks like.
+    ///
+    /// Always nil for a connector we serve: those marks are committed to the
+    /// asset catalogue and looked up by id. Optional so a response from a
+    /// server that has never heard of the field still parses.
+    public let customIcon: CustomAppIcon?
+    /// The artwork, already resolved against the app's own directory.
+    public let customIconFile: URL?
+
     public var isConnectable: Bool { status != "coming_soon" }
     public var isConnected: Bool { !connections.isEmpty }
+
+    /// A custom app built on this machine, rather than a connector we ship.
+    ///
+    /// Derived from the id prefix rather than from `category`, because
+    /// `category` is a server-supplied string and a future catalogue that
+    /// happened to name a group "custom" would otherwise make every connector
+    /// in it look local — and a local entry is routed to the Node runner
+    /// instead of to the Worker.
+    public var isLocal: Bool { id.hasPrefix(LocalCatalogue.idPrefix) }
+
+    /// The connector or plugin id behind a local entry.
+    public var localId: String { String(id.dropFirst(LocalCatalogue.idPrefix.count)) }
+
+    /// Public for the same reason `ConnectorCategoryGroup`'s is: the Custom
+    /// category is built outside this module from manifests on the user's own
+    /// disk rather than decoded from the server.
+    public init(
+        id: String, name: String, category: String, tagline: String, docsUrl: String = "",
+        dashboardUrl: String? = nil, accentColor: String, keywords: [String]? = nil,
+        authMode: String, oauth: ConnectorOAuth? = nil, fields: [AuthField] = [],
+        metrics: [MetricDescriptor], notifications: [AlertDefinition]? = nil,
+        status: String, minAppVersion: String = "0.0.0",
+        connections: [ConnectorConnection] = [], customIcon: CustomAppIcon? = nil,
+        customIconFile: URL? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.tagline = tagline
+        self.docsUrl = docsUrl
+        self.dashboardUrl = dashboardUrl
+        self.accentColor = accentColor
+        self.keywords = keywords
+        self.authMode = authMode
+        self.oauth = oauth
+        self.fields = fields
+        self.metrics = metrics
+        self.notifications = notifications
+        self.status = status
+        self.minAppVersion = minAppVersion
+        self.connections = connections
+        self.customIcon = customIcon
+        self.customIconFile = customIconFile
+    }
 }
 
 public struct ConnectorConnection: Codable, Sendable, Identifiable, Hashable {

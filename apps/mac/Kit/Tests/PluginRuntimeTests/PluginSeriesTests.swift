@@ -16,6 +16,8 @@ struct PluginSeriesTests {
         name: "GitHub stars",
         shortLabel: "Stars",
         description: "Stargazers on a repository.",
+        appId: nil,
+        appName: nil,
         unit: .count,
         currency: nil,
         format: MetricFormat(),

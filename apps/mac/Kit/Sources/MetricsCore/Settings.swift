@@ -32,6 +32,14 @@ public struct AppSettings: Codable, Sendable, Equatable {
     /// a rewrite has to be approved again, which is the only version of this
     /// gate that holds for longer than a moment.
     public var approvedPlugins: [String: String] = [:]
+
+    /// Approved custom apps, by id → the digest that was approved.
+    ///
+    /// Separate from `approvedPlugins` rather than shared. The two namespaces
+    /// are independent — a connector and a single metric may legitimately
+    /// carry the same id — and merging them would let approving one bless the
+    /// other.
+    public var approvedConnectors: [String: String] = [:]
     public var checkForUpdatesAutomatically: Bool = true
 
     // MARK: Notifications
@@ -92,6 +100,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         // exists to prevent. Re-approval costs a toggle, and the custom-metric
         // path has never shipped, so in practice there is nothing to migrate.
         approvedPlugins = value(.approvedPlugins, fallback.approvedPlugins)
+        approvedConnectors = value(.approvedConnectors, fallback.approvedConnectors)
         checkForUpdatesAutomatically = value(
             .checkForUpdatesAutomatically, fallback.checkForUpdatesAutomatically)
         alertBannerSeconds = value(.alertBannerSeconds, fallback.alertBannerSeconds)

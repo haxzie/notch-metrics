@@ -83,6 +83,82 @@ public enum WidgetKind: String, Codable, Sendable, Hashable {
 
 public enum ChartKind: String, Codable, Sendable, Hashable {
     case none, sparkline, bars
+    /// An arc filled to the value's share of its maximum, with the figure
+    /// inside it.
+    ///
+    /// The odd one out, deliberately: `sparkline` and `bars` draw a *series*
+    /// under the headline figure, and need points to say anything. A gauge
+    /// draws the headline figure itself, needs no history, and is the only
+    /// chart a scalar metric can carry.
+    ///
+    /// Only meaningful where the value has a known ceiling — today that means
+    /// `MetricUnit.ratio`, where the bound is 1.0 by definition. A count has
+    /// no inherent maximum, so there is nothing to fill *of*.
+    case gauge
+
+    /// One bar divided into coloured segments: how a whole splits.
+    ///
+    /// The distribution that fits a row. `bars` is a *time series* — one bar
+    /// per bucket — where these three draw one list's categories against each
+    /// other, which is a different question and needs different drawing.
+    case split
+    /// One labelled bar per category, largest first.
+    ///
+    /// Named for what it is chosen *for*: the ordering is the message. If the
+    /// order did not matter a pie would say the same thing in less space.
+    case ranked
+    /// The whole as a circle.
+    ///
+    /// A pie rather than a donut: a ring with a figure in the middle reads as
+    /// a gauge, and there is already one of those.
+    case pie
+
+    /// Whether this chart draws a list's categories rather than a series.
+    ///
+    /// The three distributions need `items`, where `sparkline` and `bars` need
+    /// `points` and `gauge` needs neither. Asked in one place so the tile does
+    /// not test for three cases every time it decides what to draw.
+    public var isDistribution: Bool {
+        switch self {
+        case .split, .ranked, .pie: true
+        case .none, .sparkline, .bars, .gauge: false
+        }
+    }
+
+    /// The chart a metric is best drawn with, before anybody chooses.
+    ///
+    /// A ratio has a ceiling, so an arc says something a bare figure cannot:
+    /// whether 18% is nearly nothing or nearly everything. Defaulted rather
+    /// than left to the picker, because a chart nobody finds is a chart
+    /// nobody uses — and this is the only one a scalar metric can carry.
+    /// The tile size this chart needs to read properly.
+    ///
+    /// A semicircle is twice as wide as it is tall, so on a 2x1 tile the arc
+    /// is a sliver with the figure sitting on top of it. Every other chart is
+    /// a strip along the bottom and is content with one row.
+    public var preferredSize: WidgetSize {
+        switch self {
+        // A semicircle is twice as wide as it is tall.
+        case .gauge: .square
+        // A labelled bar per category needs a line each; three categories in
+        // one row would be three slivers with no room for their names.
+        case .ranked: WidgetSize(cols: 2, rows: 2)
+        // A circle needs its height.
+        case .pie: .square
+        // A single divided bar is happiest on a line.
+        case .split, .none, .sparkline, .bars: .wide
+        }
+    }
+
+    public static func defaultFor(
+        unit: MetricUnit, supportsSeries: Bool, isList: Bool = false
+    ) -> ChartKind {
+        // A list first: its items are what it has, and a ratio-unit list —
+        // a percentage breakdown — is still a distribution, not a gauge.
+        if isList { return .ranked }
+        if unit == .ratio { return .gauge }
+        return supportsSeries ? .sparkline : .none
+    }
 }
 
 /// Tiles on a grid, or rows grouped by app.

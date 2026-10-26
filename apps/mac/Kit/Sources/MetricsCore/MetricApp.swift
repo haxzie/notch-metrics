@@ -23,14 +23,57 @@ public struct MetricApp: Sendable, Hashable, Identifiable {
     /// than one being derived from the other.
     public let chartHex: String?
 
+    /// The icon a **custom app** declared, already resolved.
+    ///
+    /// The marks for connectors we ship are committed to the asset catalogue
+    /// and looked up by id, which an app written on the user's own machine
+    /// cannot be. Carried here rather than passed to each view so that every
+    /// surface — the gallery, the notch tile, a banner, a share card — picks
+    /// it up through `resolve(_:overrides:)` with no call-site change.
+    ///
+    /// A `file` arm arrives with its name already resolved to an absolute URL
+    /// by `LoadedConnector`: the view has no idea which directory the app was
+    /// installed into, and should not be the thing deciding that.
+    public let customIcon: CustomAppIcon?
+    public let customIconFile: URL?
+
     public init(
-        id: String, name: String, symbol: String, accentHex: String, chartHex: String? = nil
+        id: String, name: String, symbol: String, accentHex: String, chartHex: String? = nil,
+        customIcon: CustomAppIcon? = nil, customIconFile: URL? = nil
     ) {
         self.id = id
         self.name = name
         self.symbol = symbol
         self.accentHex = accentHex
         self.chartHex = chartHex
+        self.customIcon = customIcon
+        self.customIconFile = customIconFile
+    }
+}
+
+extension MetricApp {
+    /// The app a *custom* app presents itself as.
+    ///
+    /// One function because there are two callers — the notch's
+    /// `appOverrides` and the gallery's entry — and they disagreed: the icon
+    /// resolved a borrowed mark while the colour stayed the generic Custom
+    /// magenta, so a Claude logo sat on a pink tile and drew a pink gauge.
+    ///
+    /// A borrowed mark brings its app's colours with it. That is most of the
+    /// point of borrowing one.
+    public static func custom(
+        id: String, name: String, icon: CustomAppIcon?, iconFile: URL? = nil
+    ) -> MetricApp {
+        let generic = AppCatalog.resolve(AppCatalog.customId)
+        let borrowed = icon?.borrowedAppId.map { AppCatalog.resolve($0) }
+        return MetricApp(
+            id: id,
+            name: name,
+            symbol: borrowed?.symbol ?? generic.symbol,
+            accentHex: borrowed?.accentHex ?? generic.accentHex,
+            chartHex: borrowed?.chartHex ?? generic.chartHex,
+            customIcon: icon,
+            customIconFile: iconFile)
     }
 }
 
@@ -133,6 +176,11 @@ public enum AppCatalog {
         let key = (id?.isEmpty == false ? id! : unknownId).lowercased()
         if let override = overrides[key] { return override }
         if let known = byId[key] { return known }
+        // A custom app whose override has not arrived — the registry rescans
+        // asynchronously, and a widget is drawn before it finishes. Falls back
+        // to Custom rather than to the grey "unknown" app, because the one
+        // thing already known about a `local.` id is that it *is* custom.
+        if key.hasPrefix("local."), let custom = byId[customId] { return custom }
         return MetricApp(
             id: key, name: titlecase(key), symbol: "app.dashed", accentHex: "8E8E93")
     }

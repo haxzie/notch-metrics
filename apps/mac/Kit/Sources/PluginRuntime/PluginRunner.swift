@@ -30,8 +30,7 @@ public enum PluginRunnerError: Error, Sendable, Equatable {
 /// `Process()` on `"node"` would appear to work in development and fail for
 /// everyone who launches the app normally.
 public struct PluginRunner: Sendable {
-    private let node: URL
-    private let script: URL
+    private let tools: RunnerTools
     private let secrets: any SecretStore
 
     /// - Parameters:
@@ -45,26 +44,7 @@ public struct PluginRunner: Sendable {
         fileExists: (URL) -> Bool = { FileManager.default.isExecutableFile(atPath: $0.path) }
     ) throws {
         self.secrets = secrets
-
-        if let script {
-            self.script = script
-        } else if let override = ProcessInfo.processInfo.environment["NOTCH_RUNNER_PATH"] {
-            self.script = URL(fileURLWithPath: override)
-        } else if let bundled = Bundle.main.url(forResource: "runner", withExtension: "mjs") {
-            self.script = bundled
-        } else {
-            throw PluginRunnerError.runnerMissing
-        }
-
-        if let node {
-            self.node = node
-            return
-        }
-        let searched = NodeLocator.candidates()
-        guard let first = searched.first(where: fileExists) else {
-            throw PluginRunnerError.nodeMissing(searched: searched.map(\.path))
-        }
-        self.node = first
+        self.tools = try RunnerTools(node: node, script: script, fileExists: fileExists)
     }
 
     public func run(_ plugin: LoadedPlugin) async throws -> PluginValue {
@@ -79,83 +59,16 @@ public struct PluginRunner: Sendable {
             }
         }
 
-        let process = Process()
-        process.executableURL = node
-        // The script by absolute path, so nothing depends on a working
-        // directory or a resolvable `PATH`.
-        process.arguments = [script.path, "run", "--dir", plugin.directory.path]
-        process.currentDirectoryURL = plugin.directory
+        let output = try await RunnerProcess.run(
+            tools: tools,
+            arguments: ["run", "--dir", plugin.directory.path],
+            workingDirectory: plugin.directory,
+            input: try JSONEncoder().encode(["secrets": declared]),
+            // Two seconds of grace over the manifest's own deadline, so the
+            // runner gets to report its timeout politely before being killed.
+            killAfter: Double(manifest.timeoutMs) / 1000 + 2.0)
 
-        // A minimal environment. Anything inherited here is also inherited by
-        // whatever the plugin spawns, and is dumped verbatim by most crash
-        // reporters — so the user's shell environment, with whatever is in it,
-        // stays out of this process entirely.
-        process.environment = [
-            "PATH": "/usr/bin:/bin",
-            "HOME": NSHomeDirectory(),
-            "TZ": TimeZone.current.identifier,
-        ]
-
-        let stdin = Pipe()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardInput = stdin
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        do {
-            try process.run()
-        } catch {
-            throw PluginRunnerError.spawnFailed(error.localizedDescription)
-        }
-
-        // Secrets go in on stdin and the stream is closed. Not argv, which is
-        // world-readable through `ps`; not the environment, for the reason
-        // above. Closing matters: the runner blocks until the stream ends.
-        let payload = try JSONEncoder().encode(["secrets": declared])
-        stdin.fileHandleForWriting.write(payload)
-        try? stdin.fileHandleForWriting.close()
-
-        // Both pipes are drained concurrently with the wait. Reading one to
-        // completion first is the classic deadlock: a plugin that logs more
-        // than the 64 KB pipe buffer blocks on stderr forever while we block
-        // on stdout.
-        async let outData = Task.detached { stdout.fileHandleForReading.readDataToEndOfFile() }.value
-        async let errData = Task.detached { stderr.fileHandleForReading.readDataToEndOfFile() }.value
-
-        let killDeadline = Double(manifest.timeoutMs) / 1000 + 2.0
-        let killed = TimeoutWitness()
-        let watchdog = Task {
-            try await Task.sleep(for: .seconds(killDeadline))
-            // The runner aborts itself on its own signal; this is for the
-            // plugin that ignores it — a `while (true)` does not observe an
-            // AbortSignal, and only SIGKILL ends it.
-            await killed.record()
-            if process.isRunning { process.terminate() }
-            try await Task.sleep(for: .milliseconds(500))
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-        }
-
-        let out = await outData
-        let err = await errData
-        // Awaited, not `waitUntilExit()`. That call blocks the thread it is
-        // on for as long as the plugin runs — up to twenty seconds — and the
-        // threads available to Swift concurrency are a small shared pool.
-        // Blocking one to wait on a subprocess is how a handful of slow
-        // metrics stall work that has nothing to do with them.
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            // One-shot, because both arms below can fire. The handler is not
-            // called for a process that has *already* exited, so the
-            // `isRunning` check is needed — but a process that exits between
-            // the two lines runs both, and resuming a continuation twice is a
-            // crash rather than a warning.
-            let once = ResumeOnce(continuation)
-            process.terminationHandler = { _ in once.fire() }
-            if !process.isRunning { once.fire() }
-        }
-        watchdog.cancel()
-
-        appendLog(plugin: plugin.id, stderr: err)
+        RunnerProcess.appendLog(id: plugin.id, stderr: output.stderr)
 
         // Two ways a run times out, and only one of them used to be read.
         //
@@ -166,19 +79,13 @@ public struct PluginRunner: Sendable {
         // `unreadableOutput`. A hung metric therefore reported "no output"
         // on the tile while `PluginFailureCode.timeout.shortReason` — the
         // words "Timed out", written for exactly this — went unused.
-        if await killed.fired { throw PluginRunnerError.timedOut }
+        if output.killed { throw PluginRunnerError.timedOut }
+        guard output.status != PluginExit.timeout else { throw PluginRunnerError.timedOut }
 
-        guard process.terminationStatus != PluginExit.timeout else {
-            throw PluginRunnerError.timedOut
-        }
-
-        guard let line = String(data: out, encoding: .utf8)?
-            .split(separator: "\n").first.map(String.init),
-            let result = try? JSONDecoder().decode(
-                PluginRunResult.self, from: Data(line.utf8))
+        guard let line = output.firstLine,
+            let result = try? JSONDecoder().decode(PluginRunResult.self, from: Data(line.utf8))
         else {
-            throw PluginRunnerError.unreadableOutput(
-                String(data: err, encoding: .utf8)?.suffix(500).description ?? "no output")
+            throw PluginRunnerError.unreadableOutput(output.errorTail)
         }
 
         switch result {
@@ -189,54 +96,4 @@ public struct PluginRunner: Sendable {
         }
     }
 
-    /// Keeps the last 200 lines, which is what the Settings pane shows and what
-    /// a user pastes back into their agent to get the metric fixed.
-    private func appendLog(plugin id: String, stderr: Data) {
-        guard !stderr.isEmpty,
-              let text = String(data: stderr, encoding: .utf8)
-        else { return }
-
-        let url = AppPaths.pluginLogs.appendingPathComponent("\(id).log")
-        try? FileManager.default.createDirectory(
-            at: AppPaths.pluginLogs, withIntermediateDirectories: true)
-
-        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        let lines = (existing + text).split(separator: "\n", omittingEmptySubsequences: false)
-        let kept = lines.suffix(200).joined(separator: "\n")
-        try? kept.write(to: url, atomically: true, encoding: .utf8)
-    }
-}
-
-/// Whether the watchdog had to kill the run.
-///
-/// An actor rather than a captured `var` because the watchdog writes it from
-/// its own task while `run` reads it from another, which is precisely the
-/// data race strict concurrency refuses to compile. It holds one bool and is
-/// written at most once.
-private actor TimeoutWitness {
-    private(set) var fired = false
-    func record() { fired = true }
-}
-
-
-/// Resumes a continuation at most once.
-///
-/// `Process` gives two ways to learn that a subprocess ended and no way to
-/// use exactly one of them safely: the termination handler does not fire for
-/// a process that already exited, and checking `isRunning` races the handler.
-private final class ResumeOnce: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    init(_ continuation: CheckedContinuation<Void, Never>) {
-        self.continuation = continuation
-    }
-
-    func fire() {
-        lock.lock()
-        let pending = continuation
-        continuation = nil
-        lock.unlock()
-        pending?.resume()
-    }
 }

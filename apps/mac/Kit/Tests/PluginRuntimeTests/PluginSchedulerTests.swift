@@ -9,7 +9,7 @@ struct PluginSchedulerTests {
     static func manifest(every seconds: Int) -> PluginManifest {
         PluginManifest(
             schemaVersion: 1, id: "stars", name: "Stars", shortLabel: "Stars",
-            description: "d", unit: .count, currency: nil, format: MetricFormat(),
+            description: "d", appId: nil, appName: nil, unit: .count, currency: nil, format: MetricFormat(),
             granularities: [.day], supportsSeries: false,
             refreshIntervalSeconds: seconds, secrets: [], allowedHosts: ["api.github.com"],
             timeoutMs: 8000, entry: "metric.mjs", author: nil,
@@ -23,7 +23,7 @@ struct PluginSchedulerTests {
         var m = manifest(every: seconds)
         if id != "stars" {
             m = PluginManifest(
-                schemaVersion: 1, id: id, name: id, shortLabel: id, description: "d",
+                schemaVersion: 1, id: id, name: id, shortLabel: id, description: "d", appId: nil, appName: nil,
                 unit: .count, currency: nil, format: MetricFormat(), granularities: [.day],
                 supportsSeries: false, refreshIntervalSeconds: seconds, secrets: [],
                 allowedHosts: ["api.github.com"], timeoutMs: 8000, entry: "metric.mjs",

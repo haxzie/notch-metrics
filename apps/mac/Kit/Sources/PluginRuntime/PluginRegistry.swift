@@ -34,6 +34,17 @@ public struct LoadedPlugin: Sendable, Identifiable, Equatable {
     public let contentHash: String
 
     public var displayName: String { manifest?.name ?? id }
+
+    /// The app this metric belongs to, as a user would name it.
+    ///
+    /// `appId` is required of anything the MCP server writes, but a manifest
+    /// placed in the folder by hand may carry neither field, and a metric with
+    /// no app still has to appear somewhere rather than vanish from the list.
+    public var appDisplayName: String {
+        if let name = manifest?.appName, !name.isEmpty { return name }
+        if let id = manifest?.appId, !id.isEmpty { return id.capitalized }
+        return "Other"
+    }
 }
 
 /// Discovers plugins and watches the directory for changes.
@@ -47,6 +58,24 @@ public final class PluginRegistry {
     /// *contents*, which is the whole of `PluginState.modified`.
     private var approved: [String: String]
     private var watcher: DirectoryWatcher?
+
+    /// Called with metrics that have appeared since the last scan.
+    ///
+    /// The MCP server and the CLI write into this directory while the app is
+    /// running, so an arrival is something that happens *to* the app rather
+    /// than something a person did in it. Without a signal here the metric
+    /// sits in a folder nobody is looking at: the agent says "enable it in
+    /// Settings" and the user has no reason to believe anything happened.
+    ///
+    /// Not fired for the first scan at launch. Everything is new then, and a
+    /// stack of banners for metrics that have been installed for weeks is
+    /// noise that teaches people to ignore the banner.
+    public var onAdded: (([LoadedPlugin]) -> Void)?
+
+    /// Nil until the first scan, which is what distinguishes "nothing
+    /// installed" from "not looked yet" — the two would otherwise both be an
+    /// empty set, and the first scan would announce everything.
+    private var known: Set<String>?
 
     public init(root: URL = AppPaths.metrics, approved: [String: String] = [:]) {
         self.root = root
@@ -78,6 +107,16 @@ public final class PluginRegistry {
 
     public func reload() {
         plugins = Self.scan(root: root, approved: approved)
+
+        let present = Set(plugins.map(\.id))
+        defer { known = present }
+        guard let known else { return }
+
+        let arrived = plugins.filter { !known.contains($0.id) }
+        // Invalid ones are deliberately included. A metric an agent has just
+        // written and got wrong is exactly when somebody needs telling, and
+        // the row in Settings carries the reason.
+        if !arrived.isEmpty { onAdded?(arrived) }
     }
 
     static func scan(root: URL, approved: [String: String]) -> [LoadedPlugin] {
