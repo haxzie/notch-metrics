@@ -57,10 +57,14 @@ struct GaugeTests {
         // collapses to a sliver with the figure sitting on top of it, which is
         // what it did before this: the default size is part of the chart kind,
         // not a separate thing each caller remembers.
+        //
+        // Every kind asks for the same tile now, so this is really one
+        // assertion about the gauge and three about the rule not having
+        // grown an exception. `DistributionTests` covers the rule itself.
         #expect(ChartKind.gauge.preferredSize == .square)
-        #expect(ChartKind.sparkline.preferredSize == .wide)
-        #expect(ChartKind.bars.preferredSize == .wide)
-        #expect(ChartKind.none.preferredSize == .wide)
+        #expect(ChartKind.sparkline.preferredSize == .square)
+        #expect(ChartKind.bars.preferredSize == .square)
+        #expect(ChartKind.none.preferredSize == .square)
     }
 
     @Test("the arc and the figure agree on where the centre is")

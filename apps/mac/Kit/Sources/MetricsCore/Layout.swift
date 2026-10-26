@@ -137,17 +137,19 @@ public enum ChartKind: String, Codable, Sendable, Hashable {
     /// is a sliver with the figure sitting on top of it. Every other chart is
     /// a strip along the bottom and is content with one row.
     public var preferredSize: WidgetSize {
-        switch self {
-        // A semicircle is twice as wide as it is tall.
-        case .gauge: .square
-        // A labelled bar per category needs a line each; three categories in
-        // one row would be three slivers with no room for their names.
-        case .ranked: WidgetSize(cols: 2, rows: 2)
-        // A circle needs its height.
-        case .pie: .square
-        // A single divided bar is happiest on a line.
-        case .split, .none, .sparkline, .bars: .wide
-        }
+        // Two by two, whatever the shape.
+        //
+        // This used to hand a sparkline or a plain figure a 2x1 and keep the
+        // taller size for the gauge, the ring and the breakdown. Side by side
+        // in the gallery that read as a fault: a short tile sat at the top of
+        // a card the height of its neighbours with a hole underneath it, and
+        // the eye took the gap for a widget that had failed to draw.
+        //
+        // It is also the size every shape is good at. A gauge and a ring need
+        // the height; a split bar wants it for the key under it; a sparkline
+        // gets a chart worth reading rather than a sliver. Anything that
+        // wants to be a strip is one drag away.
+        .square
     }
 
     public static func defaultFor(

@@ -39,13 +39,15 @@ struct DistributionTests {
         #expect(ChartKind.defaultFor(unit: .count, supportsSeries: true) == .sparkline)
     }
 
-    @Test("each distribution asks for a tile it fits in")
+    @Test("every shape starts at two by two")
     func preferredSizes() {
-        // One divided bar is happy on a line; a bar *per category* needs a
-        // line each, and a circle needs its height.
-        #expect(ChartKind.split.preferredSize == .wide)
-        #expect(ChartKind.ranked.preferredSize == WidgetSize(cols: 2, rows: 2))
-        #expect(ChartKind.pie.preferredSize == .square)
+        // One size for all of them. A gauge and a ring need the height, a
+        // split bar wants it for the key underneath, and a sparkline gets a
+        // chart worth reading. Mixed sizes also made the widget gallery read
+        // as broken: a 2x1 preview left a hole under it in a row of 2x2s.
+        for kind in [ChartKind.split, .ranked, .pie, .gauge, .sparkline, .bars, .none] {
+            #expect(kind.preferredSize == WidgetSize(cols: 2, rows: 2), "\(kind)")
+        }
     }
 
     @Test("shares are normalised so the bar fills its width")
