@@ -14,7 +14,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "bin"
   ],
   "repository": {
     "type": "git",
@@ -43,5 +44,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "bin": {
+    "notch-metrics": "bin/notch-metrics.mjs"
   }
 }

@@ -10,4 +10,6 @@
  * `register_connector` rejecting it afterwards.
  */
 export * from "./connector.ts";
+export * from "./define.ts";
 export * from "./runtime.ts";
+export * from "./validate.ts";
