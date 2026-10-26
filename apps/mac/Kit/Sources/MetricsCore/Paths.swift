@@ -59,12 +59,20 @@ public enum AppPaths {
     }
     public static var logs: URL { support.appendingPathComponent("logs", isDirectory: true) }
     public static var pluginLogs: URL { logs.appendingPathComponent("plugins", isDirectory: true) }
+    /// One file per custom app. Opened from its row's three dot menu, and
+    /// named in the docs so an agent debugging a connector knows where to
+    /// look without being told.
+    public static var connectorLogs: URL {
+        logs.appendingPathComponent("custom-apps", isDirectory: true)
+    }
 
     public static var metricCache: URL { caches.appendingPathComponent("metrics", isDirectory: true) }
     public static var updates: URL { caches.appendingPathComponent("Updates", isDirectory: true) }
 
     public static func ensureDirectories() throws {
-        for url in [support, metrics, connectors, logs, pluginLogs, metricCache, updates] {
+        for url in [
+            support, metrics, connectors, logs, pluginLogs, connectorLogs, metricCache, updates,
+        ] {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }

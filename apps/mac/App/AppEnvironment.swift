@@ -1611,6 +1611,18 @@ final class AppEnvironment {
         }
     }
 
+    /// Shows a custom app's log file in Finder.
+    ///
+    /// The one thing a connector author needs that the tile cannot give
+    /// them: what the connector actually asked for and what came back. The
+    /// path is also in the docs, so an agent debugging somebody's app can
+    /// read it without being told where it is.
+    func revealConnectorLog(_ connector: LoadedConnector) {
+        let url = ConnectorLog.url(for: connector.id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
     func setConnectorApproved(_ connector: LoadedConnector, _ approved: Bool) {
         let grants = connector.grants.canonical
         updateSettings { settings in

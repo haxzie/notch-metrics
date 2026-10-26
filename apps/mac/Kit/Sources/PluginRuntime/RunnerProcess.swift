@@ -54,6 +54,12 @@ public struct RunnerOutput: Sendable {
     public var errorTail: String {
         String(data: stderr, encoding: .utf8)?.suffix(500).description ?? "no output"
     }
+
+    /// All of stderr, for the log file. `errorTail` is capped for a message
+    /// shown on a tile; the file wants the stack that message was cut from.
+    public var stderrText: String {
+        String(data: stderr, encoding: .utf8) ?? ""
+    }
 }
 
 /// Spawning the runner and getting its answer back without deadlocking.

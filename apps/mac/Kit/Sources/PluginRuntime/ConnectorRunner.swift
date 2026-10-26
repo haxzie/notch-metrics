@@ -233,15 +233,58 @@ public struct ConnectorRunner: Sendable {
 
         RunnerProcess.appendLog(id: connector.id, stderr: output.stderr)
 
-        if output.killed { throw PluginRunnerError.timedOut }
-        guard output.status != PluginExit.timeout else { throw PluginRunnerError.timedOut }
+        let requested = metrics.map(\.metric)
+
+        if output.killed || output.status == PluginExit.timeout {
+            ConnectorLog.append(
+                id: connector.id,
+                run: .init(
+                    verb: "fetch", requested: requested, stderr: output.stderrText,
+                    failure: "timed out after \(manifest.timeoutMs)ms"))
+            throw PluginRunnerError.timedOut
+        }
 
         guard let line = output.firstLine,
             let result = try? JSONDecoder().decode(ConnectorRunResult.self, from: Data(line.utf8))
         else {
+            // The case the log earns its keep on: the runner printed
+            // something that is not a result, so the tile can only say
+            // "unreadable" while the reason is in stderr.
+            ConnectorLog.append(
+                id: connector.id,
+                run: .init(
+                    verb: "fetch", requested: requested, stderr: output.stderrText,
+                    failure: "the runner printed no usable result"))
             throw PluginRunnerError.unreadableOutput(output.errorTail)
         }
+
+        ConnectorLog.append(
+            id: connector.id,
+            run: .init(
+                verb: "fetch", requested: requested, durationMs: result.durationMs,
+                outcomes: result.outcomes.map(Self.describe),
+                httpCalls: result.httpCalls.map(Self.describe),
+                connectorLogs: result.logs, stderr: output.stderrText))
+
         return result.outcomes
+    }
+
+    /// One outcome as a line. The failure message is the point of it, so it
+    /// is never truncated.
+    static func describe(_ outcome: ConnectorMetricOutcome) -> String {
+        switch outcome {
+        case let .success(_, metric, value):
+            let points = value.points.isEmpty ? "" : " points=\(value.points.count)"
+            let rows = (value.items?.count).map { " rows=\($0)" } ?? ""
+            return "ok \(metric) value=\(value.value)\(points)\(rows)"
+        case let .failure(_, metric, code, message):
+            return "failed \(metric) [\(code.rawValue)] \(message)"
+        }
+    }
+
+    static func describe(_ call: PluginHttpCall) -> String {
+        let status = call.status.map(String.init) ?? (call.blocked ? "blocked" : "no response")
+        return "\(call.method) \(call.host) \(status) \(Int(call.ms))ms"
     }
 
     /// Runs `verify`, which is how a credential is checked before it is kept.
@@ -260,13 +303,38 @@ public struct ConnectorRunner: Sendable {
 
         RunnerProcess.appendLog(id: connector.id, stderr: output.stderr)
 
-        if output.killed { throw PluginRunnerError.timedOut }
+        if output.killed {
+            ConnectorLog.append(
+                id: connector.id,
+                run: .init(
+                    verb: "connect", requested: [], stderr: output.stderrText,
+                    failure: "timed out after \(manifest.timeoutMs)ms"))
+            throw PluginRunnerError.timedOut
+        }
         guard let line = output.firstLine,
             let result = try? JSONDecoder().decode(
                 ConnectorVerifyResult.self, from: Data(line.utf8))
         else {
+            ConnectorLog.append(
+                id: connector.id,
+                run: .init(
+                    verb: "connect", requested: [], stderr: output.stderrText,
+                    failure: "the runner printed no usable result"))
             throw PluginRunnerError.unreadableOutput(output.errorTail)
         }
+
+        // Logged on success too. "The key verified an hour ago and does not
+        // now" is a question the tile cannot answer and the file can.
+        ConnectorLog.append(
+            id: connector.id,
+            run: .init(
+                verb: "connect", requested: [],
+                outcomes: [
+                    result.ok
+                        ? "ok \(result.result?.accountLabel ?? "connected")"
+                        : "failed \(result.message ?? "no reason given")"
+                ],
+                stderr: output.stderrText))
         return result
     }
 

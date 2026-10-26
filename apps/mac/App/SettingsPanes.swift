@@ -591,6 +591,12 @@ private struct ConnectorRow: View {
     private var actions: some View {
         Menu {
             Button("Reload") { env.reloadConnector(app) }
+            // Reveals rather than opens. A `.log` has no default handler on a
+            // clean Mac, so opening it is a "choose an application" sheet;
+            // selecting it in Finder always works and leaves the user next to
+            // the file to do what they like with.
+            Button("Open logs") { env.revealConnectorLog(app) }
+                .disabled(!ConnectorLog.exists(id: app.id))
             Divider()
             Button("Remove…", role: .destructive) { confirmingRemove = true }
         } label: {
