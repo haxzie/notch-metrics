@@ -36,6 +36,13 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
+      # `@notch/schemas` imports `@notchmetrics/core` by package name, and that
+      # package's `exports` point at `dist/`. Without this the deploy resolves
+      # nothing: Turbopack reports "Can't resolve '@notchmetrics/core'" and
+      # `tsc` reports TS2307, both only on CI, because a local checkout has a
+      # `dist/` left behind by an earlier build. Same shape as the `emit` task
+      # needing `dependsOn: ["^build"]`.
+      - run: pnpm turbo run build --filter=@notchmetrics/core
       - run: pnpm --filter @notch/api typecheck
       - run: pnpm --filter @notch/api test
       - run: pnpm --filter @notch/logs typecheck
