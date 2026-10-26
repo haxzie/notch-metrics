@@ -159,6 +159,9 @@ importers:
       next:
         specifier: ^16.4.3
         version: 16.4.3(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      rangi:
+        specifier: ^2.2.0
+        version: 2.2.0
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -4389,6 +4392,10 @@ packages:
   range-parser@1.3.0:
     resolution: {integrity: sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==}
     engines: {node: '>= 0.6'}
+
+  rangi@2.2.0:
+    resolution: {integrity: sha512-zMXLNs+3ejB2dg5kjJdNbllNq6FrdtEbHA9f3POxbSIHb0CyslALbY8qSDCE2r+/6Ku7xaVHKtnC5qHbF2SgNg==}
+    hasBin: true
 
   raw-body@3.0.2:
     resolution: {integrity: sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==}
@@ -8645,6 +8652,8 @@ snapshots:
   queue-microtask@1.2.3: {}
 
   range-parser@1.3.0: {}
+
+  rangi@2.2.0: {}
 
   raw-body@3.0.2:
     dependencies:

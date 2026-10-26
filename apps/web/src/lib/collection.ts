@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import matter from "gray-matter";
 import { Marked } from "marked";
+import { highlightText } from "rangi";
+import { githubDark } from "rangi/themes";
 import { z } from "zod";
 
 /**
@@ -83,6 +85,21 @@ export type BaseEntry = z.infer<typeof BaseFrontmatter> & {
   headings: { id: string; text: string }[];
 };
 
+/**
+ * The five characters that change meaning inside markup.
+ *
+ * `marked` escapes code for us on the path it owns, but the highlighter
+ * returns markup, so the fallback branches have to escape their own.
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -123,6 +140,38 @@ export function renderMarkdown(markdown: string): {
         // people copy out of a long entry.
         return `<h${depth} id="${id}"><a href="#${id}">${inner}</a></h${depth}>\n`;
       },
+      /**
+       * Syntax highlighting, at build time.
+       *
+       * `highlightText` rather than `codeToHtml`: the latter emits its own
+       * `<div>` carrying a background, a radius, a font and a margin as
+       * inline styles, which would override `.prose pre` and give the docs
+       * two different code block shapes depending on whether a fence named
+       * its language. This returns the tokens alone, so the site keeps its
+       * own chrome and gains only the colours.
+       *
+       * A dark theme because `.prose pre` is `--color-ink` on a paper page,
+       * and no line numbers: they arrive as a `<div>` gutter inside the
+       * `<code>`, which is a second column the docs' short fences do not
+       * want and which copies along with the code.
+       *
+       * An unknown or absent language falls through to escaped plain text.
+       * A fence saying ```mermaid should render as code, not throw a build.
+       */
+      code({ text, lang }) {
+        const language = (lang ?? "").trim().split(/\s+/)[0];
+        let body: string;
+        try {
+          body = language
+            ? highlightText(text, { lang: language, theme: githubDark, lineNumbers: false })
+            : escapeHtml(text);
+        } catch {
+          body = escapeHtml(text);
+        }
+        const attribute = language ? ` data-lang="${escapeHtml(language)}"` : "";
+        return `<pre${attribute}><code>${body}</code></pre>\n`;
+      },
+
       link({ href, title, tokens }) {
         const inner = this.parser.parseInline(tokens);
         const attrs = title ? ` title="${title}"` : "";

@@ -36,14 +36,14 @@ export default function DocsIntroduction() {
   );
 
   return (
-    <main className="relative isolate mx-auto grid max-w-[88rem] grid-cols-1 gap-x-12 px-6 pb-20 pt-36 xl:grid-cols-[14rem_minmax(0,52rem)] xl:justify-center">
+    <main className="relative isolate mx-auto grid max-w-[88rem] grid-cols-1 gap-x-12 px-6 pb-20 pt-36 xl:grid-cols-[14rem_minmax(0,50rem)_17rem] xl:justify-center">
       <JsonLd data={jsonLd} />
       <DocsSidebar groups={sidebarGroups()} />
 
       {/* The measure, held below `xl` as well as at it. Without this the
-          single-column fallback stretched the prose across the full 82rem, so
+          single-column fallback stretched the prose across the full width, so
           a 1279px window drew a 1231px line where the blog draws 672px. */}
-      <div className="mx-auto w-full max-w-[52rem] xl:mx-0 xl:max-w-none">
+      <div className="mx-auto w-full max-w-[50rem] xl:mx-0 xl:max-w-none">
         <p className="eyebrow">Introduction</p>
         <h1 className="mt-4 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
           Custom apps and <span className="accent">widgets</span>
@@ -113,6 +113,13 @@ export default function DocsIntroduction() {
           </section>
         ))}
       </div>
+
+      {/* The contents rail's track, held empty. The introduction has no
+          headings to list, but without the third column this page's grid is
+          two tracks against every other docs page's three: the sidebar and
+          the prose both landed at a different x, and the measure was 2rem
+          wider, so navigating between them shifted the text sideways. */}
+      <div />
     </main>
   );
 }
