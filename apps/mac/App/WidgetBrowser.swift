@@ -210,7 +210,15 @@ struct WidgetBrowserPane: View {
                                         .foregroundStyle(NotchTheme.secondaryText)
                                 }
                                 LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 134), spacing: 10)],
+                                    // Three, fixed. `.adaptive(minimum: 134)`
+                                    // fitted four at this pane width, which
+                                    // left each card narrower than the 2x2
+                                    // tile it previews: the gauges were a
+                                    // squeezed arc and the breakdowns lost
+                                    // their labels to an ellipsis. Three gives
+                                    // a card about the shape of the real tile.
+                                    columns: Array(
+                                        repeating: GridItem(.flexible(), spacing: 10), count: 3),
                                     alignment: .leading, spacing: 10
                                 ) {
                                     ForEach(section.metrics) { metric in
