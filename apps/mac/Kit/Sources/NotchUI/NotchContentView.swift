@@ -510,6 +510,8 @@ public struct NotchContentView: View {
             } else if view.isBrowsing {
                 backFromBrowsingButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                buildYourOwnButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
             } else if view.isShowingAlerts {
                 backFromAlertsButton
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
@@ -690,6 +692,39 @@ public struct NotchContentView: View {
         .buttonStyle(.plain)
         .foregroundStyle(Color.white)
         .help("Add this widget to the notch")
+    }
+
+    /// Sends somebody who did not find their number to the docs.
+    ///
+    /// Here rather than at the end of the list: the person who needs it is
+    /// the one who has just scrolled a gallery of connectors and not found
+    /// theirs, and by then they are looking at the top of the pane for the
+    /// way out. It sits beside Back for that reason.
+    ///
+    /// Through `onOpenWidget`, which is the app's "open this URL" path and
+    /// stands the notch down first. A bare `NSWorkspace.open` here leaves
+    /// the panel hovering over the browser it just summoned.
+    private var buildYourOwnButton: some View {
+        Button {
+            guard let url = URL(string: "\(view.siteURL.absoluteString)/docs") else { return }
+            view.onOpenWidget(url)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "hammer")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Build your own")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 12)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.1)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(NotchTheme.secondaryText)
+        .help("Read how to build a custom app")
     }
 
     /// Leaves the browser for the grid.
@@ -1639,7 +1674,11 @@ public struct NotchWidgetCanvas: View {
 
     /// Fractional, because the handle drag follows the pointer between
     /// detents rather than snapping to a row on every frame.
-    static func canvasHeight(rows: CGFloat) -> CGFloat {
+    ///
+    /// Public so the widget browser can size a preview to the tile it is
+    /// previewing. A second copy of this arithmetic there is how a preview
+    /// comes to be a different shape from the thing it previews.
+    public static func canvasHeight(rows: CGFloat) -> CGFloat {
         rows * rowHeight + max(0, rows - 1) * rowSpacing
     }
 

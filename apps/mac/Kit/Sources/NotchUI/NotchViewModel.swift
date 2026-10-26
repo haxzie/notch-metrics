@@ -235,6 +235,13 @@ public final class NotchViewModel {
     /// before the browser comes forward, or the panel is left hovering over
     /// the window the user was sent to.
     public var onOpenWidget: @MainActor (URL) -> Void = { _ in }
+    /// Where the website lives, for the links the notch offers.
+    ///
+    /// Passed in rather than hard-coded: the app target reads it from
+    /// `NMAppBaseURL`, so a development build points at a development site
+    /// instead of sending somebody to production from a local run.
+    public var siteURL: URL = URL(string: "https://notchmetrics.com")!
+
     /// Opens the browser of widgets that can be added.
     public var onAddWidget: @MainActor () -> Void = {}
     /// Starts the browser sign-in handshake.

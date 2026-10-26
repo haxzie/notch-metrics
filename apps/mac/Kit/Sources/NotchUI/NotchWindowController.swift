@@ -20,6 +20,11 @@ public final class NotchWindowController {
     public var onShareWidget: (ShareRequest) -> Void = { _ in }
     /// Opens a clicked tile's destination. See `WidgetLink`.
     public var onOpenWidget: (URL) -> Void = { _ in }
+    /// Where the website lives, for the links the notch offers. Set by the
+    /// app target from `NMAppBaseURL`.
+    public var siteURL: URL = URL(string: "https://notchmetrics.com")! {
+        didSet { view?.siteURL = siteURL }
+    }
     public var onAddWidget: () -> Void = {}
     /// Starts the browser sign-in handshake. Owned by the app target, which
     /// is where the PKCE challenge and the website's URL live.
@@ -316,6 +321,7 @@ public final class NotchWindowController {
             self?.onShareWidget(request)
         }
         viewModel.onOpenWidget = { [weak self] url in self?.onOpenWidget(url) }
+        viewModel.siteURL = siteURL
         viewModel.onAddWidget = { [weak self] in self?.onAddWidget() }
         viewModel.onSignIn = { [weak self] in self?.onSignIn() }
         viewModel.onCancelSignIn = { [weak self] in self?.onCancelSignIn() }

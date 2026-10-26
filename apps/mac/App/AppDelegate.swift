@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The browser is about to come forward over the notch, so the notch
         // stands down first — the same thing a connect or a sign-in does.
+        env.notch.siteURL = AppEnvironment.appURL
         env.notch.onOpenWidget = { [weak self] url in
             self?.env.notch.suspendForExternalFlow()
             NSWorkspace.shared.open(url)

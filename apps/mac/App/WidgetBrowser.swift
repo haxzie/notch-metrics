@@ -355,13 +355,26 @@ private struct BrowseCard: View {
             WidgetTile(
                 widget: draft, app: app, state: .value(WidgetSample.series(for: metric)),
                 showsRange: usesTimeWindow)
-                // Tall enough for the tallest thing a 2x1 draws — a chart
-                // under a figure, or two list rows. `WidgetTile` fills the
-                // height it is given but will not shrink below what its
-                // contents need: too short and the ones with charts render
-                // past their own rounded fill and over the card below, which
-                // is what made a grid of equal frames look ragged.
-                .frame(height: 96)
+                // The height the widget will actually be, from the same
+                // numbers the grid lays out with.
+                //
+                // This was a flat 96 for every card, which is roughly a one
+                // row tile. A two row widget needs 178, so every gauge and
+                // every breakdown was drawn into half the space it asks for:
+                // `WidgetTile` fills the height it is given but will not
+                // shrink below what its contents need, so the ranked rows
+                // ran past their own rounded fill and over the card beneath.
+                .frame(height: NotchWidgetCanvas.canvasHeight(rows: CGFloat(draft.size.rows)))
+                // A guard, not the fix. If a tile ever wants more than its
+                // own rows allow, it is clipped here rather than painted
+                // over its neighbour.
+                .clipped()
+                // The tile is its own height; the *card* is always the
+                // tallest, so the gallery stays a grid. Sized to the tile
+                // alone the rows went ragged, with a one row preview leaving
+                // a hole beside a two row one and the eye reading the gap as
+                // a missing widget.
+                .frame(height: Self.cardHeight, alignment: .top)
                 .frame(maxWidth: .infinity)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -402,6 +415,13 @@ private struct BrowseCard: View {
     private var draft: NotchWidget {
         WidgetBrowserPane.draft(id: "browse-\(id)", connector: connector, metric: metric)
     }
+
+    /// Every card is as tall as the tallest tile any of them previews.
+    ///
+    /// Two rows, because that is the largest a browser preview offers: a
+    /// gauge, a ring and a breakdown all ask for it, and a plain figure asks
+    /// for one. The card holds the taller of the two so the grid is a grid.
+    static let cardHeight = NotchWidgetCanvas.canvasHeight(rows: 2)
 }
 
 /// Plausible numbers for a card that has not been pointed at an account yet.
