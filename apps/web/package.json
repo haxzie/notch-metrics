@@ -10,7 +10,8 @@
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --env production",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next .open-next .turbo node_modules *.tsbuildinfo",
-    "seo:thin": "node scripts/seo-thin.mjs"
+    "seo:thin": "node scripts/seo-thin.mjs",
+    "og": "node scripts/generate-og.mjs"
   },
   "dependencies": {
     "@notch/env": "workspace:*",
@@ -25,12 +26,14 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@fontsource/inter": "^5.3.0",
     "@notch/typescript-config": "workspace:*",
     "@opennextjs/cloudflare": "^1.20.13",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "esbuild": "^0.28.2",
     "react-grab": "^0.2.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",

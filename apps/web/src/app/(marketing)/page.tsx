@@ -13,7 +13,8 @@ import { AppleMark, ArrowRight } from "@/components/marketing/icons";
 import { connectable } from "@notch/integrations";
 import { JsonLd } from "@/components/JsonLd";
 import { graph, organizationJsonLd, softwareApplicationJsonLd, websiteJsonLd } from "@/lib/jsonld";
-import { LLM_ALTERNATES, absoluteUrl } from "@/lib/site";
+import { ogDefaults } from "@/lib/og";
+import { LLM_ALTERNATES } from "@/lib/site";
 
 const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL ?? "https://assets.notchmetrics.com";
 
@@ -26,7 +27,12 @@ const ASSETS = process.env.NEXT_PUBLIC_ASSETS_URL ?? "https://assets.notchmetric
  */
 export const metadata: Metadata = {
   alternates: { canonical: "/", types: LLM_ALTERNATES },
-  openGraph: { url: absoluteUrl("/") },
+  openGraph: ogDefaults({
+    path: "/",
+    title: "Notch Metrics: put your metrics in the notch",
+    description:
+      "Notch Metrics puts your revenue, MRR and subscribers in your MacBook notch. Look up, and the number is already there.",
+  }),
 };
 
 /**

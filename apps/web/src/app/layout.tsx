@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ReactGrab } from "@/components/ReactGrab";
+import { OG_IMAGE, OG_SIZE } from "@/lib/og";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -22,6 +23,10 @@ export const metadata: Metadata = {
     title: "Notch Metrics: put your metrics in the notch",
     description: "Put your metrics in the notch. Look up, and the number is already there.",
     type: "website",
+    // Inherited by every route that does not set its own `openGraph`. One
+    // that does replaces this block whole, which is what `ogDefaults` in
+    // `src/lib/og.tsx` exists to put back.
+    images: [{ url: OG_IMAGE, width: OG_SIZE.width, height: OG_SIZE.height }],
   },
   twitter: { card: "summary_large_image" },
   icons: { icon: "/logo.svg", apple: "/brand/app-icon.png" },
