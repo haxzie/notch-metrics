@@ -245,3 +245,77 @@ describe("running a connector", () => {
     expect(JSON.stringify(result)).not.toContain("should-not-be-visible");
   });
 });
+
+/**
+ * The authoring shape a connector is written in now: one default export,
+ * each metric carrying its own `fetch`.
+ *
+ * The older shape stays supported and is covered by every test above, which
+ * is the point of keeping both: a connector already on somebody's Mac cannot
+ * be migrated by this repository, so dropping it would stop their widgets at
+ * the next app update.
+ */
+describe("a connector built from metric objects", () => {
+  const modernDir = join(import.meta.dirname, "connectors/modern");
+  const modernManifest = LocalConnectorManifest.parse(
+    JSON.parse(readFileSync(join(modernDir, "manifest.json"), "utf8")),
+  );
+
+  function run(metrics: string[]) {
+    return runConnector({
+      dir: modernDir,
+      manifest: modernManifest,
+      credentials,
+      requests: metrics.map(request),
+    });
+  }
+
+  it("routes each request to that metric's own fetch", async () => {
+    const result = await run(["open_issues", "completed"]);
+    expect(result.ok).toBe(true);
+
+    const [open, completed] = result.outcomes;
+    expect(open).toMatchObject({ ok: true, metric: "open_issues", result: { value: 12 } });
+    // `note` echoes the metric the function was called for, which is what
+    // proves the dispatch went to the right object and not to a shared
+    // switch that happened to return the right number.
+    expect(completed).toMatchObject({
+      ok: true,
+      metric: "completed",
+      result: { value: 7, previousValue: 4, note: "completed" },
+    });
+  });
+
+  it("verifies through the default export", async () => {
+    const result = await verifyConnector({
+      dir: modernDir,
+      manifest: modernManifest,
+      credentials,
+    });
+    expect(result).toMatchObject({ ok: true, result: { accountLabel: "Acme" } });
+  });
+
+  it("keeps one failing metric away from the others", async () => {
+    const result = await run(["explodes", "open_issues"]);
+    const [failed, fine] = result.outcomes;
+    expect(failed).toMatchObject({ ok: false, code: "runtime" });
+    expect(fine).toMatchObject({ ok: true, result: { value: 12 } });
+  });
+
+  it("refuses a metric the module does not carry", async () => {
+    const result = await run(["not_a_metric"]);
+    expect(only(result.outcomes)).toMatchObject({
+      ok: false,
+      code: "unsupported",
+    });
+  });
+
+  it("answers two widgets on one metric separately", async () => {
+    // The id is what tells them apart. Two tiles on `completed` with
+    // different params are identical in every other field.
+    const result = await run(["completed", "completed"]);
+    const ids = result.outcomes.map((outcome) => outcome.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(result.outcomes.every((outcome) => outcome.ok)).toBe(true);
+  });
+});

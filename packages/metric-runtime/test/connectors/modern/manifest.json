@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "modern",
+  "name": "Modern",
+  "description": "Issues and cycle progress from a Linear workspace.",
+  "appId": "linear",
+  "auth": [
+    {
+      "key": "api_key",
+      "label": "API key",
+      "type": "secret",
+      "required": true
+    },
+    {
+      "key": "team",
+      "label": "Team key",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "allowedHosts": ["api.linear.app"],
+  "metrics": [
+    {
+      "id": "open_issues",
+      "label": "Open issues",
+      "shortLabel": "Open",
+      "unit": "count",
+      "shape": {
+        "kind": "scalar"
+      },
+      "methodology": "Issues in an unfinished state."
+    },
+    {
+      "id": "completed",
+      "label": "Completed",
+      "shortLabel": "Done",
+      "unit": "count",
+      "shape": {
+        "kind": "series",
+        "granularities": ["day"],
+        "compare": true
+      },
+      "methodology": "Issues moved to done in the window."
+    },
+    {
+      "id": "explodes",
+      "label": "Explodes",
+      "shortLabel": "Boom",
+      "unit": "count",
+      "shape": {
+        "kind": "scalar"
+      },
+      "methodology": "Always throws."
+    }
+  ],
+  "refreshIntervalSeconds": 300,
+  "timeoutMs": 8000,
+  "entry": "connector.mjs",
+  "createdAt": "2026-10-24T12:00:00.000Z",
+  "updatedAt": "2026-10-24T12:00:00.000Z"
+}

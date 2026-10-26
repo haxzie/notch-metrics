@@ -34,9 +34,73 @@ export interface ConnectorContext {
   http: ReturnType<typeof allowlistedHttp>;
 }
 
+/**
+ * What a connector's entry file exports.
+ *
+ * Two shapes, and both are accepted on purpose. The current one is a default
+ * export built by `defineConnector`, where each metric carries its own
+ * `fetch`. The older one is a pair of named exports with a single
+ * `fetchMetric` that switches on `request.metric`.
+ *
+ * Supporting both is not indecision. A connector is a file on somebody's Mac
+ * that this code has no way to migrate, so dropping the old shape would
+ * silently stop their widgets the next time the app updated.
+ */
 export interface ConnectorModule {
+  default?: ConnectorExport;
   verify?: (ctx: ConnectorContext) => Promise<unknown>;
   fetchMetric?: (ctx: ConnectorContext, request: MetricRequest) => Promise<unknown>;
+}
+
+interface ConnectorExport {
+  verify?: (ctx: ConnectorContext) => Promise<unknown>;
+  metrics?: Record<string, { descriptor?: unknown; fetch?: MetricFetch }>;
+  describe?: () => unknown;
+}
+
+type MetricFetch = (ctx: ConnectorContext, request: MetricRequest) => Promise<unknown>;
+
+/**
+ * The connector object, whichever shape the module used.
+ *
+ * Resolved once per load so the two shapes are reconciled in one place
+ * rather than at each of the three call sites that need one.
+ */
+function resolve(module: ConnectorModule): {
+  verify?: (ctx: ConnectorContext) => Promise<unknown>;
+  fetchFor(metric: string): MetricFetch | undefined;
+  describe(): unknown[] | undefined;
+  declaredIds(): string[] | undefined;
+} {
+  const exported = module.default;
+
+  if (exported && typeof exported === "object" && exported.metrics) {
+    const metrics = exported.metrics;
+    return {
+      ...(typeof exported.verify === "function" ? { verify: exported.verify } : {}),
+      fetchFor: (metric) => {
+        const found = metrics[metric];
+        return typeof found?.fetch === "function" ? found.fetch : undefined;
+      },
+      describe: () =>
+        typeof exported.describe === "function"
+          ? (exported.describe() as unknown[])
+          : Object.values(metrics)
+              .map((metric) => metric.descriptor)
+              .filter(Boolean),
+      declaredIds: () => Object.keys(metrics),
+    };
+  }
+
+  // The older shape. One function for every metric, so the same one is
+  // returned whichever metric is asked for, and the module can say nothing
+  // about what it declares.
+  return {
+    ...(typeof module.verify === "function" ? { verify: module.verify } : {}),
+    fetchFor: () => (typeof module.fetchMetric === "function" ? module.fetchMetric : undefined),
+    describe: () => undefined,
+    declaredIds: () => undefined,
+  };
 }
 
 /**
@@ -170,16 +234,7 @@ export async function verifyConnector(
 
   try {
     const module = await load(options.dir, options.manifest.entry);
-    if (typeof module.verify !== "function") {
-      return {
-        ok: false,
-        code: "entry",
-        message: "The entry file must export a `verify(ctx)` function.",
-        durationMs: Date.now() - started,
-        httpCalls,
-        logs,
-      };
-    }
+    const connector = resolve(module);
 
     const now = (options.now ?? (() => new Date()))();
     const ctx = buildContext({
@@ -196,7 +251,9 @@ export async function verifyConnector(
       },
     });
 
-    const raw = await module.verify(ctx);
+    // Optional now. An app against a public API has nothing to verify, and
+    // making every one of those write an empty function was noise.
+    const raw = connector.verify ? await connector.verify(ctx) : {};
     const parsed = LocalVerifyResult.safeParse(raw ?? {});
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -214,7 +271,9 @@ export async function verifyConnector(
     // Reported rather than rejected: a connector may legitimately name a
     // metric it no longer declares, and silently dropping the mismatch is how
     // `availableMetrics` used to drift from its own manifest.
-    const declared = new Set(options.manifest.metrics.map((metric) => metric.id));
+    const declared = new Set(
+      connector.declaredIds() ?? options.manifest.metrics.map((metric) => metric.id),
+    );
     const unknown = parsed.data.unavailableMetrics.filter((id) => !declared.has(id));
     if (unknown.length > 0) {
       logs.push(`verify named metrics this connector does not declare: ${unknown.join(", ")}`);
@@ -261,34 +320,37 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
 
   try {
     const module = await load(options.dir, options.manifest.entry);
-    if (typeof module.fetchMetric !== "function") {
-      clearTimeout(timer);
-      return {
-        ok: false,
-        outcomes: options.requests.map((request) => ({
-          ok: false as const,
-          id: request.id,
-          metric: request.metric,
-          code: "runtime" as const,
-          message: "The entry file must export a `fetchMetric(ctx, request)` function.",
-        })),
-        durationMs: Date.now() - started,
-        httpCalls,
-        logs,
-      };
-    }
+    const connector = resolve(module);
 
-    const declared = new Map(options.manifest.metrics.map((metric) => [metric.id, metric]));
+    // What the module says it has, falling back to the manifest for the
+    // older shape, which cannot say. A manifest that declares metrics the
+    // code does not is caught per request below rather than up front: the
+    // other five metrics should still answer.
+    const declared = new Set(
+      connector.declaredIds() ?? options.manifest.metrics.map((metric) => metric.id),
+    );
 
     for (const request of options.requests) {
-      const descriptor = declared.get(request.metric);
-      if (!descriptor) {
+      if (!declared.has(request.metric)) {
         outcomes.push({
           ok: false,
           id: request.id,
           metric: request.metric,
           code: "unsupported",
           message: `${options.manifest.name} does not declare ${request.metric}.`,
+        });
+        continue;
+      }
+
+      const fetchMetric = connector.fetchFor(request.metric);
+      if (!fetchMetric) {
+        outcomes.push({
+          ok: false,
+          id: request.id,
+          metric: request.metric,
+          code: "runtime",
+          message:
+            "The entry file must default-export defineConnector({ metrics }) or export fetchMetric(ctx, request).",
         });
         continue;
       }
@@ -321,7 +383,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
       });
 
       try {
-        const raw = await module.fetchMetric(ctx, request);
+        const raw = await fetchMetric(ctx, request);
         const parsed = LocalMetricResult.safeParse(raw);
         if (!parsed.success) {
           const issue = parsed.error.issues[0];
@@ -331,7 +393,7 @@ export async function runConnector(options: ConnectorRunOptions): Promise<Connec
             metric: request.metric,
             code: "bad_result",
             message:
-              `fetchMetric returned something unusable: ${issue?.path.join(".") ?? ""} ${issue?.message ?? ""}`.trim(),
+              `${request.metric} returned something unusable: ${issue?.path.join(".") ?? ""} ${issue?.message ?? ""}`.trim(),
           });
           continue;
         }
