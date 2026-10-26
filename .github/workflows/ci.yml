@@ -131,6 +131,13 @@ jobs:
           path: apps/mac/build/SourcePackages
           key: spm-${{ hashFiles('apps/mac/Kit/Package.swift') }}
 
+      # The app bundle copies `packages/metric-runtime/dist/runner.mjs`, which
+      # is how a custom app runs at all. Nothing in this job built it, so the
+      # copy phase failed with a bare `lstat ... No such file`. It passes on a
+      # developer's machine because a `dist/` is already sitting there from an
+      # earlier build. Same shape as the deploys needing `@notchmetrics/core`.
+      - run: pnpm turbo run build --filter=@notch/metric-runtime
+
       - run: ./scripts/mac.sh gen
 
       - name: Build

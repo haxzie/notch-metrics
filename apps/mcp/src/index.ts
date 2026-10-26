@@ -475,6 +475,10 @@ async function registerConnector(
     manifest,
     credentials: supplied,
     requests: manifest.metrics.map((metric) => ({
+      // One request per declared metric, so the metric id doubles as the
+      // request id here. The field exists because two *widgets* can ask for
+      // one metric with different params; a test run has no widgets.
+      id: metric.id,
       metric: metric.id,
       params: {},
       range: "30d",
