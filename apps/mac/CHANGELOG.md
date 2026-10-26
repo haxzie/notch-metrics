@@ -1,5 +1,88 @@
 # @notch/mac
 
+## 0.4.0
+
+### Minor Changes
+
+- [`97c3a2a`](https://github.com/haxzie/notch-metrics/commit/97c3a2a73ec10c642e1deff87b92d8d71298d592) Thanks [@haxzie](https://github.com/haxzie)! - Show which account this Mac is signed in as, and let it sign out.
+
+  The Account pane said "Signed in" and offered no way to leave. It now names the
+  email, and carries a Sign out that revokes this Mac's device token on the server
+  before forgetting it here — so the credential stops working rather than merely
+  going missing, and it does not sit in your account's device list until it
+  expires. Your widgets stay arranged; signing back in puts the numbers back.
+
+  The email is read from the account and falls back to "Signed in" until the
+  answer arrives, which on a cold launch is a moment and offline is forever.
+
+- [`8ff2372`](https://github.com/haxzie/notch-metrics/commit/8ff23725db81c1df93dc7275a1dbcd4c2f1354b6) Thanks [@haxzie](https://github.com/haxzie)! - Custom apps are app-first, and each one keeps its own log.
+
+  Settings lists apps rather than metrics, with a credentials form, a reload and
+  a remove that takes the app's widgets with it. Enabling an app approves what it
+  asks for, so a cosmetic edit no longer revokes it and a widened host or a newly
+  borrowed sign-in is named when it does.
+
+  Every run writes what was asked for, what each metric answered, which hosts
+  were called and what they returned. Open logs is in the app's three dot menu.
+
+- [`97c3a2a`](https://github.com/haxzie/notch-metrics/commit/97c3a2a73ec10c642e1deff87b92d8d71298d592) Thanks [@haxzie](https://github.com/haxzie)! - Open the app on a welcome screen in the notch, not a window of settings.
+
+  Opening Notch Metrics used to open the settings window: a list of panes that
+  are all empty until there is an account, with the one thing to do two clicks
+  away. It now opens the notch itself, pinned, on a greeting — "hello", written
+  out in the brand gradient — with a single Sign in button under it and nothing
+  else. Escape closes it.
+
+  Pinned matters for a reason worth knowing: the notch is a hover panel, and an
+  unpinned one closes the moment the pointer leaves the few points it covers. A
+  sign-in button that disappears underneath the pointer on its way to being
+  clicked is a sign-in button that does nothing, which is what some people were
+  hitting.
+
+  While the browser has the handshake, the button says so — and hovering it
+  offers Cancel, so a tab you closed or changed your mind about no longer leaves
+  the notch waiting three minutes for a browser that is never coming back.
+
+  An empty notch now carries an Add widgets button instead of a sentence naming
+  two controls, the second of which only appears once you have pressed the first.
+
+- [`8ff2372`](https://github.com/haxzie/notch-metrics/commit/8ff23725db81c1df93dc7275a1dbcd4c2f1354b6) Thanks [@haxzie](https://github.com/haxzie)! - Four new widget shapes, and a row layout for wide tiles.
+
+  A gauge draws a ratio inside a filled arc. Split, ranked and ring draw one
+  list's categories against each other, each with a key naming as many as the
+  tile has room for.
+
+  A one-row tile wider than two columns now reads left to right. Stacked, it put
+  the name on top and the figure in the middle and left everything past the
+  second column empty.
+
+### Patch Changes
+
+- [`dd5b99a`](https://github.com/haxzie/notch-metrics/commit/dd5b99a445f3ad02158c6397f64acac3ba550599) Thanks [@haxzie](https://github.com/haxzie)! - Widget previews are the size of the widget they preview, and the browser
+  points at the docs.
+
+  Every preview card was a flat 96 points, so a gauge or a breakdown was drawn
+  into half the space it asks for and spilled over the card beneath it. Build
+  your own now sits beside Back, and opens the guide to writing a custom app.
+
+- [`c07f19c`](https://github.com/haxzie/notch-metrics/commit/c07f19c55c09f07ada2a8fd4201d3b77e18e789f) Thanks [@haxzie](https://github.com/haxzie)! - Say the right bucket, and how long a rate limit lasts, when a widget fails.
+
+  Two copies of the one log line that explains a failing tile, and they had
+  drifted. The batch's printed the widget's stored `granularity` — frozen when
+  the widget is created, changed by no control since — while every request is
+  built from the range instead. So a 30-day tile that asked the server for
+  daily buckets was logged as having asked for hourly ones, which is the exact
+  signature of a bug fixed long ago somewhere else entirely. A log that names a
+  dead bug at the moment something is going wrong is worse than no log.
+
+  The line now also carries `retryAfterSeconds` when the server sends it. It is
+  the only number that says how long a rate limit has left, because a
+  provider's own `Retry-After` is obeyed literally rather than fed into a curve
+  of our own — and without it a limit that clears in a minute and a spend cap
+  that will never clear on its own read identically.
+
+  One copy now, so the next edit cannot land on half of them.
+
 ## 0.3.2
 
 ### Patch Changes
