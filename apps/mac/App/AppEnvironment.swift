@@ -15,9 +15,14 @@ final class AppEnvironment {
     let layoutModel: NotchLayoutModel
     let notch: NotchWindowController
     let plugins: PluginRegistry
+    let connectors: ConnectorRegistry
     /// Per-plugin cadence. Separate from the metric poll because a local
     /// metric is a process against somebody's own API, not a row in a batch.
     private let pluginSchedule = PluginScheduler()
+    /// Its own clock. A connector's interval is per app, not per
+    /// metric, and sharing the plugin scheduler would let a metric id
+    /// and an app id collide on one timestamp.
+    private let connectorSchedule = ConnectorScheduler()
     let secrets: any SecretStore
     let auth: AuthStore
     let api: APIClient
@@ -48,6 +53,15 @@ final class AppEnvironment {
     /// window — the same convention as `notch.onOpenSettings`.
     var onOpenSettings: @MainActor () -> Void = {}
     func openSettings() { onOpenSettings() }
+
+    /// Opens Settings on a particular pane.
+    ///
+    /// Set before the window comes forward, so it does not open on whatever
+    /// was last selected and then visibly jump.
+    func openSettings(pane: SettingsPane) {
+        settingsPane = pane
+        onOpenSettings()
+    }
 
     /// Bumped whenever the server's idea of the user's connections may have
     /// changed — a sign-in, a connect flow coming back.
@@ -259,6 +273,7 @@ final class AppEnvironment {
         self.alerts = AlertInbox()
         self.settingsStore = SettingsStore()
         self.plugins = PluginRegistry()
+        self.connectors = ConnectorRegistry()
         self.updates = UpdateController(api: Self.apiURL, mirror: Self.assetsURL)
 
         let persistedLayout = Self.loadLayout()
@@ -284,7 +299,18 @@ final class AppEnvironment {
 
         settings = await settingsStore.current
         plugins.setApproved(settings.approvedPlugins)
+        plugins.onAdded = { [weak self] arrived in
+            MainActor.assumeIsolated { self?.announceNewMetrics(arrived) }
+        }
         plugins.start()
+
+        connectors.setApproved(settings.approvedConnectors)
+        connectors.onAdded = { [weak self] arrived in
+            MainActor.assumeIsolated { self?.announceNewApps(arrived) }
+        }
+        connectors.start()
+        migrateConnectorApprovals()
+        publishAppOverrides()
 
         // Demo mode takes screenshots and must not reach the network; the
         // pane's states are reachable through NOTCH_DEBUG_UPDATE instead.
@@ -709,6 +735,16 @@ final class AppEnvironment {
         for plugin in plugins.plugins {
             if plugin.manifest?.supportsSeries == true { keys.insert("custom/\(plugin.id)") }
         }
+        // Custom apps. Missing entirely until now, which is why a connector
+        // tile lost its "· 30d" while a server tile beside it kept one: this
+        // walk knew about legacy plugins and about the catalogue, and the
+        // format that replaced the first was never added to it.
+        for connector in connectors.connectors {
+            guard let manifest = connector.manifest else { continue }
+            for metric in manifest.metrics where metric.shape.usesTimeWindow {
+                keys.insert("custom/\(CustomMetricRef(appId: connector.id, metricId: metric.id).packed)")
+            }
+        }
         // Not gated on sign-in: the catalogue is readable either way, and a
         // demo or signed-out notch should label its tiles the same as a live one.
         var links: WidgetLink.Catalogue?
@@ -822,7 +858,10 @@ final class AppEnvironment {
         // Alongside the batch, not after it. A slow plugin must not hold up
         // every provider tile in the notch, and the two paths write disjoint
         // widgets so there is nothing to order between them.
-        Task { await refreshPlugins() }
+        Task {
+            await refreshPlugins()
+            await refreshConnectors()
+        }
 
         guard !widgets.isEmpty else {
             // Not `placeholderStates`: that answers for every widget at once
@@ -1111,7 +1150,14 @@ final class AppEnvironment {
     /// processes against separate APIs on separate schedules; the only thing
     /// the two paths share is where the answer lands.
     private func refreshPlugins() async {
-        let widgets = layoutModel.layout.widgets.filter { $0.kind == .customMetric }
+        // Custom-app widgets are answered by `refreshConnectors`: one process
+        // per app for all of its metrics, rather than one per metric. The two
+        // are told apart by whether `customMetricId` names an app — see
+        // `CustomMetricRef`.
+        let widgets = layoutModel.layout.widgets.filter {
+            $0.kind == .customMetric
+                && !CustomMetricRef(packed: $0.customMetricId ?? "").isConnector
+        }
         guard !widgets.isEmpty else { return }
 
         // Keyed by plugin id, because several widgets may read the same
@@ -1176,6 +1222,188 @@ final class AppEnvironment {
         notch.update(states: states)
     }
 
+    /// Names and icons for installed custom apps.
+    ///
+    /// `AppCatalog` ships the marks for connectors we serve, compiled into the
+    /// asset catalogue — which an app written on this machine can never be in.
+    /// This is the one route by which a custom app's own icon reaches the
+    /// notch tile, the gallery and a banner, and it is why a custom widget
+    /// carries its app's id rather than a shared "custom".
+    private func publishAppOverrides() {
+        var overrides: [String: MetricApp] = [:]
+
+        for app in connectors.connectors {
+            guard let manifest = app.manifest else { continue }
+            overrides[LocalCatalogue.id(for: app.id).lowercased()] = MetricApp.custom(
+                id: LocalCatalogue.id(for: app.id),
+                name: manifest.name,
+                icon: manifest.icon,
+                iconFile: app.iconURL)
+            // Also under the bare id, which is what a widget added from the
+            // gallery stores. Both keys, because the gallery's entry id and
+            // the widget's appId are not the same string.
+            overrides[app.id.lowercased()] = overrides[
+                LocalCatalogue.id(for: app.id).lowercased()]
+        }
+
+        notch.update(appOverrides: overrides)
+    }
+
+    /// Answers every custom-app tile, one process per app.
+    ///
+    /// The batching is the whole reason the connector format exists. Six tiles
+    /// from one app are six metrics in a single run that reads the credential
+    /// once, where the single-metric path would be six Node launches per tick.
+    private func refreshConnectors() async {
+        let widgets = layoutModel.layout.widgets.filter {
+            $0.kind == .customMetric
+                && CustomMetricRef(packed: $0.customMetricId ?? "").isConnector
+        }
+        guard !widgets.isEmpty else { return }
+
+        // Republished here as well as at launch: an app installed or enabled
+        // while running changes its tile's name and icon, and nothing else
+        // would notice until the next relaunch.
+        publishAppOverrides()
+
+        let byID = Dictionary(
+            connectors.connectors.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        await connectorSchedule.retain(ids: Set(byID.keys))
+
+        let runner: ConnectorRunner
+        do {
+            runner = try ConnectorRunner(secrets: secrets)
+        } catch {
+            let reason = Self.pluginSetupFailure(error)
+            for widget in widgets { states[widget.id] = .failed(reason: reason) }
+            notch.update(states: states)
+            return
+        }
+
+        // Grouped by app, and within an app by the range each tile asked for:
+        // two widgets on the same metric over different windows are two
+        // requests, and one run can carry both.
+        var byApp: [String: [(NotchWidget, CustomMetricRef)]] = [:]
+        for widget in widgets {
+            let ref = CustomMetricRef(packed: widget.customMetricId ?? "")
+            guard let appId = ref.appId else { continue }
+            byApp[appId, default: []].append((widget, ref))
+        }
+
+        for (appId, members) in byApp {
+            guard let app = byID[appId] else {
+                // Installed once, gone now. Said plainly rather than left
+                // spinning: the folder was removed and no amount of waiting
+                // brings it back.
+                for (widget, _) in members {
+                    states[widget.id] = .failed(reason: "App not installed")
+                }
+                continue
+            }
+
+            switch app.state {
+            case .pendingApproval:
+                for (widget, _) in members {
+                    states[widget.id] = .needsSetup("Enable in Settings")
+                }
+                continue
+            case .modified:
+                // The only way into this state is an app asking for more than
+                // it was enabled for, so the tile can say so. An upgrade never
+                // lands here — `migrateConnectorApprovals` adopts what was
+                // already agreed to rather than re-asking.
+                for (widget, _) in members {
+                    states[widget.id] = .needsSetup("Wants more access")
+                }
+                continue
+            case .invalid(let reason):
+                for (widget, _) in members { states[widget.id] = .failed(reason: reason) }
+                continue
+            case .ready:
+                break
+            }
+
+            // A widget that has never answered, or one the user has just
+            // reconfigured — `widgetConfigurationChanged` marks it `.loading`
+            // — must not wait out the app's refresh interval. The interval
+            // exists to stop polling, not to make a changed setting take
+            // fifteen minutes; without this a tile sat on a spinner for ever,
+            // because the skip below also leaves its state untouched.
+            let awaiting = members.contains { widget, _ in
+                switch states[widget.id] {
+                case nil, .loading: true
+                default: false
+                }
+            }
+            if !awaiting, await !connectorSchedule.isDue(app) { continue }
+
+            // A declared host credential that is missing or expired fails every
+            // metric with one actionable reason, rather than letting each
+            // request come back as an opaque 401 from inside the connector.
+            if let problem = runner.hostCredentialProblem(app) {
+                for (widget, _) in members { states[widget.id] = .needsSetup(problem) }
+                continue
+            }
+
+            let descriptors = Dictionary(
+                (app.manifest?.metrics ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let requests = members.map { widget, ref in
+                ConnectorMetricRequest(
+                    id: widget.id,
+                    metric: ref.metricId,
+                    window: .of(widget.range),
+                    params: widget.params)
+            }
+
+            do {
+                let outcomes = try await runner.run(app, metrics: requests)
+                await connectorSchedule.recordRun(app)
+
+                // Matched by the widget's own id, which the request carried
+                // and the outcome echoes.
+                //
+                // Not by metric id: two widgets can ask for the same metric
+                // with different params — one npm package per tile — and
+                // keying by `outcome.metric` made the second answer overwrite
+                // the first, so both tiles showed one package's number and one
+                // package's chart. Not by position either: that works until
+                // anything reorders, and then it is a confidently wrong number
+                // rather than an error.
+                var answers: [String: ConnectorMetricOutcome] = [:]
+                for outcome in outcomes { answers[outcome.id] = outcome }
+
+                for (widget, ref) in members {
+                    guard let outcome = answers[widget.id] else {
+                        // Asked for and not answered. A tile saying nothing is
+                        // worse than one saying the connector skipped it.
+                        states[widget.id] = .failed(reason: "No answer")
+                        continue
+                    }
+                    switch outcome {
+                    case let .success(_, _, result):
+                        guard let descriptor = descriptors[ref.metricId] else {
+                            states[widget.id] = .failed(reason: "Unknown metric")
+                            continue
+                        }
+                        states[widget.id] = .value(
+                            result.series(descriptor: descriptor, window: .of(widget.range)))
+                    case let .failure(_, _, code, _):
+                        // Per metric, so one broken endpoint does not blank the
+                        // other five tiles from the same app.
+                        states[widget.id] = .failed(reason: code.shortReason)
+                    }
+                }
+            } catch {
+                // Recorded even on failure: an app whose API is down must not
+                // be retried every tick.
+                await connectorSchedule.recordRun(app)
+                let reason = Self.pluginFailure(error)
+                for (widget, _) in members { states[widget.id] = .failed(reason: reason) }
+            }
+        }
+        notch.update(states: states)
+    }
+
     /// What a tile says when the runner could not start at all.
     static func pluginSetupFailure(_ error: any Error) -> String {
         guard let error = error as? PluginRunnerError else { return "Could not start" }
@@ -1229,11 +1457,286 @@ final class AppEnvironment {
         return false
     }
 
+    /// Says so when an agent writes a metric into Application Support.
+    ///
+    /// The MCP server and the CLI write there while the app is running, so
+    /// this is something that happens *to* the notch. Without it the agent
+    /// finishes by saying "enable it in Settings" and nothing on screen has
+    /// changed — the user has no reason to believe a thing arrived.
+    ///
+    /// It is deliberately an ordinary banner rather than a system
+    /// notification: the metric is not urgent, it is not from a server, and
+    /// the notch is where it is going to live.
+    private func announceNewMetrics(_ arrived: [LoadedPlugin]) {
+        guard !arrived.isEmpty else { return }
+
+        let title =
+            arrived.count == 1
+            ? "New widget added"
+            : "\(arrived.count) new widgets added"
+        let body =
+            arrived.count == 1
+            ? "\(arrived[0].displayName) — enable it in Settings to start it."
+            : "\(arrived.map(\.displayName).joined(separator: ", ")) — enable them in Settings."
+
+        present(
+            NotchAlert(
+                id: "plugin-added-\(arrived.map(\.id).sorted().joined(separator: "-"))",
+                seq: 0, integrationId: nil, provider: arrived.count == 1 ? (arrived[0].manifest?.appId ?? AppCatalog.customId) : AppCatalog.customId,
+                connectionLabel: "", typeId: "plugin_added", severity: .info,
+                title: title, body: body, amount: nil, currency: nil, url: nil,
+                occurredAt: ISO8601.string(from: Date()),
+                createdAt: ISO8601.string(from: Date()), read: false, alert: true))
+    }
+
+    /// Tells the user an app arrived, with the same banner a metric gets.
+    ///
+    /// Said in widgets rather than in apps, because a widget is the thing the
+    /// user is about to see in the notch and an "app" installed by an agent
+    /// means nothing to them until a number shows up.
+    private func announceNewApps(_ arrived: [LoadedConnector]) {
+        guard !arrived.isEmpty else { return }
+
+        let metrics = arrived.reduce(0) { $0 + $1.metricCount }
+        let title = metrics == 1 ? "New widget added" : "\(metrics) new widgets added"
+        let body =
+            arrived.count == 1
+            ? "\(arrived[0].displayName) — enable it in Settings to start it."
+            : "\(arrived.map(\.displayName).joined(separator: ", ")) — enable them in Settings."
+
+        present(
+            NotchAlert(
+                id: "connector-added-\(arrived.map(\.id).sorted().joined(separator: "-"))",
+                seq: 0, integrationId: nil,
+                provider: arrived.count == 1
+                    ? (arrived[0].manifest?.appId ?? AppCatalog.customId) : AppCatalog.customId,
+                connectionLabel: "", typeId: "plugin_added", severity: .info,
+                title: title, body: body, amount: nil, currency: nil, url: nil,
+                occurredAt: ISO8601.string(from: Date()),
+                createdAt: ISO8601.string(from: Date()), read: false, alert: true))
+    }
+
+    /// Re-reads an app from disk and refetches it now.
+    ///
+    /// Two separate things, both of which "Reload" is expected to do: pick up
+    /// a rebuild the user has just made in their project, and ask for the
+    /// numbers again without waiting out the refresh interval.
+    func reloadConnector(_ app: LoadedConnector) {
+        connectors.reload()
+        publishAppOverrides()
+        // Marked loading so `refreshConnectors` treats them as awaiting and
+        // runs the app regardless of when it last ran.
+        for widget in widgetsFor(appId: app.id) { states[widget.id] = .loading }
+        notch.update(states: states)
+
+        Task {
+            await connectorSchedule.invalidate(id: app.id)
+            await refreshConnectors()
+        }
+    }
+
+    /// Removes an app, its credentials, its approval and every widget of its.
+    ///
+    /// All four, because any one left behind is a loose end the user cannot
+    /// see: an orphaned widget shows "App not installed" for ever, a stale
+    /// approval would silently re-bless a different app installed under the
+    /// same id later, and a credential nobody can reach from the UI is a
+    /// secret with no owner.
+    /// Returns what went wrong, if anything, so the pane can say it where it
+    /// says a failed load — the same place, because they are the same kind of
+    /// problem to the person reading it.
+    @discardableResult
+    func removeConnector(_ app: LoadedConnector) -> String? {
+        // Widgets first, while the manifest is still readable — the metric ids
+        // it declares are what identifies them.
+        for widget in widgetsFor(appId: app.id) { layoutModel.remove(widget.id) }
+
+        if let manifest = app.manifest {
+            for field in manifest.auth {
+                try? secrets.set(nil, for: .plugin(app.id, field.key))
+            }
+        }
+
+        var failure: String?
+        do {
+            try ConnectorImport.remove(id: app.id)
+        } catch {
+            // Reported, and the rest still runs: an app whose folder could not
+            // be deleted must not keep its approval and its widgets as well.
+            failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+
+        updateSettings { settings in
+            settings.approvedConnectors.removeValue(forKey: app.id)
+        }
+        connectors.reload()
+        publishAppOverrides()
+        Task { await connectorSchedule.invalidate(id: app.id) }
+        return failure
+    }
+
+    /// How many widgets one custom app answers. Shown before removing it.
+    func widgetCount(forConnector id: String) -> Int { widgetsFor(appId: id).count }
+
+    /// Every widget answered by one custom app.
+    private func widgetsFor(appId: String) -> [NotchWidget] {
+        layoutModel.layout.widgets.filter {
+            $0.kind == .customMetric
+                && CustomMetricRef(packed: $0.customMetricId ?? "").appId == appId
+        }
+    }
+
+    /// Enables or disables a custom app.
+    ///
+    /// Approval pins the app's *grants* — the hosts it may reach, the host
+    /// credentials it may be handed, the secrets it may ask for — rather than
+    /// a digest of its bytes. `ConnectorGrants` has the reasoning; the short
+    /// version is that a digest made every cosmetic edit a consent prompt
+    /// nobody could answer.
+    /// Rewrites approvals stored as a content digest into grants.
+    ///
+    /// Silent, and deliberately so. These apps were enabled by the user; the
+    /// older build simply recorded the decision in a form that cannot be
+    /// compared against anything. Asking again at upgrade would have shown a
+    /// consent prompt on first launch for every installed app, which is how a
+    /// prompt becomes something you dismiss rather than read.
+    ///
+    /// One write, not a fallback: until the grants are stored there is no
+    /// baseline for the *next* change to be measured against.
+    private func migrateConnectorApprovals() {
+        let upgrades = connectors.legacyApprovals
+        guard !upgrades.isEmpty else { return }
+        updateSettings { settings in
+            for (id, grants) in upgrades { settings.approvedConnectors[id] = grants }
+        }
+    }
+
+    func setConnectorApproved(_ connector: LoadedConnector, _ approved: Bool) {
+        let grants = connector.grants.canonical
+        updateSettings { settings in
+            if approved {
+                settings.approvedConnectors[connector.id] = grants
+            } else {
+                settings.approvedConnectors.removeValue(forKey: connector.id)
+            }
+        }
+    }
+
+    /// Reads one of a custom app's credentials back for the form.
+    ///
+    /// The value, not a mask. The field is a `SecureField`, so it is not shown
+    /// in the clear — but a form that cannot load what is already stored makes
+    /// changing one field of three mean retyping all of them.
+    func connectorCredential(_ connectorId: String, _ key: String) -> String {
+        (try? secrets.string(for: .plugin(connectorId, key))) ?? ""
+    }
+
+    /// Stores one credential, or clears it when emptied.
+    ///
+    /// Keyed exactly as the MCP server writes it, which is what lets an agent
+    /// set a key and the user correct it in Settings without either of them
+    /// knowing about the other.
+    func setConnectorCredential(_ connectorId: String, _ key: String, _ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // nil clears the entry; the protocol takes an optional for exactly
+        // this, so emptying a field removes the secret rather than storing "".
+        try? secrets.set(trimmed.isEmpty ? nil : trimmed, for: .plugin(connectorId, key))
+    }
+
+    /// Runs the app's own `verify`, which is how a credential is checked.
+    ///
+    /// Locally, against the app's own API — there is no server round trip and
+    /// no browser. Returns what to show beside the form: the account label on
+    /// success, or the reason it failed.
+    func verifyConnector(_ app: LoadedConnector) async -> (ok: Bool, message: String) {
+        do {
+            let runner = try ConnectorRunner(secrets: secrets)
+            let result = try await runner.verify(app)
+            if result.ok {
+                let label = result.result?.accountLabel
+                return (true, label.map { "Connected as \($0)." } ?? "Credentials work.")
+            }
+            return (false, result.message ?? "The app refused those credentials.")
+        } catch {
+            return (false, Self.pluginFailure(error))
+        }
+    }
+
+    /// Installs a custom app from a folder the user picked.
+    ///
+    /// Returns the failure rather than presenting it, so the pane can put the
+    /// message beside the button that caused it. A modal here would be the
+    /// wrong shape: most failures are "that folder is a project, not a
+    /// build", which the user fixes and retries immediately.
+    func loadConnector(from url: URL, replacing: Bool = false) -> String? {
+        do {
+            let manifest = try ConnectorImport.install(from: url, replacing: replacing)
+            connectors.reload()
+            Task {
+                await LogFile.shared.write(
+                    "app", "loaded custom app \(manifest.id) v\(manifest.displayVersion)")
+            }
+            return nil
+        } catch {
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Enables or disables a local metric.
+    ///
+    /// Approval pins the digest rather than the id, so this records *what*
+    /// was approved — see `PluginDigest`. Re-enabling a metric whose bytes
+    /// changed is a new decision and stores the new digest.
+    func setPluginApproved(_ plugin: LoadedPlugin, _ approved: Bool) {
+        let digest = plugin.contentHash
+        updateSettings { settings in
+            if approved {
+                settings.approvedPlugins[plugin.id] = digest
+            } else {
+                settings.approvedPlugins.removeValue(forKey: plugin.id)
+            }
+        }
+        guard approved else { return }
+        placeWidgetIfMissing(for: plugin)
+    }
+
+    /// Puts a tile on the grid the first time a metric is enabled.
+    ///
+    /// Enabling a metric and then having to go and add a widget for it is two
+    /// steps where the user meant one — they have already said they want to
+    /// see this number. Only when there is no tile for it already, so
+    /// toggling off and on again does not accumulate duplicates.
+    private func placeWidgetIfMissing(for plugin: LoadedPlugin) {
+        let existing = layoutModel.layout.widgets.contains {
+            $0.kind == .customMetric && $0.customMetricId == plugin.id
+        }
+        guard !existing, let manifest = plugin.manifest else { return }
+
+        let widget = NotchWidget(
+            kind: .customMetric,
+            appId: manifest.appId ?? AppCatalog.customId,
+            customMetricId: plugin.id,
+            title: manifest.shortLabel,
+            size: manifest.supportsSeries ? .wide : .square,
+            range: .month,
+            chart: manifest.supportsSeries ? .sparkline : .none)
+        layoutModel.add(widget)
+        // Straight away, rather than on the next poll: the user just asked
+        // for this and a tile that sits empty for five minutes reads as
+        // broken.
+        Task {
+            await refreshPlugins()
+            await refreshConnectors()
+        }
+    }
+
     func updateSettings(_ mutate: @escaping @Sendable (inout AppSettings) -> Void) {
         Task {
             await settingsStore.update(mutate)
             settings = await settingsStore.current
             plugins.setApproved(settings.approvedPlugins)
+            connectors.setApproved(settings.approvedConnectors)
+            publishAppOverrides()
             notch.apply(settings: settings)
             updates.automatic = settings.checkForUpdatesAutomatically
         }

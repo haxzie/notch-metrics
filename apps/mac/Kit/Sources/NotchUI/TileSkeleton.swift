@@ -56,6 +56,22 @@ struct TileSkeleton: View {
                     bar(width: nil, height: max(3, chartHeight * fraction))
                 }
             }
+        case .gauge:
+            // The arc's own silhouette, unfilled. A gauge loading as a flat
+            // line would be the wrong shape for the only chart that does not
+            // draw one.
+            GaugeArc(fraction: 0, tint: .clear, lineWidth: 6) { EmptyView() }
+                .frame(height: chartHeight)
+        case .split, .ranked, .pie:
+            // A distribution's silhouette is its slices. Equal ones, because
+            // the proportions are the thing being waited for — a skeleton
+            // that guessed them would be a chart that changes shape when the
+            // real answer lands.
+            HStack(spacing: 2) {
+                ForEach(0..<3, id: \.self) { _ in
+                    bar(width: nil, height: max(3, chartHeight * 0.4))
+                }
+            }
         case .sparkline, .none:
             // Not a flat bar: a flat line is what the real chart draws for a
             // series that never moved, so a flat placeholder reads as a

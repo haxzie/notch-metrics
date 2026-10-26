@@ -112,6 +112,20 @@ final class WidgetCatalogueModel {
 
     func entry(_ id: String) -> ConnectorEntry? { apps.first { $0.id == id } }
 
+    /// One custom app's metric, found by the id a widget stores.
+    ///
+    /// Searched across every local entry rather than through the widget's
+    /// `appId`, because the two do not have to agree: a legacy single-metric
+    /// widget stores the app id its manifest named, while the gallery files
+    /// that metric under a `local.metrics.<app>` entry. The metric id is the
+    /// one thing both ends hold.
+    func localMetric(_ id: String) -> MetricDescriptor? {
+        for app in apps where app.isLocal {
+            if let found = app.metrics.first(where: { $0.id == id }) { return found }
+        }
+        return nil
+    }
+
     func widgetCount(for appId: String, env: AppEnvironment) -> Int {
         env.layoutModel.layout.widgets.count { $0.appId == appId }
     }
@@ -127,14 +141,33 @@ final class WidgetCatalogueModel {
                 return ConnectorCategoryGroup(
                     id: group.id, label: group.label, connectors: connectors)
             }
-            categoryGroups = groups
-            state = .loaded(groups.flatMap(\.connectors))
+            // Custom last, under the server's own categories. It is the one
+            // group that needs no network, so it is also appended on failure
+            // below — a signed-out or offline user can still add a widget for
+            // an app running on their own machine.
+            categoryGroups = groups + localGroups(env: env)
+            state = .loaded(categoryGroups.flatMap(\.connectors))
             // Every connector, not just the ones offering a widget: a provider
             // that notifies but has no tile still owns notification toggles.
             env.adoptAlertCatalogue(catalogue.categories.flatMap(\.connectors))
         } catch {
+            let local = localGroups(env: env)
+            guard local.isEmpty else {
+                // The catalogue is the server's; custom apps are not. Failing
+                // the whole gallery because the Worker is unreachable would
+                // hide the widgets that never needed it.
+                categoryGroups = local
+                state = .loaded(local.flatMap(\.connectors))
+                return
+            }
             state = .failed("Could not load the app catalogue.")
         }
+    }
+
+    /// The Custom category, built from what is installed and enabled.
+    private func localGroups(env: AppEnvironment) -> [ConnectorCategoryGroup] {
+        let apps = LocalApps.browsable(connectors: env.connectors.connectors)
+        return LocalCatalogue.group(apps).map { [$0] } ?? []
     }
 
     /// Polls until the browser flow adds an account, or gives up.

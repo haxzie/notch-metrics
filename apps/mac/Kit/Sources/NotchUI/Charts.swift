@@ -270,3 +270,467 @@ public struct MiniBars: View {
         }
     }
 }
+
+/// An arc filled to a fraction, with the figure inside it.
+///
+/// For a value that has a ceiling — a percentage of a limit, a share, a score
+/// out of a known maximum. The arc says at a glance what a number cannot:
+/// whether 18% is nearly nothing or nearly everything depends on the bound,
+/// and the bound is the thing a bare figure leaves out.
+///
+/// A semicircle rather than a full ring. A ring's two ends meet, so "empty"
+/// and "full" look alike at a glance; an arc has a start and an end the eye
+/// can find, and it leaves the middle free for the figure at tile sizes where
+/// a ring would not.
+///
+/// `Canvas` for the same reason `Sparkline` uses it: this draws inside tiles
+/// that re-render together inside a spring animation, and a Shape per tile
+/// costs layout the canvas does not.
+public struct GaugeArc<Label: View>: View {
+    /// The filled share, 0...1. Values outside are clamped rather than
+    /// refused: a limit can legitimately be exceeded, and an arc that wrapped
+    /// past its own start would read as a smaller number than the truth.
+    public let fraction: Double
+    public let tint: Color
+    public var lineWidth: CGFloat
+    private let label: Label
+
+    public init(
+        fraction: Double, tint: Color, lineWidth: CGFloat = 8,
+        @ViewBuilder label: () -> Label
+    ) {
+        self.fraction = fraction
+        self.tint = tint
+        self.lineWidth = lineWidth
+        self.label = label()
+    }
+
+    /// The share actually drawn, clamped to the arc.
+    ///
+    /// Internal rather than private so the clamp can be asserted: a limit can
+    /// legitimately be exceeded, and this is the line that stops 105% drawing
+    /// as a sliver.
+    var displayFraction: Double { min(max(fraction, 0), 1) }
+
+    /// Where the arc sits, shared by the canvas and the label.
+    ///
+    /// Computed from one function so the two cannot disagree — they were two
+    /// separate expressions, and the label's idea of the centre drifted from
+    /// the arc's on any tile that was not square.
+    static func geometry(in size: CGSize, lineWidth: CGFloat) -> (centre: CGPoint, radius: CGFloat) {
+        let inset = lineWidth / 2
+        // Bounded by half the width *and* the full height: a semicircle is
+        // twice as wide as it is tall, so a short tile is limited by height
+        // and a narrow one by width.
+        let radius = max(0, min((size.width - lineWidth) / 2, size.height - lineWidth))
+        return (CGPoint(x: size.width / 2, y: size.height - inset), radius)
+    }
+
+    public var body: some View {
+        Canvas { context, size in
+            let geometry = Self.geometry(in: size, lineWidth: lineWidth)
+            guard geometry.radius > 0 else { return }
+
+            func arc(to end: Double) -> Path {
+                var path = Path()
+                path.addArc(
+                    center: geometry.centre, radius: geometry.radius,
+                    startAngle: .degrees(180),
+                    endAngle: .degrees(180 + 180 * end),
+                    clockwise: false)
+                return path
+            }
+
+            let stroke = StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            // The track is drawn whole and the fill over it, so a value of
+            // zero still shows the shape it would fill.
+            context.stroke(arc(to: 1), with: .color(.white.opacity(0.14)), style: stroke)
+            if displayFraction > 0 {
+                context.stroke(arc(to: displayFraction), with: .color(tint), style: stroke)
+            }
+        }
+        .overlay {
+            GeometryReader { proxy in
+                let geometry = Self.geometry(in: proxy.size, lineWidth: lineWidth)
+                label
+                    // Sized off the *arc*, not the frame. A 2x1 tile is far
+                    // wider than it is tall, so a label measured against the
+                    // frame width overflowed the semicircle it is supposed to
+                    // sit inside — the figure ran out past both ends of the
+                    // arc and collided with the stroke.
+                    .frame(width: geometry.radius * 1.5)
+                    .position(
+                        x: geometry.centre.x,
+                        // Above the baseline by a third of the radius: the
+                        // optical centre of a semicircle is not its chord.
+                        y: geometry.centre.y - geometry.radius * 0.34)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Colours for the slices of a distribution.
+///
+/// Fixed hues rather than shades of the app's accent. A distribution's whole
+/// job is telling categories apart, and five tints of one colour on a 90pt
+/// tile are five greys — the separation has to come from hue, not lightness.
+///
+/// Ordered so the first few are furthest apart: most distributions here have
+/// two or three categories that matter and a tail of near-zero ones, and the
+/// pairs that must never be confused are the ones drawn first.
+public enum SliceColours {
+    public static let all: [Color] = [
+        Color(hex: "5E9EFF") ?? .blue,  // blue
+        Color(hex: "F2B34B") ?? .orange,  // amber
+        Color(hex: "4FD1A5") ?? .green,  // teal
+        Color(hex: "E86A8C") ?? .pink,  // rose
+        Color(hex: "A98BFF") ?? .purple,  // violet
+        Color(hex: "8C96A8") ?? .gray,  // slate, for the tail
+    ]
+
+    /// The colour for one position, wrapping rather than running out.
+    ///
+    /// A list can be longer than the palette. Repeating is honest — two
+    /// categories sharing a colour is survivable where a transparent slice or
+    /// a crash is not — and the labels disambiguate in every layout that has
+    /// room for them.
+    public static func at(_ index: Int) -> Color {
+        all[((index % all.count) + all.count) % all.count]
+    }
+}
+
+/// One bar divided into coloured segments.
+///
+/// The distribution that fits a row: it needs one line, where a pie needs a
+/// square and ranked bars need one line *each*.
+public struct SplitBar: View {
+    public let shares: [Double]
+    public var height: CGFloat
+
+    public init(shares: [Double], height: CGFloat = 10) {
+        self.shares = shares
+        self.height = height
+    }
+
+    /// Normalised, so the bar always fills its width.
+    ///
+    /// The caller's values may be percentages, token counts or anything else;
+    /// what a split bar shows is proportion, and a bar that stopped short
+    /// would read as "the rest is missing" rather than "this is the whole".
+    var normalised: [Double] {
+        let total = shares.reduce(0) { $0 + max(0, $1) }
+        guard total > 0 else { return [] }
+        return shares.map { max(0, $0) / total }
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            HStack(spacing: 1.5) {
+                ForEach(Array(normalised.enumerated()), id: \.offset) { index, share in
+                    SliceColours.at(index)
+                        .frame(width: max(0, proxy.size.width * share - 1.5))
+                }
+            }
+            .clipShape(Capsule())
+        }
+        .frame(height: height)
+    }
+}
+
+/// The key to a split bar: a dot in each slice's colour, and its name.
+///
+/// A split bar is the one distribution that says nothing about *what* its
+/// slices are — the ranked bars and the ring both carry their labels, and the
+/// bar on its own is four coloured segments and no way to tell which is which.
+///
+/// Rows are dropped from the tail rather than squeezed, for the same reason
+/// `RankedBars` truncates: a 2x2 has room for two or three lines, and six
+/// crushed into that height is six unreadable ones. The tail of a
+/// distribution is usually the part nobody needs, and it is still in the bar.
+public struct SliceLegend: View {
+    public struct Row: Identifiable {
+        public let id: String
+        public let label: String
+        public let detail: String?
+        /// Which slice this names. Carried rather than derived from position,
+        /// because the visible rows are a prefix and a dot that drifted out of
+        /// step with the bar would be worse than no legend at all.
+        public let colourIndex: Int
+
+        public init(id: String, label: String, detail: String?, colourIndex: Int) {
+            self.id = id
+            self.label = label
+            self.detail = detail
+            self.colourIndex = colourIndex
+        }
+    }
+
+    public let rows: [Row]
+    public var fontSize: CGFloat
+    /// How many lines the tile has room for. Zero is honest: a one-row tile
+    /// has none, and the bar stands alone there as it always did.
+    public var maxRows: Int
+
+    public init(rows: [Row], fontSize: CGFloat = 10, maxRows: Int = 3) {
+        self.rows = rows
+        self.fontSize = fontSize
+        self.maxRows = maxRows
+    }
+
+    var visibleRows: [Row] { maxRows <= 0 ? [] : Array(rows.prefix(maxRows)) }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(visibleRows) { row in
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(SliceColours.at(row.colourIndex))
+                        .frame(width: fontSize * 0.6, height: fontSize * 0.6)
+                    Text(row.label)
+                        .lineLimit(1)
+                        .foregroundStyle(NotchTheme.secondaryText)
+                    Spacer(minLength: 2)
+                    if let detail = row.detail {
+                        Text(detail)
+                            .foregroundStyle(NotchTheme.primaryText)
+                            .monospacedDigit()
+                    }
+                }
+                .font(.system(size: fontSize))
+            }
+        }
+    }
+}
+
+/// One labelled bar per category, largest first.
+public struct RankedBars: View {
+    public struct Row: Identifiable {
+        public let id: String
+        public let label: String
+        public let detail: String?
+        public let share: Double
+
+        public init(id: String, label: String, detail: String?, share: Double) {
+            self.id = id
+            self.label = label
+            self.detail = detail
+            self.share = share
+        }
+    }
+
+    public let rows: [Row]
+    public var fontSize: CGFloat
+    /// How many rows the tile has room for.
+    ///
+    /// Unbounded, five categories laid out at natural height overflowed a 2x2
+    /// and pushed the tile's own frame taller than its neighbours — and made
+    /// the gallery's preview card spill past its padding. The text list has
+    /// always budgeted rows against the tile height; so does this.
+    public var maxRows: Int
+
+    public init(rows: [Row], fontSize: CGFloat = 10, maxRows: Int = 4) {
+        self.rows = rows
+        self.fontSize = fontSize
+        self.maxRows = maxRows
+    }
+
+    /// The rows that fit, largest first.
+    ///
+    /// Truncated rather than scaled: five bars squeezed into the height of
+    /// three are three unreadable bars and two slivers. The tail of a
+    /// distribution is usually the part nobody needs.
+    var visibleRows: [Row] { Array(rows.prefix(max(1, maxRows))) }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
+                VStack(alignment: .leading, spacing: 2) {
+                    // The name above its bar, so a long one has the full width
+                    // rather than squeezing the bar into nothing.
+                    HStack(spacing: 4) {
+                        Text(row.label)
+                            .lineLimit(1)
+                            .foregroundStyle(NotchTheme.secondaryText)
+                        Spacer(minLength: 2)
+                        if let detail = row.detail {
+                            Text(detail)
+                                .foregroundStyle(NotchTheme.primaryText)
+                                .monospacedDigit()
+                        }
+                    }
+                    .font(.system(size: fontSize))
+
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(SliceColours.at(index))
+                            // A floor, so a category that rounds to zero is
+                            // still visibly present rather than absent.
+                            .frame(width: max(2, proxy.size.width * row.share))
+                    }
+                    .frame(height: 4)
+                }
+            }
+        }
+    }
+}
+
+/// The whole as a ring.
+///
+/// A ring rather than a filled pie, for two reasons. Slices meeting at a point
+/// are hardest to compare exactly where they are thinnest, and the hole is
+/// somewhere to put the total — so the tile says both "how much" and "made up
+/// of what" in one shape, instead of stacking a figure above a circle and
+/// spending half the tile on the stacking.
+///
+/// The name stays `PieChart` because `ChartKind.pie` is on the wire and a
+/// rename there is a contract change for a cosmetic gain.
+public struct PieChart<Label: View>: View {
+    public let shares: [Double]
+    /// The ring's thickness as a fraction of its radius.
+    ///
+    /// Thin on purpose, and not only for looks. The stroke sets the cap, the
+    /// cap sets the floor a slice cannot be drawn below, and at a third of the
+    /// radius that floor was over twenty degrees — so the small slices came
+    /// out as fat dots crowding the top of the circle. Halving the stroke
+    /// roughly halves the floor, and gives the figure in the middle more room
+    /// at the same time.
+    public let thickness: CGFloat
+    private let label: Label
+
+    public init(shares: [Double], thickness: CGFloat = 0.18) where Label == EmptyView {
+        self.init(shares: shares, thickness: thickness) { EmptyView() }
+    }
+
+    public init(
+        shares: [Double], thickness: CGFloat = 0.18, @ViewBuilder label: () -> Label
+    ) {
+        self.shares = shares
+        self.thickness = thickness
+        self.label = label()
+    }
+
+    var normalised: [Double] {
+        let total = shares.reduce(0) { $0 + max(0, $1) }
+        guard total > 0 else { return [] }
+        return shares.map { max(0, $0) / total }
+    }
+
+    /// Each slice's angular sweep, with the gaps already taken out.
+    ///
+    /// Not simply `share * 2π`. A round cap overhangs its arc by half the
+    /// stroke at each end, so a slice thinner than two caps cannot be drawn at
+    /// its true width — and drawn at the width it *has*, neighbouring small
+    /// slices sat on top of each other. Claude's four models did exactly that:
+    /// 23.15B drew an arc and the 0.59B beside it drew a blob through it.
+    ///
+    /// So every non-zero slice is floored at one cap's worth of arc, and the
+    /// excess is taken back from the slices that have room, proportionally.
+    /// The ring stops being exactly to scale at the bottom end. That is the
+    /// right trade: a 2% slice is already too small to measure by eye, and the
+    /// honest alternatives are drawing it on top of its neighbour or not
+    /// drawing it at all.
+    func sweeps(cap: Double, gap: Double) -> [Double] {
+        let slices = normalised
+        guard !slices.isEmpty else { return [] }
+
+        let available = 2 * .pi - gap * Double(slices.count)
+        guard available > 0 else { return slices.map { _ in 0 } }
+
+        let floor = 2 * cap
+        var sweeps = slices.map { $0 * available }
+
+        // Which slices are being raised, and which can pay for it. A zero
+        // share is not raised: it is not there.
+        let raised = zip(slices, sweeps).filter { $0.0 > 0 && $0.1 < floor }
+        guard !raised.isEmpty else { return sweeps }
+
+        let owed = raised.reduce(0) { $0 + (floor - $1.1) }
+        let spare = sweeps.filter { $0 >= floor }.reduce(0) { $0 + ($1 - floor) }
+
+        guard spare > owed else {
+            // Too many slices for the ring to show them all at a readable
+            // size. Equal arcs say "these are the categories" without
+            // pretending to a precision the shape cannot carry.
+            return slices.map { $0 > 0 ? available / Double(slices.count) : 0 }
+        }
+
+        return zip(slices, sweeps).map { share, sweep in
+            if share <= 0 { return 0 }
+            if sweep < floor { return floor }
+            return sweep - (sweep - floor) * owed / spare
+        }
+    }
+
+    public var body: some View {
+        ZStack {
+            Canvas { context, size in
+                let outer = min(size.width, size.height) / 2
+                let width = outer * thickness
+                let radius = outer - width / 2
+                let slices = normalised
+                guard radius > 0, !slices.isEmpty else { return }
+
+                let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+                // How far a round cap reaches past its arc, as an angle.
+                let cap = Double(width / 2 / radius)
+                // Capped at three degrees, and at a quarter of an equal share
+                // so a ring of many slices is not mostly gap. A single slice
+                // takes none: a lone ring with a notch in it reads as missing
+                // data rather than as the whole.
+                let gap =
+                    slices.count > 1
+                    ? min(.pi / 60, (2 * .pi) / Double(slices.count) / 4)
+                    : 0
+                let widths = sweeps(cap: cap, gap: gap)
+
+                // From twelve o'clock, clockwise — where a reader starts.
+                var start = -Double.pi / 2
+                for (index, sweep) in widths.enumerated() {
+                    guard sweep > 0 else { continue }
+                    let shading = GraphicsContext.Shading.color(SliceColours.at(index))
+
+                    // Inset by one cap at each end so the drawn extent is the
+                    // sweep, not the sweep plus two overhangs.
+                    if sweep > 2 * cap + 0.001 {
+                        var path = Path()
+                        path.addArc(
+                            center: centre, radius: radius,
+                            startAngle: .radians(start + cap),
+                            endAngle: .radians(start + sweep - cap),
+                            clockwise: false)
+                        context.stroke(
+                            path, with: shading,
+                            style: StrokeStyle(lineWidth: width, lineCap: .round))
+                    } else {
+                        // At the floor: the two caps *are* the slice, so it is
+                        // a dot. Centred in its own sweep, which the gaps have
+                        // already kept clear of its neighbours.
+                        let middle = start + sweep / 2
+                        let point = CGPoint(
+                            x: centre.x + radius * cos(middle),
+                            y: centre.y + radius * sin(middle))
+                        context.fill(
+                            Path(
+                                ellipseIn: CGRect(
+                                    x: point.x - width / 2, y: point.y - width / 2,
+                                    width: width, height: width)),
+                            with: shading)
+                    }
+                    start += sweep + gap
+                }
+            }
+
+            // The hole is the point of the shape: it is where the total goes.
+            // Inset off the hole's own diameter, so the figure clears the ring
+            // rather than touching it at the corners of its frame.
+            GeometryReader { proxy in
+                let hole = min(proxy.size.width, proxy.size.height) * (1 - thickness)
+                label
+                    .frame(width: hole * 0.72, height: hole * 0.72)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}

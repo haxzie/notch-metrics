@@ -3,22 +3,25 @@ import NotchUI
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
-    case general, connections, apps, notifications, account, updates, about
+    case general, connections, apps, customApps, notifications, account, updates, about
 
     /// `notchmetrics://settings/integrations` is in the wild — in the website,
     /// in the connect flow's return URL — and kept working when the pane was
     /// renamed to Apps.
     ///
-    /// `widgets` and `custom-metrics` are parked rather than removed. Widgets
-    /// are added in the notch now and the pane is gone, but those links
-    /// are in the website and in old connect-flow return URLs — and a link to
-    /// a pane that no longer exists should land on the nearest thing rather
-    /// than nowhere.
+    /// `widgets` is parked rather than removed. Widgets are added in the
+    /// notch now and the pane is gone, but those links are in the website and
+    /// in old connect-flow return URLs — and a link to a pane that no longer
+    /// exists should land on the nearest thing rather than nowhere.
+    ///
+    /// `custom-metrics` is the name this pane shipped under. It is in a blog
+    /// post and in two strings the MCP server prints, and those are read by
+    /// agents that will not be upgraded in step with the app.
     static let aliases: [String: SettingsPane] = [
         "integrations": .apps,
         "widgets": .apps,
-        "customMetrics": .apps,
-        "custom-metrics": .apps,
+        "custom-apps": .customApps,
+        "custom-metrics": .customApps,
         // The notch and a banner both deep-link here.
         "alerts": .notifications,
     ]
@@ -30,6 +33,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .connections: "Connections"
         case .apps: "Apps"
+        case .customApps: "Custom Apps"
         case .notifications: "Notifications"
         case .account: "Account"
         case .updates: "Updates"
@@ -42,6 +46,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .connections: "link"
         case .apps: "square.grid.2x2"
+        case .customApps: "curlybraces"
         case .notifications: "bell"
         case .account: "person.crop.circle"
         case .updates: "arrow.triangle.2.circlepath"
@@ -52,7 +57,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     /// Grouped the way System Settings groups things: the thing you came to
     /// change, then your data, then the app itself.
     static let sections: [(String?, [SettingsPane])] = [
-        ("Data", [.connections, .apps, .notifications]),
+        ("Data", [.connections, .apps, .customApps, .notifications]),
         ("App", [.account, .general, .updates, .about]),
     ]
 }
@@ -99,6 +104,7 @@ struct SettingsRootView: View {
         case .general: GeneralPane()
         case .connections: ConnectionsPane()
         case .apps: AppsPane()
+        case .customApps: CustomAppsPane()
         case .notifications: NotificationsPane()
         case .account: AccountPane()
         case .updates: UpdatesPane()

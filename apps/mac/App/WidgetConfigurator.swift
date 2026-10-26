@@ -2,6 +2,7 @@ import AppKit
 import MetricsAPI
 import MetricsCore
 import NotchUI
+import PluginRuntime
 import SwiftUI
 
 /// The controls for one widget, shown in the notch's configure pane.
@@ -25,6 +26,14 @@ struct WidgetConfigPanel: View {
         return model.entry(draft.appId)
     }
 
+    /// Whether this widget is answered by a custom app on this machine.
+    ///
+    /// Read off the widget's own kind rather than from the catalogue: the
+    /// catalogue loads asynchronously, and a pane that showed a connection
+    /// row until the entry arrived would flash a Connect button for something
+    /// that can never be connected.
+    private var isCustom: Bool { draft?.kind == .customMetric }
+
     /// Whether a time window means anything for this metric.
     ///
     /// A snapshot — GitHub's stargazers, forks, open issues — is whatever it
@@ -41,7 +50,23 @@ struct WidgetConfigPanel: View {
     }
 
     /// Whether this metric can be drawn as a chart at all.
-    private var usesChart: Bool { descriptor?.supportsSeries != false }
+    private var usesChart: Bool {
+        descriptor?.supportsSeries != false || offersGauge || offersDistribution
+    }
+
+    /// Whether a gauge means anything for this metric.
+    ///
+    /// Only where the value has a ceiling to be a share *of*, which today
+    /// means a ratio — 1.0 by definition. Offering it on a count would let
+    /// somebody pick an arc that can never fill, and the picker is the only
+    /// place that can stop them.
+    private var offersGauge: Bool { descriptor?.unit == .ratio && descriptor?.isList != true }
+
+    /// Whether the distributions mean anything for this metric.
+    ///
+    /// They draw a list's categories against each other, so they need a list.
+    /// Offered on a series metric they would have nothing to slice.
+    private var offersDistribution: Bool { descriptor?.isList == true }
 
     /// The ranges this metric can actually answer for.
     ///
@@ -169,7 +194,15 @@ struct WidgetConfigPanel: View {
     }
 
     private var descriptor: MetricDescriptor? {
-        guard let draft, let metric = draft.metric else { return nil }
+        guard let draft else { return nil }
+        // A custom widget names its metric in `customMetricId`, not `metric`.
+        // Looking only at `metric` meant `descriptor` was always nil for one,
+        // so `metricParams` was always empty and the Data section rendered no
+        // parameters however many the app declared.
+        if draft.kind == .customMetric, let id = draft.customMetricId {
+            return model.localMetric(id)
+        }
+        guard let metric = draft.metric else { return nil }
         return entry?.metrics.first { $0.id == metric }
     }
 
@@ -228,7 +261,20 @@ struct WidgetConfigPanel: View {
             })
         return ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                connectionSection(binding)
+                // The name is a property of the widget, so it is asked for
+                // unconditionally — above the connection rather than inside
+                // it. It used to live in the connection section's "has an
+                // account" branch, which meant a widget with no connection
+                // yet, and every custom widget, got a Connect button and no
+                // way to name the tile at all.
+                nameSection(binding)
+
+                // A custom app has nothing to connect *to*: no integration row
+                // on the server for an account picker, and no redirect URI for
+                // the browser flow — which is why pointing it at one produced
+                // "Could not start that connection". Its credentials are asked
+                // for once per app in Settings, not once per tile.
+                if !isCustom { connectionSection(binding) }
                 appearanceSection(binding)
                 dataSection(binding)
                 // Not while the widget is being added: Cancel in the header
@@ -254,6 +300,63 @@ struct WidgetConfigPanel: View {
         .scrollContentBackground(.hidden)
     }
 
+    /// The widget's own name, always.
+    ///
+    /// Shown whether or not an account is attached and whether or not the
+    /// catalogue has loaded: naming a tile needs nothing from the server, and
+    /// a field that appears only once a connection exists is a field nobody
+    /// finds.
+    private func nameSection(_ binding: Binding<NotchWidget>) -> some View {
+        section("Widget") {
+            row("Name") {
+                // Names this tile only. A served connection keeps its own
+                // name and the other tiles reading it keep showing that.
+                TextField(placeholderName, text: nameField(binding))
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 13))
+                    .frame(width: 200)
+            }
+
+            if needsCredentials {
+                Divider().opacity(0.4)
+                row("Credentials") {
+                    Button("Open Settings") {
+                        env.openSettings(pane: .customApps)
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+        }
+    }
+
+    /// What the empty field suggests it will be called.
+    ///
+    /// `nameField` already falls back to the connection's label when the user
+    /// has typed nothing, so the placeholder has to say what *will* be used
+    /// rather than sit blank — otherwise an unnamed tile looks unnamed while
+    /// the notch shows a name.
+    private var placeholderName: String {
+        draft?.title ?? entry?.name ?? "Name"
+    }
+
+    /// Whether this app is waiting on a credential the user has not given.
+    ///
+    /// Shown as a pointer rather than a second form: one key answers every
+    /// metric behind an app, so asking per tile would ask the same question
+    /// five times and let five answers disagree.
+    private var needsCredentials: Bool {
+        guard let draft, draft.kind == .customMetric else { return false }
+        let ref = CustomMetricRef(packed: draft.customMetricId ?? "")
+        guard let appId = ref.appId,
+            let app = env.connectors.connectors.first(where: { $0.id == appId }),
+            let manifest = app.manifest, manifest.requiresCredentials
+        else { return false }
+        return manifest.auth.contains { field in
+            field.required && env.connectorCredential(appId, field.key).isEmpty
+        }
+    }
+
     private func connectionSection(_ binding: Binding<NotchWidget>) -> some View {
         section("Connection") {
             if let entry {
@@ -272,17 +375,6 @@ struct WidgetConfigPanel: View {
                         }
                     }
                 } else {
-                    row("Name") {
-                        // Names this widget only. The connection keeps its
-                        // own name, and the other tiles reading it keep
-                        // showing that.
-                        TextField("", text: nameField(binding))
-                            .textFieldStyle(.plain)
-                            .multilineTextAlignment(.trailing)
-                            .font(.system(size: 13))
-                            .frame(width: 200)
-                    }
-                    Divider().opacity(0.4)
                     row("Account") {
                         Picker("", selection: Binding(
                             get: { binding.wrappedValue.integrationId ?? "" },
@@ -371,9 +463,19 @@ struct WidgetConfigPanel: View {
                             binding.wrappedValue = next
                         }
                     )) {
-                        Text("None").tag(ChartKind.none)
-                        Text("Sparkline").tag(ChartKind.sparkline)
-                        Text("Bars").tag(ChartKind.bars)
+                        // "None" means the plain rendering: a figure, or for
+                        // a list the text rows it has always drawn.
+                        Text(offersDistribution ? "Rows" : "None").tag(ChartKind.none)
+                        if offersGauge { Text("Gauge").tag(ChartKind.gauge) }
+                        if offersDistribution {
+                            Text("Ranked").tag(ChartKind.ranked)
+                            Text("Split").tag(ChartKind.split)
+                            Text("Donut").tag(ChartKind.pie)
+                        }
+                        if descriptor?.supportsSeries != false, !offersDistribution {
+                            Text("Sparkline").tag(ChartKind.sparkline)
+                            Text("Bars").tag(ChartKind.bars)
+                        }
                     }
                     .labelsHidden()
                     .fixedSize()

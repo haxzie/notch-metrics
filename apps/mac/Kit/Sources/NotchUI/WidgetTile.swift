@@ -65,7 +65,95 @@ public struct WidgetTile: View {
         return NotchTheme.chartTint(for: app)
     }
 
-    public var body: some View {
+    /// Whether the tile is wide enough, and short enough, to read as a row.
+    ///
+    /// A long one-row tile stacks badly: the label takes the top, the figure
+    /// the middle, and everything past the second column is empty. Wide
+    /// enough, the natural reading is left-to-right — what this is, then what
+    /// it says — which is also how the list view already reads.
+    ///
+    /// "Wide enough" starts at three columns. Two is the size where a stacked
+    /// label over a figure is exactly right, and where a row has width for
+    /// neither.
+    ///
+    /// Two rows or more have the height for the stacked layout, and that is
+    /// what the gauge and the charts are drawn for.
+    var readsAsRow: Bool {
+        // Three columns, not two. A 2x1 has room for a name or a figure, not
+        // both: side by side it truncated everything to "Claude us…", "Out…"
+        // and "90…." — three ellipses where there had been a readable tile.
+        guard widget.size.rows == 1, widget.size.cols >= 3 else { return false }
+        // A list drawn as *text* is already rows and has no headline figure
+        // to put on the right, so it keeps the stacked layout at every size.
+        // Drawn as a split bar it is one object and sits on a line happily.
+        if case .value(let series) = state, series.items != nil {
+            return widget.chart == .split
+        }
+        return true
+    }
+
+    /// Name on the left, number on the right, centred against each other.
+    ///
+    /// The right-hand block is given only the width it needs, so the name has
+    /// the rest — a long connection label is what actually runs out of room on
+    /// a row, not the figure.
+    @ViewBuilder
+    private var rowBody: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                source
+                titleText
+                    .font(.system(size: labelSize, weight: .regular))
+                    .foregroundStyle(NotchTheme.secondaryText)
+                    .lineLimit(1)
+                    .accessibilityLabel(title)
+            }
+
+            Spacer(minLength: 8)
+
+            switch state {
+            case .loading:
+                TileSkeleton(
+                    valueHeight: valueFontSize, chartHeight: skeletonChartHeight,
+                    chart: widget.chart)
+                    .frame(maxWidth: 180)
+
+            case .value(let series) where drawsDistribution(series):
+                distribution(series, compact: true)
+                    .frame(maxWidth: rowChartWidth)
+
+            case .value(let series) where drawsGauge(series):
+                // Sized to the line and kept to the semicircle's own 2:1, so
+                // the arc is not clipped by a frame taller than it can fill.
+                gauge(for: series)
+                    .frame(width: rowGaugeHeight * 2, height: rowGaugeHeight)
+
+            case .value(let series):
+                value
+                if widget.chart != .none, series.points.count > 1 {
+                    chart(for: series)
+                        .frame(width: rowChartWidth, height: rowChartHeight)
+                }
+
+            default:
+                value
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// How much of a row the chart may take.
+    ///
+    /// Proportional to the tile, not fixed: a 2x1 has barely room for the
+    /// figure, where a 6x1 can give the chart half the row and still leave the
+    /// name space.
+    var rowChartWidth: CGFloat { widget.size.cols >= 4 ? 150 : 90 }
+    private var rowChartHeight: CGFloat { 30 }
+    /// The arc keeps its own 2:1 so a taller frame cannot clip it.
+    private var rowGaugeHeight: CGFloat { 34 }
+
+    @ViewBuilder
+    private var stackedBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             source
             titleText
@@ -87,12 +175,28 @@ public struct WidgetTile: View {
                 TileSkeleton(
                     valueHeight: valueFontSize, chartHeight: skeletonChartHeight,
                     chart: widget.chart)
+            } else if case .value(let series) = state, drawsDistribution(series) {
+                // The rows, drawn rather than listed. Same data as the text
+                // list below; which one you get is the chart you chose.
+                //
+                // Height-capped: a tile that grows to fit its content is a
+                // tile taller than the one beside it, and the grid's whole
+                // premise is that a 2x2 is a 2x2.
+                distribution(series, compact: false)
+                    .padding(.top, 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .clipped()
             } else if case .value(let series) = state, let items = series.items {
                 // A list fills the tile from the label down. The headline
                 // figure is dropped: the rows are the number, itemised.
                 list(items, stale: series.stale)
                     .padding(.top, 6)
                 Spacer(minLength: 0)
+            } else if case .value(let series) = state, drawsGauge(series) {
+                // In place of the figure, not under it: the arc contains the
+                // number, so drawing both would print it twice.
+                gauge(for: series)
+                    .padding(.top, 2)
             } else {
                 Spacer(minLength: 0)
                 value
@@ -102,12 +206,22 @@ public struct WidgetTile: View {
             // Always the bottom edge, never under the number. The chart used
             // to live inside the value stack, so it floated with the figure
             // and sat at a different height on every tile.
-            if case .value(let series) = state,
-               widget.chart != .none, series.points.count > 1, widget.size != .small {
+            //
+            // A gauge is drawn above, in the figure's place, and needs no
+            // points — which is also why `points.count > 1` cannot gate it.
+            if case .value(let series) = state, !drawsGauge(series),
+                widget.chart != .none, series.points.count > 1, widget.size != .small
+            {
                 chart(for: series)
                     .frame(height: chartHeight)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+
+    public var body: some View {
+        Group {
+            if readsAsRow { rowBody } else { stackedBody }
         }
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, verticalPadding)
@@ -299,6 +413,25 @@ public struct WidgetTile: View {
     /// Rows per tile height: two on a one-row tile, then three more per row.
     /// Derived from the same 84pt-per-row the grid uses, less the header.
     private var listRows: Int { widget.size.rows == 1 ? 2 : 2 + (widget.size.rows - 1) * 3 }
+
+    /// Rows a *ranked* distribution has room for.
+    ///
+    /// Fewer than the text list, because a ranked row is three things — the
+    /// name, the figure beside it and the bar under it — where a list row is
+    /// one line. Reusing the list's budget overflowed a 2x2 and pushed the
+    /// tile taller than its neighbours.
+    private var rankedRows: Int {
+        widget.size.rows <= 1 ? 2 : 3 + (widget.size.rows - 2) * 3
+    }
+    /// Lines of key a *split* tile has room for under its bar.
+    ///
+    /// One more than `rankedRows` at each height, because a legend row is a
+    /// single line where a ranked row is a name, a figure and a bar. Zero at
+    /// one row tall: the bar fills that tile on its own, and in a row layout
+    /// it shares the line with the title already.
+    private var legendRows: Int {
+        widget.size.rows <= 1 ? 0 : 3 + (widget.size.rows - 2) * 4
+    }
     private var listRowSpacing: CGFloat { isTiny ? 2 : 4 }
     private var listFontSize: CGFloat { isTiny ? 9 : 11 }
 
@@ -313,7 +446,106 @@ public struct WidgetTile: View {
                 values: values, tint: chartTint,
                 fill: widget.chartStyle?.fill ?? true,
                 fillOpacity: widget.chartStyle?.fillOpacity ?? 0.45)
-        case .none: EmptyView()
+        case .gauge, .none, .split, .ranked, .pie: EmptyView()
+        }
+    }
+
+    /// Whether this tile draws its rows as a distribution rather than text.
+    ///
+    /// Needs both: a chart that draws categories, and a list to draw. A
+    /// distribution chosen on a metric that turned out to have no rows falls
+    /// back to the text list rather than an empty tile.
+    private func drawsDistribution(_ series: MetricSeries) -> Bool {
+        widget.chart.isDistribution && !(series.items ?? []).isEmpty
+    }
+
+    /// The rows of a list as shares of their total.
+    ///
+    /// `amount` first, then the number inside `detail` — a connector may put
+    /// the figure in either, and a distribution needs a magnitude per row. A
+    /// list with no magnitudes anywhere is drawn as equal slices, which is
+    /// honest: it says "these are the categories" without inventing weights.
+    private func shares(_ items: [MetricListItem]) -> [Double] {
+        let values = items.map { item -> Double in
+            if let amount = item.amount { return abs(Double(amount)) }
+            let digits = (item.detail ?? "").filter { $0.isNumber || $0 == "." }
+            return Double(digits) ?? 0
+        }
+        return values.allSatisfy { $0 == 0 } ? items.map { _ in 1 } : values
+    }
+
+    @ViewBuilder
+    private func distribution(_ series: MetricSeries, compact: Bool) -> some View {
+        let items = series.items ?? []
+        let weights = shares(items)
+        switch widget.chart {
+        case .split:
+            // The bar, then its key. A split bar is the one distribution that
+            // says nothing about *what* its slices are: the ranked bars and
+            // the ring both carry their labels, where this was four coloured
+            // segments and no way to tell which was which.
+            VStack(alignment: .leading, spacing: 7) {
+                SplitBar(shares: weights, height: compact ? 8 : 10)
+                SliceLegend(
+                    rows: items.indices.map { index in
+                        SliceLegend.Row(
+                            id: items[index].id, label: items[index].label,
+                            detail: items[index].detail, colourIndex: index)
+                    },
+                    fontSize: listFontSize,
+                    maxRows: compact ? 0 : legendRows)
+            }
+        case .pie:
+            // The total in the hole. A list tile normally drops the headline
+            // figure, because the rows *are* the figure itemised — a ring has
+            // the one place where showing it again costs nothing.
+            PieChart(shares: weights) {
+                Text(MetricFormatter.display(series, override: widget.format))
+                    .font(
+                        .system(
+                            size: valueFontSize * (compact ? 0.6 : 0.72), weight: .semibold,
+                            design: .rounded)
+                    )
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.4)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+        default:
+            RankedBars(
+                rows: Array(zip(items, weights.indices)).map { item, index in
+                    RankedBars.Row(
+                        id: item.id, label: item.label, detail: item.detail,
+                        share: weights[index] / max(weights.reduce(0, +), 1))
+                },
+                fontSize: listFontSize,
+                maxRows: rankedRows)
+        }
+    }
+
+    /// Whether this tile draws its figure as a gauge.
+    ///
+    /// Needs a ceiling to be a share *of* something, and `ratio` is the only
+    /// unit that carries one — 1.0, by definition. A gauge on a count would be
+    /// an arc filled to an arbitrary fraction of nothing.
+    private func drawsGauge(_ series: MetricSeries) -> Bool {
+        widget.chart == .gauge && series.unit == .ratio && series.items == nil
+    }
+
+    /// The figure inside its arc.
+    @ViewBuilder
+    private func gauge(for series: MetricSeries) -> some View {
+        GaugeArc(
+            fraction: series.value,
+            tint: chartTint,
+            lineWidth: isTiny ? 5 : 8
+        ) {
+            Text(MetricFormatter.display(series, override: widget.format))
+                .font(.system(size: valueFontSize * 0.78, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .foregroundStyle(NotchTheme.primaryText)
         }
     }
 

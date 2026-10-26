@@ -366,6 +366,10 @@ public struct ShareEditorView: View {
         case .none: return "None"
         case .sparkline: return "Line"
         case .bars: return "Bars"
+        case .gauge: return "Gauge"
+        case .split: return "Split"
+        case .ranked: return "Ranked"
+        case .pie: return "Pie"
         }
     }
 

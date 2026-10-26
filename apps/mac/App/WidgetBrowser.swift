@@ -75,7 +75,7 @@ struct WidgetBrowserPane: View {
                         sidebarRow(
                             icon: {
                                 AnyView(
-                                    ConnectorIcon(app: AppCatalog.resolve(connector.id), size: 16))
+                                    ConnectorIcon(app: connector.metricApp, size: 16))
                             },
                             title: connector.name,
                             // How many widgets this connector offers, not how
@@ -204,8 +204,7 @@ struct WidgetBrowserPane: View {
                         ForEach(sections) { section in
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack(spacing: 7) {
-                                    ConnectorIcon(
-                                        app: AppCatalog.resolve(section.connector.id), size: 16)
+                                    ConnectorIcon(app: section.connector.metricApp, size: 16)
                                     Text(section.connector.name)
                                         .font(.system(size: 11.5, weight: .semibold))
                                         .foregroundStyle(NotchTheme.secondaryText)
@@ -245,20 +244,8 @@ struct WidgetBrowserPane: View {
     /// be done with a widget that does not exist yet. Cancel in the pane takes
     /// it back out again — see `configuringIsNew`.
     private func add(_ connector: ConnectorEntry, _ metric: MetricDescriptor) {
-        let widget = NotchWidget(
-            id: "w_\(UUID().uuidString.prefix(8))",
-            kind: .providerMetric,
-            appId: connector.id,
-            // Whatever is already connected, so a new widget lands on real
-            // numbers when there is only one account — the common case.
-            integrationId: connector.connections.first?.id,
-            metric: metric.id,
-            title: metric.shortLabel,
-            size: .wide,
-            granularity: TimeRange.month.defaultGranularity,
-            range: .month,
-            chart: metric.supportsSeries ? .sparkline : .none,
-            format: WidgetFormat(compact: true))
+        let widget = Self.draft(
+            id: "w_\(UUID().uuidString.prefix(8))", connector: connector, metric: metric)
 
         guard env.layoutModel.add(widget) else {
             problem = "No room in the notch. Press Done, then drag the handle at the bottom "
@@ -269,6 +256,65 @@ struct WidgetBrowserPane: View {
 
         Task { await env.refresh() }
         env.beginConfiguring(widget.id, isNew: true)
+    }
+}
+
+extension WidgetBrowserPane {
+    /// The widget a card stands for.
+    ///
+    /// One builder for the preview and for the thing actually added, because a
+    /// preview of a different shape is a preview of something else — the
+    /// comment on `BrowseCard.draft` already said so while quietly keeping a
+    /// second copy of these arguments.
+    ///
+    /// A local entry becomes a `.customMetric` widget: it is answered by the
+    /// Node runner on this machine, has no integration row to point at, and
+    /// carries its app and metric packed into `customMetricId`.
+    static func draft(id: String, connector: ConnectorEntry, metric: MetricDescriptor)
+        -> NotchWidget
+    {
+        if connector.isLocal {
+            return NotchWidget(
+                id: id,
+                kind: .customMetric,
+                // The app's own id, not a shared "custom". All custom widgets
+                // sharing one appId meant one `appOverrides` entry had to
+                // serve every app, so none of them could carry its own icon
+                // or its own name.
+                appId: connector.id,
+                customMetricId: metric.id,
+                title: metric.shortLabel,
+                size: ChartKind.defaultFor(
+                    unit: metric.unit, supportsSeries: metric.supportsSeries,
+                    isList: metric.isList == true
+                ).preferredSize,
+                granularity: TimeRange.month.defaultGranularity,
+                range: .month,
+                chart: ChartKind.defaultFor(
+                    unit: metric.unit, supportsSeries: metric.supportsSeries,
+                    isList: metric.isList == true),
+                format: WidgetFormat(compact: true))
+        }
+
+        return NotchWidget(
+            id: id,
+            kind: .providerMetric,
+            appId: connector.id,
+            // Whatever is already connected, so a new widget lands on real
+            // numbers when there is only one account — the common case.
+            integrationId: connector.connections.first?.id,
+            metric: metric.id,
+            title: metric.shortLabel,
+            size: ChartKind.defaultFor(
+                unit: metric.unit, supportsSeries: metric.supportsSeries,
+                isList: metric.isList == true
+            ).preferredSize,
+            granularity: TimeRange.month.defaultGranularity,
+            range: .month,
+            chart: ChartKind.defaultFor(
+                    unit: metric.unit, supportsSeries: metric.supportsSeries,
+                    isList: metric.isList == true),
+            format: WidgetFormat(compact: true))
     }
 }
 
@@ -292,7 +338,9 @@ private struct BrowseCard: View {
     private var id: String { "\(connector.id)/\(metric.id)" }
     private var isHovered: Bool { hoveredID == id }
 
-    private var app: MetricApp { AppCatalog.resolve(connector.id) }
+    /// A custom app has no mark in the asset catalogue, so this carries
+    /// whatever its manifest declared — see `ConnectorEntry.metricApp`.
+    private var app: MetricApp { connector.metricApp }
 
     /// The same test the configure pane uses to decide whether to offer a
     /// Range control. The preview should carry the window for exactly the
@@ -352,20 +400,7 @@ private struct BrowseCard: View {
     }
 
     private var draft: NotchWidget {
-        NotchWidget(
-            id: "browse-\(id)",
-            kind: .providerMetric,
-            appId: connector.id,
-            metric: metric.id,
-            title: metric.shortLabel,
-            // The size it will be when added, not a square: a preview that
-            // is a different shape from the tile you get is a preview of
-            // something else.
-            size: .wide,
-            granularity: TimeRange.month.defaultGranularity,
-            range: .month,
-            chart: metric.supportsSeries ? .sparkline : .none,
-            format: WidgetFormat(compact: true))
+        WidgetBrowserPane.draft(id: "browse-\(id)", connector: connector, metric: metric)
     }
 }
 
@@ -382,13 +417,26 @@ enum WidgetSample {
             return Double((seed >> 33) % 1000) / 1000
         }
 
-        let base: Double = metric.unit == .currency ? 12_340_000 : 56
+        // Per unit, because the renderer reads the number differently for
+        // each: `ratio` is drawn as `value * 100` with a percent sign, so the
+        // generic 56 rendered a preview card reading "5600.0%", and `duration`
+        // is seconds, where 56 is a blink. A preview that cannot occur is
+        // worse than no preview — it is the one thing a person judges the
+        // metric by before adding it.
+        let base: Double =
+            switch metric.unit {
+            case .currency: 12_340_000
+            case .ratio: 0.42
+            case .duration: 9_000
+            case .bytes: 4_200_000
+            case .count: 56
+            }
         let points = (0..<24).map { index in
             MetricPoint(
                 t: "2026-01-\(String(format: "%02d", index % 28 + 1))T00:00:00Z",
                 v: base * (0.55 + next() * 0.75))
         }
-        let rows = sampleRows(for: metric.id)
+        let rows = sampleRows(for: metric.id) ?? genericRows(for: metric)
         return MetricSeries(
             integrationId: nil,
             metric: metric.id,
@@ -411,6 +459,24 @@ enum WidgetSample {
     /// shows a plausible number instead of nothing. Every other part of the
     /// browser reads the catalogue, so a new connector still needs no release
     /// — only its preview does.
+    /// Rows for a list metric this build has never heard of.
+    ///
+    /// The table below names metrics that ship with the app. A custom app's
+    /// list metric cannot be in it and never will be — there is no release in
+    /// which to add one — so without this every local list previewed as a
+    /// figure, which is a preview of the wrong widget.
+    private static func genericRows(for metric: MetricDescriptor) -> [MetricListItem]? {
+        guard metric.isList == true else { return nil }
+        // Labelled off the metric, so the card reads as that metric's rows
+        // rather than as somebody else's sample data.
+        return (1...3).map { index in
+            MetricListItem(
+                id: "\(index)", t: "2026-01-\(String(format: "%02d", 28 - index))T11:40:00Z",
+                label: "\(metric.shortLabel) \(index)", detail: nil,
+                amount: nil, currency: nil, status: nil)
+        }
+    }
+
     private static func sampleRows(for metric: String) -> [MetricListItem]? {
         switch metric {
         case "recent_payments":

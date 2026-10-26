@@ -33,24 +33,100 @@ public struct ConnectorIcon: View {
     public var size: CGFloat
     /// Dimmed for connectors that cannot be connected yet.
     public var isEnabled: Bool
+    /// An icon shipped by a **custom app**, read from its own directory.
+    ///
+    /// The asset catalogue is committed at build time, so a connector we ship
+    /// has its mark compiled in — and an app written on the user's machine
+    /// last night cannot possibly be in there. Without this, every custom app
+    /// everywhere drew the generic `{}` however good an icon it shipped.
+    public var fileURL: URL?
 
-    public init(app: MetricApp, size: CGFloat = 28, isEnabled: Bool = true) {
+    public init(
+        app: MetricApp, size: CGFloat = 28, isEnabled: Bool = true, fileURL: URL? = nil
+    ) {
         self.app = app
         self.size = size
         self.isEnabled = isEnabled
+        self.fileURL = fileURL
     }
 
     /// Looked up in the main bundle because the catalogue belongs to the app
-    /// target, not to this package.
-    private var mark: NSImage? { NSImage(named: "connector-\(app.id)") }
+    /// target, not to this package — or loaded from disk for a custom app.
+    ///
+    /// `ConnectorMarks` is keyed by the ids we ship, so a file-backed mark
+    /// matches none of the treatments below and lands in the default one: its
+    /// own colours on the app's accent tile, which is what an author who
+    /// supplied a square icon expects.
+    private var mark: NSImage? {
+        if let url = fileURL ?? app.customIconFile { return Self.cached(url) }
+        // A borrowed mark is looked up by the app it names, not by the custom
+        // app's own id — which has no mark and never will.
+        if let borrowed = declared?.borrowedAppId {
+            return NSImage(named: "connector-\(borrowed)")
+        }
+        return NSImage(named: "connector-\(app.id)")
+    }
 
-    private var usesLightTile: Bool { ConnectorMarks.lightTile.contains(app.id) }
+    /// The app a borrowed mark belongs to, for its treatment and its colour.
+    ///
+    /// `ConnectorMarks` is keyed by the ids we ship, so a borrowed mark has to
+    /// be looked up under *that* id or it lands in the wrong treatment —
+    /// GitHub's black silhouette drawn in colour on a dark tile, say.
+    private var borrowedApp: MetricApp? {
+        declared?.borrowedAppId.map { AppCatalog.resolve($0) }
+    }
+
+    /// What a custom app declared, if this is one.
+    ///
+    /// An `unknown` arm — a manifest from a newer core — is treated as no icon
+    /// at all, which falls through to the generic Custom mark rather than
+    /// drawing a blank tile.
+    private var declared: CustomAppIcon? {
+        guard let icon = app.customIcon, icon != .unknown else { return nil }
+        return icon
+    }
+
+    /// Whether this is drawing an author-supplied image rather than a mark we
+    /// ship. Both treatments below branch on it.
+    private var isFileBacked: Bool { fileURL != nil || app.customIconFile != nil }
+
+    /// Which id the mark treatments are keyed by.
+    private var markId: String { borrowedApp?.id ?? app.id }
+
+    /// The tile colour an author asked for, when they asked for one.
+    private var declaredTint: Color? {
+        guard case let .symbol(_, tint) = declared, let tint else { return nil }
+        return Color(hex: tint)
+    }
+
+    /// Decoded once per path.
+    ///
+    /// SwiftUI rebuilds a row on every hover and every scroll tick, and
+    /// decoding a PNG off disk on each of those made the gallery stutter with
+    /// a handful of custom apps in it.
+    private static func cached(_ url: URL) -> NSImage? {
+        if let hit = iconCache.object(forKey: url.path as NSString) { return hit }
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        iconCache.setObject(image, forKey: url.path as NSString)
+        return image
+    }
+
+    private static let iconCache = NSCache<NSString, NSImage>()
+
+    private var usesLightTile: Bool {
+        !isFileBacked && ConnectorMarks.lightTile.contains(markId)
+    }
     /// Silhouetted on glass rather than drawn in colour on a light tile.
     private var usesTemplate: Bool {
-        usesLightTile && ConnectorMarks.monochrome.contains(app.id)
+        usesLightTile && ConnectorMarks.monochrome.contains(markId)
     }
     /// Artwork that already is the tile, so it is drawn to the edges.
-    private var isFullBleed: Bool { mark != nil && ConnectorMarks.fullBleed.contains(app.id) }
+    /// A custom app's icon is drawn to the edges: it is a square image the
+    /// author chose, not a glyph meant to sit inside a brand tile.
+    private var isFullBleed: Bool {
+        guard mark != nil else { return false }
+        return isFileBacked || ConnectorMarks.fullBleed.contains(markId)
+    }
 
     /// The tile behind the mark.
     ///
@@ -74,6 +150,13 @@ public struct ConnectorIcon: View {
         // The luminance floor keeps a *white glyph* legible. A mark with its
         // own colours does not need it, and lifting Dodo Payments' black to
         // grey only makes the tile look washed out behind its lime.
+        if let declaredTint { return declaredTint }
+        // A borrowed mark brings its own colour: that is most of the point of
+        // borrowing it, and a Claude logo on the generic magenta would look
+        // like neither.
+        if let borrowedApp {
+            return Color(hex: borrowedApp.accentHex) ?? NotchTheme.tileFill(for: borrowedApp)
+        }
         if ConnectorMarks.ownColour.contains(app.id) {
             return Color(hex: app.accentHex) ?? NotchTheme.tileFill(for: app)
         }
@@ -130,10 +213,41 @@ public struct ConnectorIcon: View {
                 .frame(
                     width: size * (isFullBleed ? 1 : usesLightTile ? 0.62 : 0.54),
                     height: size * (isFullBleed ? 1 : usesLightTile ? 0.62 : 0.54))
+        } else if case let .emoji(value) = declared {
+            // Sized against the tile rather than set in points, so it matches
+            // a symbol at every call site from 16pt to the share card's 60.
+            Text(value)
+                .font(.system(size: size * 0.56))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+        } else if case let .symbol(name, _) = declared, Self.symbolExists(name) {
+            Image(systemName: name)
+                .font(.system(size: size * 0.46, weight: .semibold))
+                .foregroundStyle(.white)
         } else {
+            // The app's own symbol: `curlybraces` for a custom app, whatever
+            // the catalogue says otherwise. Reached when a manifest names a
+            // symbol this version of macOS does not have, which is why the
+            // name is checked rather than trusted.
             Image(systemName: app.symbol)
                 .font(.system(size: size * 0.46, weight: .semibold))
                 .foregroundStyle(.white)
         }
     }
+
+    /// Whether this macOS has the named symbol.
+    ///
+    /// `Image(systemName:)` renders *nothing* for a name it does not know —
+    /// no placeholder, no warning — so a manifest naming a symbol added in a
+    /// later macOS would draw an empty tile. Checked through AppKit, which
+    /// does report the miss, and cached because the answer cannot change
+    /// while the app is running.
+    private static func symbolExists(_ name: String) -> Bool {
+        if let known = symbolCache.object(forKey: name as NSString) { return known.boolValue }
+        let exists = NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
+        symbolCache.setObject(NSNumber(value: exists), forKey: name as NSString)
+        return exists
+    }
+
+    private static let symbolCache = NSCache<NSString, NSNumber>()
 }

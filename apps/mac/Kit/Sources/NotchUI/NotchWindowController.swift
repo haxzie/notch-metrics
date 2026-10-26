@@ -222,8 +222,26 @@ public final class NotchWindowController {
         view?.connectionNames = connectionNames
     }
 
+    /// App names and icons that override the built-in catalogue.
+    ///
+    /// Held as well as forwarded. Every other `update(_:)` here is called
+    /// repeatedly from a refresh loop, so dropping one before the view exists
+    /// costs a few seconds — but these are published once at launch, and
+    /// `start()` happens *after*. The value went nowhere and every custom
+    /// tile drew the generic mark under the name "Custom" until something
+    /// else happened to republish.
     public func update(appOverrides: [String: MetricApp]) {
+        pendingAppOverrides = appOverrides
         view?.appOverrides = appOverrides
+    }
+
+    private var pendingAppOverrides: [String: MetricApp] = [:]
+
+    /// What the notch is actually drawing with — the view's copy once it
+    /// exists, the held one before that. Exists so the hand-off can be
+    /// asserted rather than assumed.
+    var effectiveAppOverrides: [String: MetricApp] {
+        view?.appOverrides ?? pendingAppOverrides
     }
 
     /// Which metrics carry their time window in the tile's title.
@@ -326,6 +344,8 @@ public final class NotchWindowController {
         viewModel.onTogglePin = { [weak self] in self?.togglePin() }
         viewModel.onClose = { [weak self] in self?.close() }
         self.view = viewModel
+        // Anything published before the view existed.
+        viewModel.appOverrides = pendingAppOverrides
 
         let container = HitTestingContainerView(frame: CGRect(origin: .zero, size: NotchPanel.maxSize))
         container.autoresizingMask = [.width, .height]

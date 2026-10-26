@@ -607,6 +607,10 @@ public enum ShareMenuIcon {
         case .none: name = "number"
         case .sparkline: name = "chart.xyaxis.line"
         case .bars: name = "chart.bar.fill"
+        case .gauge: name = "gauge.with.needle"
+        case .split: name = "rectangle.split.3x1.fill"
+        case .ranked: name = "chart.bar.xaxis"
+        case .pie: name = "chart.pie.fill"
         }
         let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage()
         image.isTemplate = true
