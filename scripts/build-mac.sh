@@ -30,7 +30,12 @@ node "$ROOT/scripts/sync-mac-config.mjs"
 # metrics have nothing to run: `PluginRunner` would throw `runnerMissing` and
 # every local tile would read "Runner missing".
 echo "==> building the metric runner"
-(cd "$ROOT" && pnpm --filter @notch/metric-runtime build >/dev/null)
+# Through `pnpm runner`, which is turbo, so `dependsOn: ["^build"]` builds
+# `@notchmetrics/core` first. Filtering straight to the package skips that,
+# and `@notch/schemas` imports core by package name with its `exports`
+# pointing at `dist/` — so esbuild cannot resolve it on a clean checkout.
+# That is what failed the 0.4.0 release twice.
+(cd "$ROOT" && pnpm runner >/dev/null)
 [ -f "$ROOT/packages/metric-runtime/dist/runner.mjs" ] || {
   echo "::error::the runner did not build; custom metrics would not run in this app"
   exit 1
