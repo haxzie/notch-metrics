@@ -1,6 +1,6 @@
 {
   "name": "@notchmetrics/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Types and schemas for writing a local Notch Metrics connector.",
   "license": "MIT",
   "type": "module",

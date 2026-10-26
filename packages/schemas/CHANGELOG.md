@@ -1,5 +1,52 @@
 # @notch/schemas
 
+## 0.3.0
+
+### Minor Changes
+
+- [`95bf1a7`](https://github.com/haxzie/notch-metrics/commit/95bf1a7203615230bfdba95c12eee31eb224ea83) Thanks [@haxzie](https://github.com/haxzie)! - Remove the HubSpot and Intercom connectors.
+
+  Both were declared and never implemented: `status: "coming_soon"` since the
+  day the catalogue was added, every metric throwing `notImplemented`, and
+  `connectable()` filtering them out. Nobody has ever connected one, so there
+  are no rows, no widgets and nothing to migrate — which is the only reason
+  this is a deletion rather than a deprecation.
+
+  They were also the only two connectors in the CRM category, so the category
+  goes with them along with the six metric ids nothing else declared —
+  `contacts`, `new_contacts`, `open_deals`, `won_deals`, `pipeline_value` and
+  `open_conversations`. Leaving those behind would have recreated the problem
+  `arr` and `conversion_rate` already are: ids in the enum that no provider
+  serves, which nothing fails over and nobody notices.
+
+  `ProviderId`, `MetricId` and `ConnectorCategory` all shrink, so this is a
+  wire change and `contracts/` is regenerated with it. No golden fixture moved
+  — none of them named a removed value — and the Swift models read these as
+  strings with a fallback, so an installed app meeting the smaller catalogue
+  decodes it fine.
+
+  The marketing site loses its Sales layout, which was nine-tenths HubSpot and
+  Intercom. Its own note said leaning on "Soon" connectors was deliberate
+  because it showed where the product was going; with them gone it showed where
+  it is not. Rebuilding it from revenue widgets would have made a second
+  Founders layout, so it went instead. The hero glyph that was HubSpot is now
+  Claude, which keeps the hand-placed composition intact.
+
+- [`8ff2372`](https://github.com/haxzie/notch-metrics/commit/8ff23725db81c1df93dc7275a1dbcd4c2f1354b6) Thanks [@haxzie](https://github.com/haxzie)! - Four new widget shapes, and a row layout for wide tiles.
+
+  A gauge draws a ratio inside a filled arc. Split, ranked and ring draw one
+  list's categories against each other, each with a key naming as many as the
+  tile has room for.
+
+  A one-row tile wider than two columns now reads left to right. Stacked, it put
+  the name on top and the figure in the middle and left everything past the
+  second column empty.
+
+### Patch Changes
+
+- Updated dependencies [[`8ff2372`](https://github.com/haxzie/notch-metrics/commit/8ff23725db81c1df93dc7275a1dbcd4c2f1354b6)]:
+  - @notchmetrics/core@0.2.0
+
 ## 0.2.0
 
 ### Minor Changes
