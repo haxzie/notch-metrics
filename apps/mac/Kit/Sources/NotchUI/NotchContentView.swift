@@ -205,31 +205,40 @@ public struct NotchContentView: View {
     private var expandedContent: some View {
         VStack(spacing: 0) {
             header
-            content
-            // The handle sets how many rows are on screen, which is not a
-            // thing any pane has. Keyed on `bodyKind` like everything else:
-            // this was a third copy of the same if-ladder, and it drifted —
-            // the grabber drew over the notification centre while
-            // `expandedSize` left no room for it.
             if bodyKind == .grid {
-                // The chip rides the handle's band rather than taking a row of
-                // its own: the band is already full width and its capsule is
-                // centred, so the trailing end of it is empty space. The band
-                // grows to `bottomBandHeight` to hold it, which is the number
-                // `expandedSize` reserves — see the note on that constant.
-                ZStack {
-                    grabber
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        updateChip
-                    }
-                }
-                .frame(height: bottomBandHeight)
+                // An inset, not a stacked band. Stacked, the scroll view
+                // stopped where the handle began, so the last row was cut at a
+                // hard line and anything drawn over the band was a strip
+                // floating on top of it. Inset, the grid runs behind the band
+                // and the band's own height is the fade.
+                content
+                    .softGridEdges(bandHeight: bottomBandHeight)
+                    .safeAreaInset(edge: .bottom, spacing: 0) { bottomBand }
+            } else {
+                content
             }
         }
         // One value, so the frame change and the body swap cannot animate on
         // different clocks.
         .animation(.snappy(duration: 0.28), value: bodyKind)
+    }
+
+    /// The handle's band: the resize grabber, with the update chip riding the
+    /// empty trailing end of it.
+    ///
+    /// The chip rides the band rather than taking a row of its own: the band
+    /// is already full width and its capsule is centred, so the trailing end
+    /// is empty space. The band grows to `bottomBandHeight` to hold it, which
+    /// is the number `expandedSize` reserves.
+    private var bottomBand: some View {
+        ZStack {
+            grabber
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                updateChip
+            }
+        }
+        .frame(height: bottomBandHeight)
     }
 
     /// "Update to 0.4.0", in the bottom corner, when there is one.
