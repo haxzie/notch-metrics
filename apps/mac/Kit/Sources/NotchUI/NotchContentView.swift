@@ -225,6 +225,11 @@ public struct NotchContentView: View {
                     }
                 }
                 .frame(height: bottomBandHeight)
+                .background(alignment: .bottom) {
+                    ProgressiveBlur(edge: .bottom)
+                        .frame(height: bottomBandHeight)
+                        .padding(.top, -Self.blurOverhang)
+                }
             }
         }
         // One value, so the frame change and the body swap cannot animate on
@@ -548,7 +553,26 @@ public struct NotchContentView: View {
         // is taller and the same correction pushed the row visibly low.
         .padding(.top, 8)
         .frame(height: headerHeight)
+        // Grid only. The other bodies are panels that fill the notch and do
+        // not scroll, so there is nothing passing under the header to ramp
+        // against, and a blur over a static panel is a smudge.
+        .background(alignment: .top) {
+            if bodyKind == .grid {
+                ProgressiveBlur(edge: .top)
+                    .frame(height: headerHeight)
+                    // Past its own band, so a tile is already softening as it
+                    // reaches the header rather than meeting a line.
+                    .padding(.bottom, -Self.blurOverhang)
+            }
+        }
     }
+
+    /// How far each blurred band reaches past its own edge.
+    ///
+    /// The ramp needs somewhere to start. Confined to the band exactly, the
+    /// blur begins at full strength at the boundary, which is the hard line
+    /// it exists to remove.
+    static let blurOverhang: CGFloat = 14
 
     /// How tall the header band is.
     ///
