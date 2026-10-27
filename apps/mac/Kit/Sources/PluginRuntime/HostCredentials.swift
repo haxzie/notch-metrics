@@ -37,11 +37,96 @@ public enum HostCredentials {
     }
 
     public static func lookup(_ credential: HostCredential, now: Date = Date()) -> Outcome {
-        switch credential {
-        case .claudeCodeOAuth: claudeCodeToken(now: now)
-        case .unknown: .missing
-        }
+        if let cached = cache.value(for: credential, now: now) { return cached }
+
+        let read: (outcome: Outcome, goodUntil: Date?) =
+            switch credential {
+            case .claudeCodeOAuth: claudeCodeToken(now: now)
+            case .unknown: (.missing, nil)
+            }
+        cache.store(read.outcome, goodUntil: read.goodUntil, for: credential, now: now)
+        return read.outcome
     }
+
+    /// Clears what is remembered, so the next lookup reads the Keychain.
+    ///
+    /// For the moment a user has gone and signed in to the other app and
+    /// wants the tile to notice without relaunching.
+    public static func forget() { cache.clear() }
+
+    private static let cache = CredentialCache()
+}
+
+/// What was last read, so a refresh is not a Keychain hit.
+///
+/// macOS prompts for a password when an application reads a Keychain item
+/// another application created, and keeps prompting until the user grants
+/// "Always Allow" to that exact binary. Reading Claude Code's item is
+/// therefore a prompt, by design and correctly — but `lookup` was called
+/// twice per connector refresh, once to decide whether the tile should say
+/// anything and once to build the credentials for the run. A user who had
+/// not granted the standing permission got two dialogs every refresh.
+///
+/// So the answer is held for as long as it is good for. A live token is kept
+/// until its own expiry, which is the moment it stops being usable anyway. A
+/// failure is kept for a minute: long enough that one refusal does not
+/// become a dialog a second later, short enough that signing in to the other
+/// app is noticed without relaunching this one.
+///
+/// Memory only. Nothing here is written anywhere, which is the whole reason
+/// the token is read from the owning app's Keychain in the first place.
+final class CredentialCache: @unchecked Sendable {
+    private struct Entry {
+        let outcome: HostCredentials.Outcome
+        let until: Date
+    }
+
+    private let lock = NSLock()
+    private var entries: [HostCredential: Entry] = [:]
+
+    /// Long enough to cover a run; short enough to notice a sign-in.
+    private static let failureTTL: TimeInterval = 60
+
+    func value(for credential: HostCredential, now: Date) -> HostCredentials.Outcome? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[credential], entry.until > now else { return nil }
+        return entry.outcome
+    }
+
+    /// `goodUntil` comes from the same read that produced the outcome.
+    ///
+    /// It has to. Looking the expiry up separately would be a second Keychain
+    /// hit and therefore a second password prompt, which is the thing this
+    /// cache exists to stop — the first version of it did exactly that.
+    func store(
+        _ outcome: HostCredentials.Outcome, goodUntil: Date?, for credential: HostCredential,
+        now: Date
+    ) {
+        let until: Date
+        switch outcome {
+        case .value:
+            // Until the token itself expires. A blob that names no expiry
+            // gets five minutes: long enough to stop a refresh prompting,
+            // short enough that a rotation is picked up.
+            until = goodUntil ?? now.addingTimeInterval(300)
+        case .missing, .stale, .expired, .unreadable:
+            until = now.addingTimeInterval(Self.failureTTL)
+        }
+
+        lock.lock()
+        entries[credential] = Entry(outcome: outcome, until: until)
+        lock.unlock()
+    }
+
+    func clear() {
+        lock.lock()
+        entries.removeAll()
+        lock.unlock()
+    }
+}
+
+extension HostCredentials {
 
     /// The Claude Code subscription OAuth token.
     ///
@@ -54,9 +139,21 @@ public enum HostCredentials {
     /// application created. That prompt is correct and worth it: it is the
     /// user being told, by the system, that Notch Metrics wants their Claude
     /// Code credential.
-    static func claudeCodeToken(now: Date = Date()) -> Outcome {
-        guard let data = keychainValue(service: claudeCodeService) else { return .missing }
-        return interpret(blob: data, now: now)
+    static func claudeCodeToken(now: Date = Date()) -> (outcome: Outcome, goodUntil: Date?) {
+        guard let data = keychainValue(service: claudeCodeService) else { return (.missing, nil) }
+        return (interpret(blob: data, now: now), accessExpiry(in: data))
+    }
+
+    /// When the access token in this blob stops being usable.
+    ///
+    /// Parsed from the bytes already in hand rather than read again: a second
+    /// `SecItemCopyMatching` is a second password prompt.
+    static func accessExpiry(in data: Data) -> Date? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let account = root["claudeAiOauth"] as? [String: Any],
+            let millis = account["expiresAt"] as? Double
+        else { return nil }
+        return Date(timeIntervalSince1970: millis / 1000)
     }
 
     /// The stored blob as an outcome, with no Keychain in the way.

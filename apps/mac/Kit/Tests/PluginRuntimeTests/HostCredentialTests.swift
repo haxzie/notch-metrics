@@ -184,4 +184,73 @@ struct HostCredentialTests {
             HostCredentials.interpret(
                 blob: Self.blob(access: nil, refresh: nil, token: ""), now: now) == .missing)
     }
+
+    @Test("a live token is remembered until it expires")
+    func cachedWhileGood() {
+        // The point of the cache. macOS prompts for a password when one app
+        // reads a Keychain item another app created, and keeps prompting
+        // until "Always Allow" is granted to that exact binary. `lookup` ran
+        // twice per connector refresh — once to decide what the tile says,
+        // once to build the credentials for the run — so a user without the
+        // standing permission got two dialogs every refresh.
+        let cache = CredentialCache()
+        let now = Date()
+        let expiry = now.addingTimeInterval(3600)
+
+        cache.store(.value("t"), goodUntil: expiry, for: .claudeCodeOAuth, now: now)
+
+        #expect(cache.value(for: .claudeCodeOAuth, now: now) == .value("t"))
+        #expect(cache.value(for: .claudeCodeOAuth, now: now.addingTimeInterval(1800)) == .value("t"))
+        // Past the token's own expiry it is read again, because by then it
+        // would not work anyway.
+        #expect(cache.value(for: .claudeCodeOAuth, now: expiry.addingTimeInterval(1)) == nil)
+    }
+
+    @Test("a failure is remembered briefly, not until it expires")
+    func failuresExpireSoon() {
+        // Long enough that one refusal does not become a dialog a second
+        // later; short enough that going and signing in to the other app is
+        // noticed without relaunching this one.
+        let cache = CredentialCache()
+        let now = Date()
+        cache.store(.missing, goodUntil: nil, for: .claudeCodeOAuth, now: now)
+
+        #expect(cache.value(for: .claudeCodeOAuth, now: now.addingTimeInterval(30)) == .missing)
+        #expect(cache.value(for: .claudeCodeOAuth, now: now.addingTimeInterval(61)) == nil)
+    }
+
+    @Test("a blob with no expiry is still not read on every refresh")
+    func noExpiryStillCached() {
+        // Forward compatibility: a format change that drops the field must
+        // not put the password dialog back on every refresh.
+        let cache = CredentialCache()
+        let now = Date()
+        cache.store(.value("t"), goodUntil: nil, for: .claudeCodeOAuth, now: now)
+
+        #expect(cache.value(for: .claudeCodeOAuth, now: now.addingTimeInterval(120)) == .value("t"))
+        #expect(cache.value(for: .claudeCodeOAuth, now: now.addingTimeInterval(301)) == nil)
+    }
+
+    @Test("forgetting makes the next lookup read again")
+    func forgetClears() {
+        // For the moment somebody has gone and signed in to the other app and
+        // wants the tile to notice without relaunching.
+        let cache = CredentialCache()
+        let now = Date()
+        cache.store(.value("t"), goodUntil: now.addingTimeInterval(3600), for: .claudeCodeOAuth, now: now)
+        cache.clear()
+        #expect(cache.value(for: .claudeCodeOAuth, now: now) == nil)
+    }
+
+    @Test("the expiry is parsed from the bytes already in hand")
+    func expiryFromTheSameRead() {
+        // The first version of the cache looked the expiry up with a second
+        // `SecItemCopyMatching`, which is a second password prompt and would
+        // have made the cache pointless.
+        let expiry = Date().addingTimeInterval(3600)
+        let blob = Self.blob(access: expiry, refresh: expiry.addingTimeInterval(86400))
+        let parsed = HostCredentials.accessExpiry(in: blob)
+        #expect(parsed != nil)
+        #expect(abs((parsed ?? .distantPast).timeIntervalSince(expiry)) < 0.001)
+    }
 }
