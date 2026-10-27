@@ -189,9 +189,17 @@ public struct WidgetTile: View {
             } else if case .value(let series) = state, let items = series.items {
                 // A list fills the tile from the label down. The headline
                 // figure is dropped: the rows are the number, itemised.
-                list(items, stale: series.stale)
-                    .padding(.top, 6)
-                Spacer(minLength: 0)
+                //
+                // How many rows is measured, not guessed. `listRows` was a
+                // formula — two, then three more per extra row — which came
+                // out at five for every 2x2 whatever the tile's real height,
+                // and left two rows of empty space under a payments feed that
+                // had more to show.
+                GeometryReader { proxy in
+                    list(items, stale: series.stale, rows: rowsThatFit(in: proxy.size.height))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                .padding(.top, 6)
             } else if case .value(let series) = state, drawsGauge(series) {
                 // In place of the figure, not under it: the arc contains the
                 // number, so drawing both would print it twice.
@@ -348,14 +356,14 @@ public struct WidgetTile: View {
     /// by the tile's corner reads as a rendering fault, and a row that is
     /// not there reads as a shorter list.
     @ViewBuilder
-    private func list(_ items: [MetricListItem], stale: Bool) -> some View {
+    private func list(_ items: [MetricListItem], stale: Bool, rows: Int) -> some View {
         if items.isEmpty {
             Text("Nothing yet")
                 .font(.system(size: 11))
                 .foregroundStyle(NotchTheme.tertiaryText)
         } else {
             VStack(alignment: .leading, spacing: listRowSpacing) {
-                ForEach(items.prefix(listRows)) { item in
+                ForEach(items.prefix(rows)) { item in
                     row(item, stale: stale)
                 }
             }
@@ -412,7 +420,24 @@ public struct WidgetTile: View {
 
     /// Rows per tile height: two on a one-row tile, then three more per row.
     /// Derived from the same 84pt-per-row the grid uses, less the header.
-    private var listRows: Int { widget.size.rows == 1 ? 2 : 2 + (widget.size.rows - 1) * 3 }
+    /// One row's height: the line the text sets, plus the gap under it.
+    ///
+    /// Derived from the type size rather than measured per row, because every
+    /// row is one line of the same font — the leading figure and the age are
+    /// set in it too.
+    var listRowHeight: CGFloat { listFontSize * 1.3 }
+
+    /// How many whole rows fit in the space the list is actually given.
+    ///
+    /// The last row is only drawn if it fits whole. A row clipped halfway is
+    /// read as a rendering fault, where a short list is just a short list.
+    func rowsThatFit(in height: CGFloat) -> Int {
+        // The first layout pass has no height yet. One row rather than none,
+        // so the tile does not flash empty before it settles.
+        guard height > 0 else { return 1 }
+        let step = listRowHeight + listRowSpacing
+        return max(1, Int((height + listRowSpacing) / step))
+    }
 
     /// Rows a *ranked* distribution has room for.
     ///
@@ -432,7 +457,7 @@ public struct WidgetTile: View {
     private var legendRows: Int {
         widget.size.rows <= 1 ? 0 : 3 + (widget.size.rows - 2) * 4
     }
-    private var listRowSpacing: CGFloat { isTiny ? 2 : 4 }
+    var listRowSpacing: CGFloat { isTiny ? 2 : 4 }
     private var listFontSize: CGFloat { isTiny ? 9 : 11 }
 
     @ViewBuilder

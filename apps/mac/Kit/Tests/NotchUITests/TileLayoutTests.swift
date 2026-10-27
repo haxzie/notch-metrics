@@ -100,4 +100,48 @@ struct TileLayoutTests {
             Self.tile(size: WidgetSize(cols: 6, rows: 1)).rowChartWidth
                 > Self.tile(size: WidgetSize(cols: 3, rows: 1)).rowChartWidth)
     }
+
+    @Test("a list fills the height it is given")
+    func listRowsAreMeasured() {
+        // What this replaced was a formula: two rows, then three more per
+        // extra tile row. It came out at five for every 2x2 whatever the
+        // tile's real height, so a payments feed with more to show sat above
+        // two rows of empty space.
+        let tile = Self.tile(size: .square)
+        let step = tile.listRowHeight + tile.listRowSpacing
+
+        // Exactly three rows' worth fits three.
+        #expect(tile.rowsThatFit(in: step * 3 - tile.listRowSpacing) == 3)
+        // A sliver more does not buy a fourth.
+        #expect(tile.rowsThatFit(in: step * 3) == 3)
+        // A whole row more does.
+        #expect(tile.rowsThatFit(in: step * 4 - tile.listRowSpacing) == 4)
+    }
+
+    @Test("a taller tile shows more rows")
+    func tallerShowsMore() {
+        // The property the formula was reaching for, now true by measurement
+        // rather than by a constant that had to be kept in step by hand.
+        let tile = Self.tile(size: .square)
+        #expect(tile.rowsThatFit(in: 200) > tile.rowsThatFit(in: 100))
+    }
+
+    @Test("the first layout pass draws one row, not none")
+    func beforeTheTileHasASize() {
+        // Reachable on every open: the geometry reader reports zero until the
+        // panel has laid out. Zero rows would flash an empty tile.
+        #expect(Self.tile(size: .square).rowsThatFit(in: 0) == 1)
+        #expect(Self.tile(size: .square).rowsThatFit(in: -10) == 1)
+    }
+
+    @Test("a row is never drawn half-clipped")
+    func noPartialRows() {
+        // A row cut in half reads as a rendering fault; a short list reads as
+        // a short list.
+        let tile = Self.tile(size: .square)
+        let step = tile.listRowHeight + tile.listRowSpacing
+        for extra in stride(from: 0.0, to: step, by: step / 5) {
+            #expect(tile.rowsThatFit(in: step * 2 - tile.listRowSpacing + extra) == 2)
+        }
+    }
 }
