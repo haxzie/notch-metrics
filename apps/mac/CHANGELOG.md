@@ -1,5 +1,32 @@
 # @notch/mac
 
+## 0.4.1
+
+### Patch Changes
+
+- [`80cf26a`](https://github.com/haxzie/notch-metrics/commit/80cf26a5287423095386b135fbe9e9008891f4f1) Thanks [@haxzie](https://github.com/haxzie)! - Stop asking for your Keychain password on every refresh.
+
+  A custom app that borrows a sign-in from another app read that app's
+  Keychain item twice per refresh, and macOS prompts for a password each time
+  one application reads another's item. The token is now held in memory until
+  it expires, so the prompt happens once rather than on every tick.
+
+- [`cffaba4`](https://github.com/haxzie/notch-metrics/commit/cffaba4f64bd5faf94084bb44c7cdf442de9898e) Thanks [@haxzie](https://github.com/haxzie)! - A list widget fills its tile.
+
+  The number of rows was a formula that came out at five for every 2x2 tile
+  whatever its real height, while the server sends ten. Half the rows were
+  thrown away and the space they would have filled was left empty. The tile
+  now fits as many whole rows as it has room for.
+
+- [`29a4e57`](https://github.com/haxzie/notch-metrics/commit/29a4e5781a5075b9d83727dbc6fdce939de5c280) Thanks [@haxzie](https://github.com/haxzie)! - Every widget starts at two by two.
+
+  A sparkline or a plain figure used to start as a 2x1 while a gauge, a ring
+  and a breakdown started taller. In the widget gallery that read as a fault:
+  a short tile sat at the top of a card the height of its neighbours, and the
+  gap underneath looked like a widget that had failed to draw. It is also the
+  size every shape is good at. Anything that wants to be a strip is one drag
+  away.
+
 ## 0.4.0
 
 ### Minor Changes
