@@ -709,21 +709,24 @@ public struct NotchContentView: View {
             guard let url = URL(string: "\(view.siteURL.absoluteString)/docs") else { return }
             view.onOpenWidget(url)
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "hammer")
+            HStack(spacing: 5) {
+                Image(systemName: "hammer.fill")
                     .font(.system(size: 10, weight: .semibold))
                 Text("Build your own")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .semibold))
             }
-            .padding(.leading, 9)
-            .padding(.trailing, 12)
+            // Filled blue, the same treatment as Upgrade: this is the one
+            // thing to do on a pane where nothing else was found, and beside
+            // a quiet Back it has to read as the offer rather than as a
+            // second way out. `editHighlight` is the app's one blue.
+            .foregroundStyle(Color.white)
+            .padding(.leading, 10)
+            .padding(.trailing, 13)
             .padding(.vertical, 5)
-            .background(Capsule().fill(Color.white.opacity(0.1)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .background(Capsule().fill(NotchTheme.editHighlight))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(NotchTheme.secondaryText)
         .help("Read how to build a custom app")
     }
 
