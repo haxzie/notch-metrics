@@ -12,7 +12,12 @@ public enum MetricFormatter {
     ) -> String {
         let style = override?.style ?? series.unit
         let useCompact = compact ?? override?.compact ?? series.format?.compact ?? true
-        let decimals = override?.decimals
+        // The series' own, where the widget has not overridden it. Search
+        // Console sends `decimals: 1` with an average position precisely so
+        // the tile reads 8.4 rather than 8 — and this used to read only the
+        // widget's, so the adapter's instruction was dropped and a rank
+        // rounded to the integer it is never quoted as.
+        let decimals = override?.decimals ?? series.format?.decimals
 
         let body: String
         switch style {
@@ -30,7 +35,9 @@ public enum MetricFormatter {
             body = bytes(series.value)
         }
 
-        return (override?.prefix ?? "") + body + (override?.suffix ?? "")
+        let prefix = override?.prefix ?? series.format?.prefix ?? ""
+        let suffix = override?.suffix ?? series.format?.suffix ?? ""
+        return prefix + body + suffix
     }
 
     public static func currency(
@@ -45,7 +52,13 @@ public enum MetricFormatter {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = decimals ?? (abs(amount) >= 1_000 ? 0 : 2)
-        formatter.minimumFractionDigits = 0
+        // Cents are all-or-nothing. With a floor of zero, $428.60 rendered as
+        // "$428.6" — a figure that is not a price in any currency, and the
+        // sort of thing somebody notices on a screenshot before they notice
+        // anything else.
+        formatter.minimumFractionDigits =
+            formatter.maximumFractionDigits > 0 && amount != amount.rounded()
+            ? min(2, formatter.maximumFractionDigits) : 0
         // Explicit, because NumberFormatter defaults to half-*even* — so
         // $1,284.50 would render as $1,284. Banker's rounding is right for
         // statistics and wrong for a figure somebody is going to compare

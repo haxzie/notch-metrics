@@ -4,9 +4,12 @@ import Testing
 @testable import MetricsCore
 
 @Suite struct WidgetFormatTests {
-    private func series(_ value: Double, unit: MetricUnit, currency: String? = nil) -> MetricSeries {
+    private func series(
+        _ value: Double, unit: MetricUnit, currency: String? = nil, format: MetricFormat? = nil
+    ) -> MetricSeries {
         MetricSeries(
-            integrationId: "int", metric: "m", unit: unit, currency: currency, value: value)
+            integrationId: "int", metric: "m", unit: unit, currency: currency, value: value,
+            format: format)
     }
 
     @Test("counts compact to k, M and B")
@@ -38,12 +41,32 @@ import Testing
         #expect(MetricFormatter.display(series(12_300, unit: .count), override: short) == "12.3k")
     }
 
+    @Test("cents are all or nothing")
+    func centsAreNotTruncated() {
+        // $428.60 used to render as "$428.6", which is not a price.
+        #expect(MetricFormatter.display(series(42_860, unit: .currency, currency: "USD")) == "$428.60")
+        #expect(MetricFormatter.display(series(42_800, unit: .currency, currency: "USD")) == "$428")
+        #expect(MetricFormatter.display(series(42_856, unit: .currency, currency: "USD")) == "$428.56")
+    }
+
     @Test("a widget can restate the type")
     func widgetOverridesStyle() {
         // An adapter reporting a conversion rate as a count still wants to
         // read as a percentage.
         let asRatio = WidgetFormat(style: .ratio)
         #expect(MetricFormatter.display(series(0.0734, unit: .count), override: asRatio) == "7.3%")
+    }
+
+    @Test("the series' own format carries the adapter's precision")
+    func seriesFormatDecimals() {
+        // Search Console sends this with an average position so the tile
+        // reads 8.4. Only `compact` used to be read off the series, so the
+        // rank was compacted correctly and then rounded to 8 anyway.
+        let position = series(
+            8.4, unit: .count, format: MetricFormat(decimals: 1, compact: false))
+        #expect(MetricFormatter.display(position) == "8.4")
+        // The widget still wins where it says something.
+        #expect(MetricFormatter.display(position, override: WidgetFormat(decimals: 0)) == "8")
     }
 
     @Test("prefix and suffix wrap the number")
