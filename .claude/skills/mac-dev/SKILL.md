@@ -56,7 +56,7 @@ The notch is awkward to inspect because it hides when the pointer leaves it.
 | ------------------------ | ------------------------------------------------------------ |
 | `NOTCH_DEBUG_EXPAND=1`   | Open and **pin** the notch at launch.                        |
 | `NOTCH_DEBUG_EDIT=1`     | Start in edit mode — dotted grid, resize handles.            |
-| `NOTCH_DEBUG_DEMO=1`     | Plausible numbers instead of "Sign in". For screenshots.     |
+| `NOTCH_DEBUG_DEMO=…`     | `1`, or a connector category. Numbers, not "Sign in".        |
 | `NOTCH_DEBUG_BROWSE=1`   | Open the widget browser in the notch at launch.              |
 | `NOTCH_DEBUG_UPGRADE=1`  | The lapsed-plan panel. Implies demo.                         |
 | `NOTCH_DEBUG_WELCOME=1`  | The welcome screen, with a token still in the Keychain.      |
@@ -77,6 +77,19 @@ and downloads; `run` goes the whole way, through the swap and the relaunch.
 That is the only way to test an updater without publishing a release, which is
 the difference between this flow being checked when it is touched and being
 checked twice a year.
+
+`NOTCH_DEBUG_DEMO` takes `1` for the mixed layout every other flag here is
+written against, or one of `revenue`, `analytics`, `marketing`, `developer`
+and `ai` — the `ConnectorCategory` values from `packages/schemas`, where
+`marketing` is the SEO one. Each is one category's tiles filling the grid
+exactly, for the launch gallery. `scripts/shoot-notch.swift` captures all five
+as cropped transparent PNGs under `.context/shots/`; it needs Screen Recording
+permission and a Debug build.
+
+The figures in a preset mirror what the provider actually reports: a snapshot
+metric — Stripe's MRR, every GitHub scalar — gets no chart and no delta,
+because the shipped app cannot draw one for it and a screenshot that does is
+a promise the product does not keep.
 
 `NOTCH_DEBUG_EXPAND` pins rather than merely expanding, and that matters: the
 exit watch installed on expand finds the pointer elsewhere and collapses within

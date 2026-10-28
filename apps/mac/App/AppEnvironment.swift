@@ -104,11 +104,30 @@ final class AppEnvironment {
     /// catalogue.
     func catalogueChanged() { catalogueRevision += 1 }
 
-    /// Plausible numbers, no account, no network. For screenshots.
-    static var isDemo: Bool {
-        ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"] == "1" || isSkeletonDemo
-            || isUpgradeDemo
+    /// Which set of demo tiles to show.
+    ///
+    /// `1` is the mixed layout every other debug flag is written against, so
+    /// it stays the meaning of the bare flag. The rest are one connector
+    /// category each, named after `ConnectorCategory` in `packages/schemas`
+    /// — `marketing` is the SEO one. They exist for the launch gallery: a
+    /// revenue screenshot with a CI tile in the corner of it advertises a
+    /// different product on every slide.
+    enum DemoPreset: String, CaseIterable {
+        case starter
+        case revenue, analytics, marketing, developer, ai
     }
+
+    /// Plausible numbers, no account, no network. For screenshots.
+    static var demoPreset: DemoPreset? {
+        let raw = ProcessInfo.processInfo.environment["NOTCH_DEBUG_DEMO"]
+        if raw == "1" { return .starter }
+        if let raw, let preset = DemoPreset(rawValue: raw) { return preset }
+        // Both panels are drawn over the demo layout, so each implies one
+        // without having to name it.
+        return (isSkeletonDemo || isUpgradeDemo) ? .starter : nil
+    }
+
+    static var isDemo: Bool { demoPreset != nil }
 
     /// The welcome screen, on a Mac that already has a token.
     ///
@@ -335,9 +354,9 @@ final class AppEnvironment {
         // a new user's notch was full of an app they had never connected and
         // every tile said "Connect Stripe". The empty state in NotchPanel
         // says what to do instead.
-        if Self.isDemo {
+        if let preset = Self.demoPreset {
             needsUpgrade = Self.isUpgradeDemo
-            layoutModel.replace(with: Self.demoLayout())
+            layoutModel.replace(with: Self.demoLayout(preset))
             // Demo tiles go somewhere too: a click that does nothing in the
             // one mode built for screenshots is how a regression here would
             // be missed.
@@ -351,6 +370,11 @@ final class AppEnvironment {
                         "stripe": "https://dashboard.stripe.com",
                         "google-analytics": "https://analytics.google.com",
                         "github": "https://github.com",
+                        "posthog": "https://eu.posthog.com",
+                        "plausible": "https://plausible.io",
+                        "google-search-console": "https://search.google.com/search-console",
+                        "openai": "https://platform.openai.com/usage",
+                        "anthropic": "https://console.anthropic.com",
                     ]))
             // Demo mode never refreshes, so the titles would otherwise miss
             // the time window a live notch shows — and a screenshot of the
@@ -362,9 +386,8 @@ final class AppEnvironment {
             Self.isSkeletonDemo
             ? Dictionary(
                 uniqueKeysWithValues: layoutModel.layout.widgets.map { ($0.id, TileState.loading) })
-            : Self.isDemo
-                ? Self.demoStates(for: layoutModel.layout)
-                : Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
+            : Self.demoPreset.map { Self.demoStates(for: layoutModel.layout, preset: $0) }
+                ?? Self.placeholderStates(for: layoutModel.layout, signedIn: isSignedIn)
         notch.update(states: states)
 
         // Demo mode has numbers without an account, and the sign-in panel
@@ -732,6 +755,11 @@ final class AppEnvironment {
     /// refresh without a migration.
     func refreshMetricWindows() async {
         var keys = Set<String>()
+        // The demo's own, before the request. This walk reads the catalogue
+        // over the network, and a screenshot taken against a Worker that is
+        // not running would miss the "· 30d" every windowed tile in a live
+        // notch carries — which is the one difference a reader would notice.
+        if Self.isDemo { keys.formUnion(Self.demoTimeWindowedMetrics) }
         for plugin in plugins.plugins {
             if plugin.manifest?.supportsSeries == true { keys.insert("custom/\(plugin.id)") }
         }
@@ -1811,46 +1839,168 @@ final class AppEnvironment {
     ///
     /// All six are present in both modes. `repack` marks the ones that do not
     /// fit the grid as hidden, which is exactly the situation the list solves.
-    nonisolated private static func demoLayout() -> NotchLayout {
-        NotchLayout(
-            rows: 2,
-            widgets: [
+    nonisolated private static func starterLayout() -> [NotchWidget] {
+        [
+            NotchWidget(
+                id: "starter-revenue", kind: .providerMetric, appId: "stripe",
+                metric: "revenue", title: "Revenue", size: .square, col: 0, row: 0,
+                position: 0, chart: .sparkline),
+            NotchWidget(
+                id: "starter-mrr", kind: .providerMetric, appId: "stripe", metric: "mrr",
+                title: "MRR", size: .square, col: 2, row: 0, position: 1, chart: .none),
+            // A list, so the demo shows both kinds of tile.
+            NotchWidget(
+                id: "starter-payments", kind: .providerMetric, appId: "stripe",
+                metric: "recent_payments", title: "Payments", size: .square,
+                col: 4, row: 0, position: 2, chart: .none),
+            NotchWidget(
+                id: "starter-subs", kind: .providerMetric, appId: "stripe",
+                metric: "active_subscribers", title: "Subscribers", size: .square,
+                col: 0, row: 0, position: 3, chart: .bars),
+            NotchWidget(
+                id: "demo-ga-users", kind: .providerMetric, appId: "google-analytics",
+                metric: "active_subscribers", title: "Active users", size: .wide,
+                col: 0, row: 0, position: 3, chart: .sparkline),
+            NotchWidget(
+                id: "demo-ga-new", kind: .providerMetric, appId: "google-analytics",
+                metric: "new_subscribers", title: "New users", size: .wide,
+                col: 0, row: 0, position: 4, chart: .none),
+            // The other list shape: rows with an outcome rather than an
+            // amount, which is the only tile with icons down its left.
+            NotchWidget(
+                id: "demo-ci", kind: .providerMetric, appId: "github",
+                metric: "ci_runs", title: "CI", size: .square,
+                col: 0, row: 1, position: 5, chart: .none,
+                params: ["repository": "haxzie/notch-metrics", "branch": "main"]),
+            NotchWidget(
+                id: "demo-stars", kind: .customMetric, appId: "github",
+                customMetricId: "github-stars", title: "Stars", size: .small,
+                col: 0, row: 0, position: 5, chart: .none),
+        ]
+    }
+
+    /// One category's worth of tiles, filling the grid exactly.
+    ///
+    /// Every preset is four tiles on the 6x2 grid — two squares and two
+    /// halves, or three squares — because a preset that leaves a hole shows
+    /// the empty-grid hint in the corner of a marketing shot. Coordinates are
+    /// written out rather than left to `reflow`, so what the screenshot
+    /// catches does not depend on the packer's first-fit order.
+    nonisolated private static func categoryLayout(_ preset: DemoPreset) -> [NotchWidget] {
+        switch preset {
+        case .starter:
+            return starterLayout()
+
+        case .revenue:
+            // Revenue leads rather than MRR, because revenue is the only one
+            // of the two Stripe reports as a series — MRR and the subscriber
+            // count are snapshots of the book right now, and a chart under
+            // either would be a chart the shipped app cannot draw.
+            return [
                 NotchWidget(
-                    id: "starter-revenue", kind: .providerMetric, appId: "stripe",
-                    metric: "revenue", title: "Revenue", size: .square, col: 0, row: 0,
-                    position: 0, chart: .sparkline),
+                    id: "cat-revenue", appId: "stripe", metric: "revenue", title: "Revenue",
+                    size: .square, col: 0, row: 0, position: 0, chart: .sparkline),
                 NotchWidget(
-                    id: "starter-mrr", kind: .providerMetric, appId: "stripe", metric: "mrr",
-                    title: "MRR", size: .square, col: 2, row: 0, position: 1, chart: .none),
-                // A list, so the demo shows both kinds of tile.
+                    id: "cat-payments", appId: "stripe", metric: "recent_payments",
+                    title: "Payments", size: .square, col: 2, row: 0, position: 1,
+                    chart: .none),
                 NotchWidget(
-                    id: "starter-payments", kind: .providerMetric, appId: "stripe",
-                    metric: "recent_payments", title: "Payments", size: .square,
-                    col: 4, row: 0, position: 2, chart: .none),
+                    id: "cat-mrr", appId: "stripe", metric: "mrr", title: "MRR",
+                    size: .wide, col: 4, row: 0, position: 2, chart: .none),
                 NotchWidget(
-                    id: "starter-subs", kind: .providerMetric, appId: "stripe",
-                    metric: "active_subscribers", title: "Subscribers", size: .square,
-                    col: 0, row: 0, position: 3, chart: .bars),
+                    id: "cat-subs", appId: "stripe", metric: "active_subscribers",
+                    title: "Subscribers", size: .wide, col: 4, row: 1, position: 3,
+                    chart: .none),
+            ]
+
+        case .analytics:
+            // Three apps rather than one: the point of the analytics shot is
+            // that the numbers do not have to come from the same place.
+            return [
                 NotchWidget(
-                    id: "demo-ga-users", kind: .providerMetric, appId: "google-analytics",
-                    metric: "active_subscribers", title: "Active users", size: .wide,
-                    col: 0, row: 0, position: 3, chart: .sparkline),
+                    id: "cat-users", appId: "google-analytics", metric: "active_users",
+                    title: "Active users", size: .square, col: 0, row: 0, position: 0,
+                    chart: .sparkline),
                 NotchWidget(
-                    id: "demo-ga-new", kind: .providerMetric, appId: "google-analytics",
-                    metric: "new_subscribers", title: "New users", size: .wide,
-                    col: 0, row: 0, position: 4, chart: .none),
-                // The other list shape: rows with an outcome rather than an
-                // amount, which is the only tile with icons down its left.
+                    id: "cat-pageviews", appId: "posthog", metric: "pageviews",
+                    title: "Pageviews", size: .square, col: 2, row: 0, position: 1,
+                    chart: .bars),
                 NotchWidget(
-                    id: "demo-ci", kind: .providerMetric, appId: "github",
-                    metric: "ci_runs", title: "CI", size: .square,
-                    col: 0, row: 1, position: 5, chart: .none,
+                    id: "cat-bounce", appId: "plausible", metric: "bounce_rate",
+                    title: "Bounce rate", size: .square, col: 4, row: 0, position: 2,
+                    chart: .gauge),
+            ]
+
+        case .marketing:
+            return [
+                NotchWidget(
+                    id: "cat-clicks", appId: "google-search-console", metric: "clicks",
+                    title: "Clicks", size: .square, col: 0, row: 0, position: 0,
+                    chart: .sparkline),
+                NotchWidget(
+                    id: "cat-impressions", appId: "google-search-console",
+                    metric: "impressions", title: "Impressions", size: .square,
+                    col: 2, row: 0, position: 1, chart: .bars),
+                NotchWidget(
+                    id: "cat-ctr", appId: "google-search-console", metric: "ctr",
+                    title: "CTR", size: .wide, col: 4, row: 0, position: 2, chart: .none),
+                NotchWidget(
+                    id: "cat-position", appId: "google-search-console",
+                    metric: "average_position", title: "Position", size: .wide,
+                    col: 4, row: 1, position: 3, chart: .none),
+            ]
+
+        case .developer:
+            // Every GitHub scalar is a snapshot — the API reports what is
+            // true now and offers no history — so four of these are a figure
+            // and nothing else, and the run feed carries the tile.
+            return [
+                NotchWidget(
+                    id: "cat-ci", appId: "github", metric: "ci_runs", title: "CI",
+                    size: .square, col: 0, row: 0, position: 0, chart: .none,
                     params: ["repository": "haxzie/notch-metrics", "branch": "main"]),
                 NotchWidget(
-                    id: "demo-stars", kind: .customMetric, appId: "github",
-                    customMetricId: "github-stars", title: "Stars", size: .small,
-                    col: 0, row: 0, position: 5, chart: .none),
-            ])
+                    id: "cat-stars", appId: "github", metric: "stars", title: "Stars",
+                    size: .wide, col: 2, row: 0, position: 1, chart: .none,
+                    params: ["repository": "haxzie/notch-metrics"]),
+                NotchWidget(
+                    id: "cat-issues", appId: "github", metric: "open_issues",
+                    title: "Open issues", size: .wide, col: 4, row: 0, position: 2,
+                    chart: .none, params: ["repository": "haxzie/notch-metrics"]),
+                NotchWidget(
+                    id: "cat-forks", appId: "github", metric: "forks", title: "Forks",
+                    size: .wide, col: 2, row: 1, position: 3, chart: .none,
+                    params: ["repository": "haxzie/notch-metrics"]),
+                NotchWidget(
+                    id: "cat-prs", appId: "github", metric: "open_pull_requests",
+                    title: "Open PRs", size: .wide, col: 4, row: 1, position: 4,
+                    chart: .none, params: ["repository": "haxzie/notch-metrics"]),
+            ]
+
+        case .ai:
+            return [
+                NotchWidget(
+                    id: "cat-spend", appId: "openai", metric: "api_spend",
+                    title: "API spend", size: .square, col: 0, row: 0, position: 0,
+                    chart: .sparkline),
+                NotchWidget(
+                    id: "cat-tokens", appId: "anthropic", metric: "tokens",
+                    title: "Tokens", size: .square, col: 2, row: 0, position: 1,
+                    chart: .bars),
+                NotchWidget(
+                    id: "cat-requests", appId: "openai", metric: "api_requests",
+                    title: "Requests", size: .wide, col: 4, row: 0, position: 2,
+                    chart: .none),
+                NotchWidget(
+                    id: "cat-claude-spend", appId: "anthropic", metric: "api_spend",
+                    title: "API spend", size: .wide, col: 4, row: 1, position: 3,
+                    chart: .none),
+            ]
+        }
+    }
+
+    nonisolated private static func demoLayout(_ preset: DemoPreset) -> NotchLayout {
+        NotchLayout(rows: 2, widgets: categoryLayout(preset))
     }
 
     /// Plausible numbers for screenshots and design work.
@@ -1858,100 +2008,242 @@ final class AppEnvironment {
     /// Behind an environment variable and never reachable from the shipped UI:
     /// a dashboard that invents figures when it cannot reach the server is a
     /// dashboard nobody can trust.
-    nonisolated private static func demoStates(for layout: NotchLayout) -> [String: TileState] {
-        func series(_ metric: String, _ value: Double, unit: MetricUnit, currency: String?, trend: [Double])
-            -> MetricSeries
-        {
-            let now = Date()
-            let points = trend.enumerated().map { index, v in
-                MetricPoint(
-                    t: ISO8601.string(
-                        from: now.addingTimeInterval(-Double(trend.count - index) * 86_400)),
-                    v: v)
-            }
-            return MetricSeries(
-                integrationId: "int_demo", metric: metric, unit: unit, currency: currency,
-                value: value, previousValue: trend.first,
-                delta: MetricDelta(
-                    absolute: value - (trend.first ?? value),
-                    percent: ((value - (trend.first ?? value)) / max(1, trend.first ?? 1)) * 100),
-                points: points, granularity: .day, range: .month,
-                from: "", to: "", format: nil,
-                generatedAt: ISO8601.string(from: now), stale: false)
-        }
+    ///
+    /// One company across every preset — roughly $12.8k a month from 1,842
+    /// subscribers — so a launch gallery does not show five unrelated
+    /// businesses one slide apart.
+    /// Which demo metrics carry a time window, and so a "· 30d" in the tile's
+    /// title.
+    ///
+    /// Hand-written here rather than derived, because the real answer lives
+    /// in the server's catalogue and demo mode is the one mode that must not
+    /// ask it. Each is a `series` metric in `packages/integrations`; the
+    /// snapshots beside them — MRR, subscribers, stargazers, open issues —
+    /// are deliberately absent, and a list metric has no window either.
+    nonisolated static let demoTimeWindowedMetrics: Set<String> = [
+        "stripe/revenue",
+        "google-analytics/active_users",
+        "google-analytics/active_subscribers",
+        "google-analytics/new_subscribers",
+        "posthog/pageviews",
+        "plausible/bounce_rate",
+        "google-search-console/clicks",
+        "google-search-console/impressions",
+        "google-search-console/ctr",
+        "google-search-console/average_position",
+        "openai/api_spend",
+        "openai/api_requests",
+        "anthropic/tokens",
+        "anthropic/api_spend",
+    ]
 
-        let demo: [String: MetricSeries] = [
-            "starter-revenue": series(
-                "revenue", 5_567_800, unit: .currency, currency: "USD",
-                trend: [4_120_000, 4_480_000, 4_310_000, 4_950_000, 5_210_000, 5_567_800]),
-            "starter-mrr": series(
-                "mrr", 1_284_500, unit: .currency, currency: "USD",
-                trend: [1_190_000, 1_236_000, 1_284_500]),
-            "starter-subs": series(
-                "active_subscribers", 3_456, unit: .count, currency: nil,
-                trend: [2_980, 3_110, 3_240, 3_300, 3_398, 3_456]),
-            "starter-payments": MetricSeries(
-                integrationId: "int_demo", metric: "recent_payments", unit: .currency,
-                currency: "USD", value: 41_700, points: [], granularity: .day, range: .month,
-                generatedAt: ISO8601.string(from: Date()),
-                items: [
-                    MetricListItem(
-                        id: "1", t: ISO8601.string(from: Date().addingTimeInterval(-420)),
-                        label: "Ada Lovelace", detail: "Pro · yearly", amount: 9_900,
-                        currency: "USD", status: "succeeded"),
-                    MetricListItem(
-                        id: "2", t: ISO8601.string(from: Date().addingTimeInterval(-5_400)),
-                        label: "grace@example.com", detail: "Starter", amount: 1_900,
-                        currency: "USD", status: "succeeded"),
-                    MetricListItem(
-                        id: "3", t: ISO8601.string(from: Date().addingTimeInterval(-19_800)),
-                        label: "Linus T.", detail: "Team", amount: 29_900, currency: "USD",
-                        status: "succeeded"),
-                    MetricListItem(
-                        id: "4", t: ISO8601.string(from: Date().addingTimeInterval(-93_600)),
-                        label: "Margaret H.", detail: "Pro", amount: 4_900, currency: "USD",
-                        status: "refunded"),
-                    MetricListItem(
-                        id: "5", t: ISO8601.string(from: Date().addingTimeInterval(-180_000)),
-                        label: "ken@example.com", detail: "Starter", amount: 1_900,
-                        currency: "USD", status: "succeeded"),
-                ]),
-            "demo-ga-users": series(
-                "active_subscribers", 18_402, unit: .count, currency: nil,
-                trend: [14_900, 15_800, 16_100, 17_400, 17_900, 18_402]),
-            "demo-ga-new": series(
-                "new_subscribers", 2_117, unit: .count, currency: nil,
-                trend: [2_400, 2_310, 2_290, 2_180, 2_140, 2_117]),
-            "demo-ci": MetricSeries(
-                integrationId: "int_demo", metric: "ci_runs", unit: .count, currency: nil,
-                value: 5, points: [], granularity: .day, range: .month,
-                generatedAt: ISO8601.string(from: Date()),
-                items: [
-                    MetricListItem(
-                        id: "101", t: ISO8601.string(from: Date().addingTimeInterval(-240)),
-                        label: "CI", detail: "Tell people when something happened",
-                        status: "success", state: .succeeded),
-                    MetricListItem(
-                        id: "102", t: ISO8601.string(from: Date().addingTimeInterval(-260)),
-                        label: "Deploy the API", detail: "Tell people when something happened",
-                        status: "failure", state: .failed),
-                    MetricListItem(
-                        id: "103", t: ISO8601.string(from: Date().addingTimeInterval(-280)),
-                        label: "Deploy the website", detail: "Tell people when something happened",
-                        status: "in_progress", state: .running),
-                    MetricListItem(
-                        id: "104", t: ISO8601.string(from: Date().addingTimeInterval(-9_000)),
-                        label: "Version and publish", detail: "Cut 0.2.1",
-                        status: "cancelled", state: .neutral),
-                    MetricListItem(
-                        id: "105", t: ISO8601.string(from: Date().addingTimeInterval(-20_000)),
-                        label: "CI", detail: "Step the notch aside",
-                        status: "success", state: .succeeded),
-                ]),
-            "demo-stars": series(
-                "stars", 6_786, unit: .count, currency: nil,
-                trend: [6_310, 6_420, 6_560, 6_700, 6_786]),
-        ]
+    /// `previous` is the window before this one, not the first bucket of this
+    /// one — the two are different numbers and only the first produces an
+    /// honest delta. Defaulted to the first bucket, which is close enough for
+    /// a flat trend and is what the starter layout has always done.
+    nonisolated private static func demoSeries(
+        _ metric: String, _ value: Double, unit: MetricUnit, currency: String? = nil,
+        trend: [Double] = [], previous: Double? = nil, format: MetricFormat? = nil
+    ) -> MetricSeries {
+        let now = Date()
+        let points = trend.enumerated().map { index, v in
+            MetricPoint(
+                t: ISO8601.string(
+                    from: now.addingTimeInterval(-Double(trend.count - index) * 86_400)),
+                v: v)
+        }
+        let before = previous ?? trend.first
+        return MetricSeries(
+            integrationId: "int_demo", metric: metric, unit: unit, currency: currency,
+            value: value, previousValue: before,
+            // Nil, not zero, where there is nothing to compare against. A
+            // metric with no previous window has no delta, and a constructed
+            // one reads as "+0.0%" — which claims the number has not moved.
+            delta: before.map {
+                MetricDelta(absolute: value - $0, percent: ((value - $0) / max(1, $0)) * 100)
+            },
+            points: points, granularity: .day, range: .month,
+            from: "", to: "", format: format,
+            generatedAt: ISO8601.string(from: now), stale: false)
+    }
+
+    /// The payment rows, shared by the starter and revenue presets.
+    nonisolated private static func demoPayments() -> MetricSeries {
+        MetricSeries(
+            integrationId: "int_demo", metric: "recent_payments", unit: .currency,
+            currency: "USD", value: 41_700, points: [], granularity: .day, range: .month,
+            generatedAt: ISO8601.string(from: Date()),
+            items: [
+                MetricListItem(
+                    id: "1", t: ISO8601.string(from: Date().addingTimeInterval(-420)),
+                    label: "Ada Lovelace", detail: "Pro · yearly", amount: 9_900,
+                    currency: "USD", status: "succeeded"),
+                MetricListItem(
+                    id: "2", t: ISO8601.string(from: Date().addingTimeInterval(-5_400)),
+                    label: "grace@example.com", detail: "Starter", amount: 1_900,
+                    currency: "USD", status: "succeeded"),
+                MetricListItem(
+                    id: "3", t: ISO8601.string(from: Date().addingTimeInterval(-19_800)),
+                    label: "Linus T.", detail: "Team", amount: 29_900, currency: "USD",
+                    status: "succeeded"),
+                MetricListItem(
+                    id: "4", t: ISO8601.string(from: Date().addingTimeInterval(-93_600)),
+                    label: "Margaret H.", detail: "Pro", amount: 4_900, currency: "USD",
+                    status: "refunded"),
+                MetricListItem(
+                    id: "5", t: ISO8601.string(from: Date().addingTimeInterval(-180_000)),
+                    label: "ken@example.com", detail: "Starter", amount: 1_900,
+                    currency: "USD", status: "succeeded"),
+            ])
+    }
+
+    /// The CI rows, shared by the starter and developer presets.
+    nonisolated private static func demoRuns() -> MetricSeries {
+        MetricSeries(
+            integrationId: "int_demo", metric: "ci_runs", unit: .count, currency: nil,
+            value: 5, points: [], granularity: .day, range: .month,
+            generatedAt: ISO8601.string(from: Date()),
+            items: [
+                MetricListItem(
+                    id: "101", t: ISO8601.string(from: Date().addingTimeInterval(-240)),
+                    label: "CI", detail: "Tell people when something happened",
+                    status: "success", state: .succeeded),
+                MetricListItem(
+                    id: "102", t: ISO8601.string(from: Date().addingTimeInterval(-260)),
+                    label: "Deploy the API", detail: "Tell people when something happened",
+                    status: "failure", state: .failed),
+                MetricListItem(
+                    id: "103", t: ISO8601.string(from: Date().addingTimeInterval(-280)),
+                    label: "Deploy the website", detail: "Tell people when something happened",
+                    status: "in_progress", state: .running),
+                MetricListItem(
+                    id: "104", t: ISO8601.string(from: Date().addingTimeInterval(-9_000)),
+                    label: "Version and publish", detail: "Cut 0.2.1",
+                    status: "cancelled", state: .neutral),
+                MetricListItem(
+                    id: "105", t: ISO8601.string(from: Date().addingTimeInterval(-20_000)),
+                    label: "CI", detail: "Step the notch aside",
+                    status: "success", state: .succeeded),
+            ])
+    }
+
+    nonisolated private static func demoStates(
+        for layout: NotchLayout, preset: DemoPreset
+    ) -> [String: TileState] {
+        // Bound to a local so the tables below read as data rather than as
+        // six lines of labelled arguments each. Spelled out as a closure
+        // rather than a reference to `demoSeries`, because a function
+        // reference drops both the labels and the defaults.
+        let series = {
+            (
+                metric: String, value: Double, unit: MetricUnit, currency: String?,
+                trend: [Double], previous: Double?
+            ) in
+            demoSeries(
+                metric, value, unit: unit, currency: currency, trend: trend, previous: previous)
+        }
+        var demo: [String: MetricSeries] = [:]
+
+        switch preset {
+        case .starter:
+            demo = [
+                "starter-revenue": series(
+                    "revenue", 5_567_800, .currency, "USD",
+                    [4_120_000, 4_480_000, 4_310_000, 4_950_000, 5_210_000, 5_567_800], nil),
+                "starter-mrr": series(
+                    "mrr", 1_284_500, .currency, "USD",
+                    [1_190_000, 1_236_000, 1_284_500], nil),
+                "starter-subs": series(
+                    "active_subscribers", 3_456, .count, nil,
+                    [2_980, 3_110, 3_240, 3_300, 3_398, 3_456], nil),
+                "starter-payments": demoPayments(),
+                "demo-ga-users": series(
+                    "active_subscribers", 18_402, .count, nil,
+                    [14_900, 15_800, 16_100, 17_400, 17_900, 18_402], nil),
+                "demo-ga-new": series(
+                    "new_subscribers", 2_117, .count, nil,
+                    [2_400, 2_310, 2_290, 2_180, 2_140, 2_117], nil),
+                "demo-ci": demoRuns(),
+                "demo-stars": series(
+                    "stars", 6_786, .count, nil, [6_310, 6_420, 6_560, 6_700, 6_786], nil),
+            ]
+
+        case .revenue:
+            demo = [
+                // Daily takings, which swing — so the delta is against the
+                // previous window's total rather than against the first of
+                // eight days, which is a different number entirely.
+                "cat-revenue": series(
+                    "revenue", 4_821_000, .currency, "USD",
+                    [
+                        412_000, 586_000, 497_000, 638_000, 521_000, 702_000, 594_000,
+                        871_000,
+                    ], 4_063_000),
+                "cat-payments": demoPayments(),
+                // Snapshots. No window, no previous, no delta.
+                "cat-mrr": demoSeries("mrr", 1_284_500, unit: .currency, currency: "USD"),
+                "cat-subs": demoSeries("active_subscribers", 1_842, unit: .count),
+            ]
+
+        case .analytics:
+            demo = [
+                "cat-users": series(
+                    "active_users", 18_402, .count, nil,
+                    [14_900, 15_600, 15_200, 16_400, 16_100, 17_300, 17_800, 18_402], nil),
+                "cat-pageviews": series(
+                    "pageviews", 96_480, .count, nil,
+                    [11_200, 16_400, 12_900, 18_100, 13_600, 19_480], 82_300),
+                // A ratio, so the arc has a ceiling to fill against. Down is
+                // the good direction here, which the falling trend says.
+                "cat-bounce": series(
+                    "bounce_rate", 0.382, .ratio, nil, [0.441, 0.428, 0.409, 0.382], nil),
+            ]
+
+        case .marketing:
+            demo = [
+                "cat-clicks": series(
+                    "clicks", 24_918, .count, nil,
+                    [17_400, 18_200, 17_900, 19_600, 21_300, 20_800, 23_100, 24_918], 20_600),
+                "cat-impressions": series(
+                    "impressions", 612_400, .count, nil,
+                    [68_000, 112_000, 76_000, 131_000, 94_000, 131_400], 524_800),
+                "cat-ctr": series("ctr", 0.0407, .ratio, nil, [0.0388, 0.0394, 0.0407], nil),
+                // A rank, so the tenths matter. Search Console's adapter
+                // sends this format with the series rather than leaving the
+                // tile to round 8.4 down to page-one-or-not.
+                // No trend, so no delta. A rank improving is a number
+                // falling, and nothing on the wire says which direction is
+                // the good one — so a shot with a trend on this tile sells
+                // the product with a red minus against its best news.
+                "cat-position": demoSeries(
+                    "average_position", 8.4, unit: .count,
+                    format: MetricFormat(decimals: 1, compact: false)),
+            ]
+
+        case .developer:
+            demo = [
+                "cat-ci": demoRuns(),
+                "cat-stars": demoSeries("stars", 6_786, unit: .count),
+                "cat-issues": demoSeries("open_issues", 23, unit: .count),
+                "cat-forks": demoSeries("forks", 412, unit: .count),
+                "cat-prs": demoSeries("open_pull_requests", 7, unit: .count),
+            ]
+
+        case .ai:
+            demo = [
+                "cat-spend": series(
+                    "api_spend", 42_860, .currency, "USD",
+                    [28_400, 32_100, 30_600, 35_900, 34_200, 38_700, 40_100, 42_860], nil),
+                "cat-tokens": series(
+                    "tokens", 18_400_000, .count, nil,
+                    [1_820_000, 3_640_000, 2_410_000, 4_180_000, 2_960_000, 3_390_000],
+                    14_900_000),
+                "cat-requests": series(
+                    "api_requests", 142_800, .count, nil, [104_000, 121_000, 142_800], nil),
+                "cat-claude-spend": series(
+                    "api_spend", 21_240, .currency, "USD", [16_800, 19_300, 21_240], nil),
+            ]
+        }
 
         return Dictionary(
             uniqueKeysWithValues: layout.widgets.map { widget in
