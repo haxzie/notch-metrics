@@ -14,6 +14,14 @@
 export interface Env {
   DB: D1Database;
   ASSETS_BUCKET: R2Bucket;
+  /**
+   * Cloudflare Email Sending. See `lib/email.ts`.
+   *
+   * Optional, and bound only in the production environment, so a test run and
+   * a dev stack send nothing at all. A binding is not a secret and needs no
+   * key: the sending domain is authorised on the account, not here.
+   */
+  EMAIL?: SendEmail;
 
   // vars
   APP_URL: string;

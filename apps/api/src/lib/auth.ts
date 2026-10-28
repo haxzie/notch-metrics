@@ -2,8 +2,10 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { schema } from "@notch/db";
 import { createDb } from "./db.ts";
+import { sendWelcome } from "./email.ts";
 import { TRIAL_DAYS } from "./entitlement.ts";
-import { notify } from "./slack.ts";
+import { loadUser } from "./identity.ts";
+import { track } from "./track.ts";
 import { isProduction, required, type Env } from "../env.ts";
 
 /**
@@ -12,11 +14,22 @@ import { isProduction, required, type Env } from "../env.ts";
  * It cannot be a module-scope singleton: the D1 binding only exists on `env`,
  * which only exists inside a request. Construction is cheap.
  *
- * `waitUntil` is how the signup notification stays off the critical path. It
- * is optional because most callers only ever read a session, which fires no
- * hooks — without one the notification is simply awaited.
+ * `waitUntil` is how the signup notification and the welcome email stay off
+ * the critical path. It is optional because most callers only ever read a
+ * session, which fires no hooks — without one they are simply awaited.
  */
 export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => void) {
+  /**
+   * Whether this request is the one that created the account.
+   *
+   * Signing up also creates a session, so both hooks below fire on the same
+   * request and the naive version reports every signup as a signin too, which
+   * quietly inflates the top of the funnel by exactly the number of new users.
+   * A closure variable is enough to tell them apart because `createAuth` is
+   * per request: the two hooks that read it are always the same invocation.
+   */
+  let signedUpThisRequest = false;
+
   return betterAuth({
     database: drizzleAdapter(createDb(env), { provider: "sqlite", schema }),
     secret: required(env, "BETTER_AUTH_SECRET"),
@@ -78,10 +91,51 @@ export function createAuth(env: Env, waitUntil?: (promise: Promise<unknown>) => 
             },
           }),
           // Every account is created through this hook, whichever provider
-          // it came in by — which is why the notification hangs off it
-          // rather than off a route.
+          // it came in by — which is why the notification and the welcome
+          // email hang off it rather than off a route. It fires once per
+          // account, which is what keeps a returning user from being
+          // welcomed twice.
           after: async (user) => {
-            const posted = notify(env, { kind: "signup", email: user.email, name: user.name });
+            signedUpThisRequest = true;
+            const posted = Promise.all([
+              track(env, {
+                kind: "signed_up",
+                userId: user.id,
+                email: user.email,
+                name: user.name,
+              }),
+              sendWelcome(env, { email: user.email, name: user.name }),
+            ]);
+            if (waitUntil) waitUntil(posted);
+            else await posted;
+          },
+        },
+      },
+
+      session: {
+        create: {
+          /**
+           * Every sign-in, by any provider, and nothing else: a session row is
+           * written once per sign-in and the cookie cache serves the rest of
+           * the month from memory without touching this.
+           *
+           * Loads the user because a session row carries an id and no address,
+           * and `$identify` without an address leaves PostHog full of people
+           * called `usr_01h...`. One indexed read on a path that runs once per
+           * sign-in, not once per request.
+           */
+          after: async (session) => {
+            if (signedUpThisRequest) return;
+            const posted = (async () => {
+              const owner = await loadUser(createDb(env), session.userId);
+              if (!owner) return;
+              await track(env, {
+                kind: "signed_in",
+                userId: owner.id,
+                email: owner.email,
+                name: owner.name,
+              });
+            })();
             if (waitUntil) waitUntil(posted);
             else await posted;
           },

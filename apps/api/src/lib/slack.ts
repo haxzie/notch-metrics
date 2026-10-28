@@ -1,6 +1,4 @@
-import { loadUser } from "./identity.ts";
 import { logError } from "./redact.ts";
-import type { Database } from "./db.ts";
 import type { Env } from "../env.ts";
 
 /**
@@ -21,7 +19,8 @@ export type SlackEvent =
   | { kind: "signup"; email: string; name?: string | null; via?: string | null }
   | { kind: "integration_connected"; provider: string; account: string; email: string | null }
   | { kind: "integration_disconnected"; provider: string; account: string; email: string | null }
-  | { kind: "integration_broken"; provider: string; account: string; email: string | null };
+  | { kind: "integration_broken"; provider: string; account: string; email: string | null }
+  | { kind: "custom_app_added"; name: string; appId: string; email: string | null };
 
 /** Which secret holds each channel's webhook. */
 const WEBHOOK: Record<SlackChannel, keyof Env> = {
@@ -43,6 +42,15 @@ function render(event: SlackEvent): { channel: SlackChannel; text: string } {
       return { channel: "events", text: `:heavy_minus_sign: Disconnected ${describe(event)}` };
     case "integration_broken":
       return { channel: "events", text: `:warning: Needs reconnecting — ${describe(event)}` };
+    // The name first, because it is the only part of this message that is not
+    // already known: somebody wrote their own connector and called it that.
+    case "custom_app_added":
+      return {
+        channel: "events",
+        text: `:hammer_and_wrench: Custom app — ${[event.name, event.appId, event.email]
+          .filter(Boolean)
+          .join(" · ")}`,
+      };
   }
 }
 
@@ -102,31 +110,4 @@ function isSlackWebhook(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * The one connection transition worth hearing about: a working one going dead.
- *
- * Takes the row's *previous* status so it fires on the edge rather than on the
- * state. A revoked key fails on every poll, and notifying on the state would
- * mean a message every five minutes until somebody reconnects it.
- *
- * Looks the email up itself: both callers are deep in the refresh path, where
- * the user row is not otherwise needed, and this runs only on the transition.
- */
-export async function notifyBroken(
-  env: Env,
-  db: Database,
-  previousStatus: string,
-  row: { provider: string; label: string; accountLabel: string | null; userId: string },
-): Promise<void> {
-  if (previousStatus === "auth_failed") return;
-  if (env[WEBHOOK.events] === undefined) return;
-  const owner = await loadUser(db, row.userId);
-  await notify(env, {
-    kind: "integration_broken",
-    provider: row.provider,
-    account: row.accountLabel ?? row.label,
-    email: owner?.email ?? null,
-  });
 }

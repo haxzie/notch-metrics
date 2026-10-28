@@ -15,7 +15,7 @@ import { adapterContext, toMetricError } from "./adapter.ts";
 import { openFreshCredentials } from "./token-refresh.ts";
 import { percentChange } from "@notch/integrations";
 import { logError } from "./redact.ts";
-import { notifyBroken } from "./slack.ts";
+import { trackBroken } from "./track.ts";
 import { emitConnectionBroken } from "./notifications.ts";
 import { callRecorder, recordEvent } from "./events.ts";
 import type { RequestTelemetry } from "./telemetry.ts";
@@ -512,7 +512,7 @@ async function recordFailure(
     // The user's notification first, then ours. The Slack ping is gated on a
     // webhook secret being configured; the user's is not.
     await emitConnectionBroken(db, row.status, row);
-    await notifyBroken(env, db, row.status, row);
+    await trackBroken(env, db, row.status, row);
   }
 }
 

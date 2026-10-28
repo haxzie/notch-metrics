@@ -109,7 +109,18 @@
           "migrations_dir": "migrations"
         }
       ],
-      "r2_buckets": [{ "binding": "ASSETS_BUCKET", "bucket_name": "notch" }]
+      "r2_buckets": [{ "binding": "ASSETS_BUCKET", "bucket_name": "notch" }],
+
+      // Transactional email, from `musthaq@notchmetrics.com`. Production
+      // only, for the same reason the bucket above is not `"remote": true`:
+      // the tests read this file, so a binding at the top level would put
+      // every signup test through the send path. Absent, `sendWelcome` is a
+      // no-op, and `test/email.test.ts` stubs the binding instead.
+      //
+      // `notchmetrics.com` must stay onboarded onto Email Sending
+      // (`wrangler email sending enable notchmetrics.com`). Unverified, every
+      // send fails, and the only symptom is a log line in `email.welcome`.
+      "send_email": [{ "name": "EMAIL" }]
     }
   }
 }

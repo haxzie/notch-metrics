@@ -3,6 +3,9 @@ import { eq } from "drizzle-orm";
 import { WidgetLayout } from "@notch/schemas";
 import { widget as widgetTable, widgetRevision } from "@notch/db";
 import { authenticate, type AppContext } from "../middleware.ts";
+import { layoutEvents } from "../lib/layout-events.ts";
+import { loadUser } from "../lib/identity.ts";
+import { track } from "../lib/track.ts";
 import type { Database } from "../lib/db.ts";
 
 /**
@@ -87,6 +90,11 @@ widgets.put("/", async (c) => {
     );
   }
 
+  // Read before the replace, because the replace is what makes the comparison
+  // impossible: a whole-list PUT carries no statement of intent, so "added a
+  // GitHub tile" exists only as the difference between these two lists.
+  const before = await db.select().from(widgetTable).where(eq(widgetTable.userId, userId));
+
   // Whole-list replace. A notch layout is at most a dozen rows, and per-widget
   // PATCH would make a single drag into three round trips with a half-applied
   // state in between.
@@ -123,6 +131,32 @@ widgets.put("/", async (c) => {
       target: widgetRevision.userId,
       set: { revision: next, rows, updatedAt: new Date() },
     });
+
+  // After the write, never before: an event saying somebody added a tile is a
+  // lie if the insert then failed, and this route is not transactional.
+  const events = layoutEvents({
+    userId,
+    revision: next,
+    rows,
+    before,
+    after: body.data.widgets,
+  });
+  if (events.length > 0) {
+    // The address is looked up only for the events that carry one to Slack,
+    // and only when there is one. A drag that reorders tiles produces no
+    // custom-app event, so it costs no read.
+    const needsEmail = events.some(
+      (e) => e.kind === "custom_app_added" || e.kind === "custom_app_removed",
+    );
+    const email = needsEmail ? ((await loadUser(db, userId))?.email ?? null) : null;
+    await track(
+      c.env,
+      events.map((e) =>
+        e.kind === "custom_app_added" || e.kind === "custom_app_removed" ? { ...e, email } : e,
+      ),
+      c.executionCtx.waitUntil.bind(c.executionCtx),
+    );
+  }
 
   return c.json({ revision: next, rows, widgets: body.data.widgets });
 });

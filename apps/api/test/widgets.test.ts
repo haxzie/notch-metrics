@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExecutionContext } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { deviceToken, user, widget, widgetRevision } from "@notch/db";
@@ -63,6 +63,8 @@ const widgetFixture = {
 };
 
 describe("layout round-trip", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("stores and returns the app and the row count", async () => {
     const { token } = await signedInUser();
 
@@ -122,6 +124,44 @@ describe("layout round-trip", () => {
     // The loser needs the winning state back to merge against, which means it
     // has to include the fields it was about to overwrite.
     expect(body.rows).toBe(4);
+  });
+
+  it("reports what the save changed, once the rows are written", async () => {
+    // The wiring, not the diff: `layout-events.test.ts` covers the inference.
+    // What this checks is that the route reads the old list before replacing
+    // it, and reports after the insert rather than before.
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (String(url).includes("posthog")) posts.push(JSON.parse(String(init.body)));
+      return new Response("ok");
+    });
+
+    const { token } = await signedInUser();
+    const analytics = { ...env, POSTHOG_PROJECT_TOKEN: "phc_test" };
+    const put = (revision: number, widgets: unknown[]) =>
+      worker.fetch(
+        new Request("http://localhost:8787/v1/widgets", {
+          method: "PUT",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ revision, widgets }),
+        }),
+        analytics,
+        ctx,
+      );
+
+    await put(0, [widgetFixture]);
+    await put(1, []);
+
+    const names = posts.flatMap((body) =>
+      ((body.batch ?? []) as { event: string }[]).map((e) => e.event),
+    );
+    expect(names).toContain("widget_added");
+    expect(names).toContain("widget_removed");
+    expect(names).toContain("layout_saved");
+
+    // And the rows really are gone, so the removal was not reported early.
+    const left = await (await call("/v1/widgets", token)).json<{ widgets: unknown[] }>();
+    expect(left.widgets).toHaveLength(0);
   });
 
   it("refuses another user's layout without confirming it exists", async () => {

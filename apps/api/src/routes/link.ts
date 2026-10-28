@@ -10,7 +10,7 @@ import { fingerprint, openCredentials, sealCredentials } from "../lib/crypto.ts"
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id, randomToken, sha256Base64Url } from "../lib/ids.ts";
 import { loadUser } from "../lib/identity.ts";
-import { notify } from "../lib/slack.ts";
+import { track } from "../lib/track.ts";
 import { logError } from "../lib/redact.ts";
 import { oauthClient } from "../lib/oauth-client.ts";
 import { seedSubscriptions } from "../lib/notifications.ts";
@@ -270,13 +270,17 @@ async function finishConnection(
   // API-key submit meet here, so hooking the routes instead would be the same
   // line written twice and forgotten once.
   const owner = await loadUser(db, row.userId);
-  c.executionCtx.waitUntil(
-    notify(c.env, {
+  await track(
+    c.env,
+    {
       kind: "integration_connected",
+      userId: row.userId,
+      email: owner?.email ?? null,
       provider: row.connectorId,
       account: verified.accountLabel ?? row.connectorId,
-      email: owner?.email ?? null,
-    }),
+      integrationId,
+    },
+    c.executionCtx.waitUntil.bind(c.executionCtx),
   );
 
   return {

@@ -5,7 +5,9 @@ import { subscription, user, webhookEvent } from "@notch/db";
 import { required, type Env } from "../../env.ts";
 import type { AppContext } from "../../middleware.ts";
 import { id } from "../../lib/ids.ts";
+import { loadUser } from "../../lib/identity.ts";
 import { logError } from "../../lib/redact.ts";
+import { track } from "../../lib/track.ts";
 
 /**
  * Dodo Payments webhooks. The only thing in this codebase that writes a plan.
@@ -115,8 +117,9 @@ dodoWebhook.post("/", async (c) => {
     return c.json({ ok: true, ignored: true });
   }
 
+  let status: string | null;
   try {
-    await apply(db, c.env.DODOPAYMENT_MODE, userId, event);
+    status = await apply(db, c.env.DODOPAYMENT_MODE, userId, event);
   } catch (error) {
     logError("webhooks.dodo.apply", error);
     // 500 so Dodo retries. The event id row is already written, so the retry
@@ -125,15 +128,43 @@ dodoWebhook.post("/", async (c) => {
     return c.json({ code: "ERROR", message: "Could not apply." }, 500);
   }
 
+  // Only for the event types that moved the subscription. Dodo sends a good
+  // deal more than those, and `apply` ignoring one is the signal that it is
+  // not worth a row in anybody's funnel.
+  //
+  // Read after `apply`, so `plan` is the value it just wrote rather than the
+  // one it replaced.
+  if (status) {
+    const owner = await loadUser(db, userId);
+    await track(
+      c.env,
+      {
+        kind: "subscription_changed",
+        userId,
+        email: owner?.email ?? null,
+        status,
+        dodoEvent: event.type,
+        plan: owner?.plan ?? null,
+      },
+      c.executionCtx.waitUntil.bind(c.executionCtx),
+    );
+  }
+
   return c.json({ ok: true });
 });
 
+/**
+ * Applies one event, and returns the subscription status it wrote.
+ *
+ * Returns null for an event it ignores, which is what the caller uses to
+ * decide whether anything happened worth reporting.
+ */
 async function apply(
   db: import("../../lib/db.ts").Database,
   _mode: string,
   userId: string,
   event: DodoEvent,
-): Promise<void> {
+): Promise<string | null> {
   const data = event.data ?? {};
   const now = new Date();
 
@@ -160,28 +191,28 @@ async function apply(
     case "subscription.renewed":
       await upsert("active", null);
       await db.update(user).set({ plan: "pro" }).where(eq(user.id, userId));
-      break;
+      return "active";
 
     case "subscription.on_hold":
     case "subscription.failed":
       // Keep access through the grace window. A card that expires on a Friday
       // should not blank somebody's dashboard over the weekend.
       await upsert("past_due", new Date(now.getTime() + GRACE_DAYS * 24 * 3600 * 1000));
-      break;
+      return "past_due";
 
     case "subscription.cancelled":
       await upsert("cancelled", null);
       // Deliberately not dropping the plan here. A cancellation usually means
       // "do not renew"; `currentPeriodEnd` is what the cron watches, and
       // cutting access the moment somebody cancels is a refund request.
-      break;
+      return "cancelled";
 
     case "subscription.expired":
       await upsert("expired", null);
       await db.update(user).set({ plan: "expired" }).where(eq(user.id, userId));
-      break;
+      return "expired";
 
     default:
-      break;
+      return null;
   }
 }

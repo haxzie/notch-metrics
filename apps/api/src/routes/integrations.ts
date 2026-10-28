@@ -11,7 +11,7 @@ import { callRecorder, recordEvent } from "../lib/events.ts";
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id } from "../lib/ids.ts";
 import { loadUser } from "../lib/identity.ts";
-import { notify } from "../lib/slack.ts";
+import { track } from "../lib/track.ts";
 import { logError } from "../lib/redact.ts";
 import type { Database } from "../lib/db.ts";
 
@@ -176,13 +176,17 @@ integrations.post("/", sessionOnly, rateLimited({ limit: 20, windowSeconds: 3600
 
   const row = await owned(db, userId, rowId);
   if (row) {
-    c.executionCtx.waitUntil(
-      notify(c.env, {
+    await track(
+      c.env,
+      {
         kind: "integration_connected",
+        userId: row.userId,
+        email: user.email,
         provider: row.provider,
         account: row.accountLabel ?? row.label,
-        email: user.email,
-      }),
+        integrationId: row.id,
+      },
+      c.executionCtx.waitUntil.bind(c.executionCtx),
     );
   }
   return row
@@ -267,13 +271,17 @@ integrations.delete("/:id", async (c) => {
   // the channel it is posted to.
   const owner = await loadUser(db, row.userId);
   await db.delete(integrationTable).where(eq(integrationTable.id, row.id));
-  c.executionCtx.waitUntil(
-    notify(c.env, {
+  await track(
+    c.env,
+    {
       kind: "integration_disconnected",
+      userId: row.userId,
+      email: owner?.email ?? null,
       provider: row.provider,
       account: row.accountLabel ?? row.label,
-      email: owner?.email ?? null,
-    }),
+      integrationId: row.id,
+    },
+    c.executionCtx.waitUntil.bind(c.executionCtx),
   );
   return c.json({ ok: true });
 });

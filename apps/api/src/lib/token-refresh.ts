@@ -12,7 +12,7 @@ import { openCredentials, sealCredentials, sealedFromRow } from "./crypto.ts";
 import type { Database } from "./db.ts";
 import { oauthClient } from "./oauth-client.ts";
 import { logError } from "./redact.ts";
-import { notifyBroken } from "./slack.ts";
+import { trackBroken } from "./track.ts";
 import { emitConnectionBroken } from "./notifications.ts";
 import { recordEvent } from "./events.ts";
 
@@ -187,7 +187,7 @@ export async function openFreshCredentials(
       // The user's notification first, then ours. The Slack ping is gated on a
       // webhook secret being configured; the user's is not.
       await emitConnectionBroken(db, row.status, row);
-      await notifyBroken(env, db, row.status, row);
+      await trackBroken(env, db, row.status, row);
       return { credentials, refreshed: false };
     }
 
@@ -217,7 +217,7 @@ export async function openFreshCredentials(
     });
     if (giveUp) {
       await emitConnectionBroken(db, row.status, row);
-      await notifyBroken(env, db, row.status, row);
+      await trackBroken(env, db, row.status, row);
     }
     return { credentials, refreshed: false };
   }
