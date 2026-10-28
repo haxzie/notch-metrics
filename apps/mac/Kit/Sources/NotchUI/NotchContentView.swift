@@ -924,12 +924,25 @@ public struct NotchContentView: View {
         return Capsule()
             .fill(lit ? NotchTheme.editHighlight : Color.white.opacity(0.22))
             .frame(width: lit ? 56 : 44, height: Self.grabberCapsuleHeight)
-            // The hit area is the full width and much taller than the capsule:
-            // a 44x4 target is below every sane minimum, and the band is the
+            // The hit area is the full width and the whole band's height: a
+            // 44x4 target is below every sane minimum, and the band is the
             // last thing in the panel, so the pointer arrives at it from
             // outside and should find it before it reaches the capsule itself.
-            .padding(.vertical, (Self.grabberHeight - Self.grabberCapsuleHeight) / 2)
-            .frame(maxWidth: .infinity)
+            // `maxHeight` rather than the band's height written out, so the
+            // taller update band is covered too — at a fixed `grabberHeight`
+            // the chip's extra 20pt sat under the capsule as dead glass.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // And it reaches `grabberOutsideReach` *past* the panel's bottom
+            // edge, which is where the pointer is when it arrives: all of the
+            // band's slack used to be inside, so a pointer walking up from
+            // below the notch crossed the edge before the cursor changed, and
+            // the handle read as inert from the one direction people approach
+            // it. The negative padding takes the overhang back out of the
+            // layout, so the band is still the height `expandedSize` reserves.
+            // `NotchWindowController.expandedScreenRect` has to allow the same
+            // reach, or hovering the overhang is a pointer exit and collapses
+            // the notch instead of offering the handle.
+            .padding(.bottom, Self.grabberOutsideReach)
             .contentShape(Rectangle())
             // The cursor comes from `pointerStyle`, which SwiftUI resolves on
             // the hosting view's own cursor-update pass. Setting `NSCursor`
@@ -952,6 +965,10 @@ public struct NotchContentView: View {
                 }
             }
             .gesture(resizeGesture)
+            // Last, so every interactive modifier above it is attached to the
+            // view that includes the overhang. Applied earlier, the hover and
+            // the gesture would be the ones the smaller frame gets to keep.
+            .padding(.bottom, -Self.grabberOutsideReach)
             .animation(.easeOut(duration: 0.14), value: lit)
             .accessibilityLabel("Resize")
             .accessibilityValue("\(model.displayed.rows) rows")
@@ -1123,13 +1140,22 @@ public struct NotchContentView: View {
 
     /// The handle's whole band, capsule plus the slack that makes it hittable.
     ///
-    /// The band's padding is derived from this rather than written out beside
-    /// it. The two were 20 and 19, which left the handle's last point outside
+    /// The band fills this rather than carrying a padding derived from it. The
+    /// two numbers were 20 and 19, which left the handle's last point outside
     /// the height `expandedSize` reserved for it — so the capsule sat on the
     /// panel's bottom edge instead of inside it, and the bottom of the pointer
     /// target hung over nothing.
     static let grabberHeight: CGFloat = 22
     static let grabberCapsuleHeight: CGFloat = 4
+
+    /// How far the handle's target hangs below the panel's bottom edge.
+    ///
+    /// The edge is not where the gesture starts — the pointer comes up at the
+    /// notch from the screen below it, so the first points it crosses are
+    /// outside the panel entirely. Everything inside is already covered by the
+    /// band; this is the part that makes the cursor change *before* the user
+    /// has to find a 22pt strip by feel.
+    static let grabberOutsideReach: CGFloat = 10
 
     /// How tall the configure pane opens: whatever the form measured, clamped.
     ///

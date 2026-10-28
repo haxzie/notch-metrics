@@ -496,8 +496,17 @@ public final class NotchWindowController {
             height: size.height)
 
         // A few points of slack, so a pointer resting exactly on the border
-        // does not flicker the notch open and shut.
-        return rect.insetBy(dx: -4, dy: -4)
+        // does not flicker the notch open and shut. The bottom edge gets the
+        // resize handle's overhang instead: the handle's target deliberately
+        // hangs below the panel, and with 4pt there the pointer arriving at it
+        // from the screen below counted as having left — so the notch began
+        // collapsing under the gesture it was being offered.
+        let bottom = max(4, NotchContentView.grabberOutsideReach)
+        return CGRect(
+            x: rect.minX - 4,
+            y: rect.minY - bottom,
+            width: rect.width + 8,
+            height: rect.height + 4 + bottom)
     }
 
     public func expand() {
