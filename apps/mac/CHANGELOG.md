@@ -1,5 +1,17 @@
 # @notch/mac
 
+## 0.4.2
+
+### Patch Changes
+
+- [`0d5a572`](https://github.com/haxzie/notch-metrics/commit/0d5a5723442c0fabc87403d08de7034842817445) Thanks [@haxzie](https://github.com/haxzie)! - Find the resize handle on the way in, not after you have passed it.
+
+  The handle's target sat entirely inside the panel, so a pointer coming up at
+  the notch from the screen below had to cross the bottom edge before the cursor
+  changed, and the handle read as inert from the one direction people approach
+  it. It now reaches a little past the edge, and the whole band is hittable when
+  an update chip is sharing it.
+
 ## 0.4.1
 
 ### Patch Changes

@@ -5,5 +5,5 @@
 // targets.*.settings in project.yml: a target build setting *overrides* an
 // xcconfig value, so the app would ship a stale literal with this file sitting
 // right here looking correct.
-MARKETING_VERSION = 0.4.1
-CURRENT_PROJECT_VERSION = 110
+MARKETING_VERSION = 0.4.2
+CURRENT_PROJECT_VERSION = 112
