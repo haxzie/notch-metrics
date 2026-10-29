@@ -1,3 +1,4 @@
+import { GoogleAnalytics } from "@next/third-parties/google";
 import type { Metadata } from "next";
 import { ReactGrab } from "@/components/ReactGrab";
 import { OG_IMAGE, OG_SIZE } from "@/lib/og";
@@ -40,12 +41,28 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Google Analytics, alongside PostHog rather than instead of it. The two
+ * answer different questions: GA is the acquisition picture that Search
+ * Console and Ads already speak, PostHog is what somebody did once they
+ * arrived and who they turned out to be.
+ *
+ * Unset is no tag at all, which is what a preview build and a local run
+ * should get. A measurement id is public, so this is a variable in
+ * `deploy-web.yml` and not a secret.
+ */
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen antialiased">
         {children}
         <ReactGrab />
+        {/* `@next/third-parties` rather than a hand-written `<Script>`: it
+            loads gtag after hydration and handles App Router navigation, so
+            this stays a server component and the pages stay static. */}
+        {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
       </body>
     </html>
   );

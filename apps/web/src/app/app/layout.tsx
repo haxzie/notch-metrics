@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
 
@@ -23,6 +24,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  // The same `distinct_id` the Worker uses, which is the whole point of doing
+  // this here. `lib/track.ts` identifies by user id on sign-up and sign-in, so
+  // keying the browser off the same id joins a visit to the account it became
+  // rather than leaving an anonymous session and a `usr_...` as two strangers.
+  //
+  // This is the one place on the site that reliably knows who somebody is.
+  // Identifying is cheap and repeat calls are a no-op once the id matches, so
+  // it runs whenever the session resolves rather than chasing a sign-in event.
+  const userId = session?.user?.id;
+  const userEmail = session?.user?.email;
+  useEffect(() => {
+    if (!userId) return;
+    posthog.identify(userId, userEmail ? { email: userEmail } : undefined);
+  }, [userId, userEmail]);
 
   // A client-side guard, not a security boundary — every route this page
   // calls is authorised on the Worker. This only avoids rendering a shell
@@ -101,7 +117,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               type="button"
               title="Sign out"
               aria-label="Sign out"
-              onClick={() => void signOut().then(() => window.location.replace("/"))}
+              onClick={() =>
+                void signOut().then(() => {
+                  // Or the next person on this browser inherits the last
+                  // one's identity, and a shared machine becomes one person
+                  // with two accounts' worth of behaviour.
+                  posthog.reset();
+                  window.location.replace("/");
+                })
+              }
               className="rounded-md p-1.5 text-white/45 transition hover:bg-white/[0.06] hover:text-white"
             >
               <SignOutIcon className="size-4" />

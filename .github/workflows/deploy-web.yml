@@ -45,6 +45,16 @@ jobs:
       NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://notchmetrics.com' }}
       NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.notchmetrics.com' }}
       NEXT_PUBLIC_ASSETS_URL: ${{ vars.NOTCH_ASSETS_URL || 'https://assets.notchmetrics.com' }}
+      # A repository *variable*, not a secret. A PostHog project token is
+      # readable in the page source of every site that uses one; it only
+      # permits writing events into the project it names. Left unset, the
+      # bundle simply carries no analytics, which is what a fork or a preview
+      # build should get.
+      NEXT_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+      NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
+      # Also a variable: a GA measurement id is in the page source of every
+      # site that uses one.
+      NEXT_PUBLIC_GA_ID: ${{ vars.NEXT_PUBLIC_GA_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

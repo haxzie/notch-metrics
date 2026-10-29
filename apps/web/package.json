@@ -14,6 +14,7 @@
     "og": "node scripts/generate-og.mjs"
   },
   "dependencies": {
+    "@next/third-parties": "^16.4.3",
     "@notch/env": "workspace:*",
     "@notch/integrations": "workspace:*",
     "@notch/schemas": "workspace:*",
@@ -21,6 +22,7 @@
     "gray-matter": "^4.0.3",
     "marked": "^18.1.0",
     "next": "^16.4.3",
+    "posthog-js": "^1.297.3",
     "rangi": "^2.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
