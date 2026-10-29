@@ -26,8 +26,10 @@ describe("the welcome email", () => {
       email: "musthaq@notchmetrics.com",
       name: "Musthaq from Notch Metrics",
     });
-    // The email asks for a reply, so a no-reply sender would make it a lie.
-    expect(message?.replyTo).toBe("musthaq@notchmetrics.com");
+    // The email asks for a reply, and the sending domain cannot receive one:
+    // `notchmetrics.com` has no apex MX. Replies go to an inbox that exists.
+    expect(message?.replyTo).toBe("musthaq@sequel.sh");
+    expect(message?.replyTo).not.toContain("notchmetrics.com");
   });
 
   it("greets by first name only, and copes with no name at all", async () => {

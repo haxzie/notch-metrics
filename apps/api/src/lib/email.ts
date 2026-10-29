@@ -17,8 +17,22 @@ import { isProduction, type Env } from "../env.ts";
  * send comes back as a 4xx naming an unverified sender.
  */
 
-/** Replies are the point of the welcome email, so this must be a real inbox. */
+/**
+ * Who the message is from, and where an answer to it goes. They are two
+ * different domains on purpose.
+ *
+ * `notchmetrics.com` is onboarded onto Cloudflare Email Sending, so it can
+ * send; it has no apex MX, so nothing addressed to it is ever delivered.
+ * Replies therefore go to `sequel.sh`, which runs on Google Workspace and has
+ * a real inbox behind it. Pointing `replyTo` at the sending domain instead
+ * would make the one sentence this email exists for into a lie.
+ *
+ * Changing `FROM` to a domain that is not on Email Sending fails every send
+ * with a 4xx naming an unverified sender. `replyTo` carries no such
+ * requirement: nobody has to authorise a domain to be written to.
+ */
 const FROM = { email: "musthaq@notchmetrics.com", name: "Musthaq from Notch Metrics" } as const;
+const REPLY_TO = "musthaq@sequel.sh";
 
 /**
  * Welcomes one new account.
@@ -50,7 +64,7 @@ export async function sendWelcome(
     await binding.send({
       to: recipient.email,
       from: FROM,
-      replyTo: FROM.email,
+      replyTo: REPLY_TO,
       subject,
       text,
       html,
