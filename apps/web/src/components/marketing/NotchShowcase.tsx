@@ -32,7 +32,7 @@ export function NotchShowcase() {
     <NotchMockup
       widgets={persona?.widgets ?? []}
       controls={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <Arrow label="Previous setup" onClick={() => go(index - 1)} />
           <div
             role="tablist"
@@ -70,7 +70,11 @@ function Arrow({ label, onClick, flip }: { label: string; onClick: () => void; f
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="border-ink/[0.06] text-ink/60 hover:text-ink flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-white/80 shadow-[0_10px_30px_-14px_rgba(11,10,14,0.4)] backdrop-blur-xl transition"
+      /* Hidden on a phone, where the three tabs and two 40px arrows together
+         are wider than the screen and both arrows end up half cut off. The
+         tabs are the real control; the arrows are a desktop affordance, so
+         they are the part that goes. */
+      className="border-ink/[0.06] text-ink/60 hover:text-ink hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-white/80 shadow-[0_10px_30px_-14px_rgba(11,10,14,0.4)] backdrop-blur-xl transition min-[420px]:flex"
     >
       <svg
         viewBox="0 0 24 24"

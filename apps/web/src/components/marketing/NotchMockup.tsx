@@ -33,10 +33,14 @@ export function NotchMockup({
         <div className="relative overflow-hidden rounded-t-[27px] bg-[#f1ecf5]">
           <MenuBar />
 
-          <div className="relative h-[590px] sm:h-[620px]">
+          {/* The desktop under the notch, sized so the panel keeps roughly the
+              same share of the screen at every width. The panel scales down on
+              a phone (see NOTCH_SCALE) and a fixed height would leave it
+              floating at the top of a great field of empty wallpaper. */}
+          <div className="relative h-[340px] min-[400px]:h-[380px] min-[440px]:h-[420px] min-[520px]:h-[480px] min-[600px]:h-[545px] sm:h-[575px] md:h-[620px]">
             <ExpandedNotch widgets={widgets} />
             {controls && (
-              <div className="absolute inset-x-0 bottom-[148px] z-20 flex justify-center px-4">
+              <div className="absolute inset-x-0 bottom-[86px] z-20 flex justify-center px-3 min-[440px]:bottom-[100px] min-[600px]:bottom-[120px] sm:px-4 md:bottom-[148px]">
                 {controls}
               </div>
             )}
@@ -50,7 +54,9 @@ export function NotchMockup({
           rates and leave the bezel as two grey legs. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[128px]"
+        /* Shorter on a phone, where the screen itself is shorter: a fixed
+           128px fade would reach up over the setup picker and grey it out. */
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[80px] sm:h-[110px] md:h-[128px]"
         style={{
           background:
             "linear-gradient(to bottom, rgba(251,250,252,0) 0%, rgba(251,250,252,0.72) 46%, rgba(251,250,252,0.97) 72%, #fbfafc 86%)",
@@ -75,15 +81,24 @@ function MenuBar() {
       aria-hidden
       className="text-ink/70 absolute inset-x-0 top-0 z-0 flex h-[30px] items-center justify-between px-3 text-[11px]"
     >
-      <div className="flex items-center gap-3.5">
+      <div className="flex min-w-0 items-center gap-2.5 sm:gap-3.5">
         <AppleMenuMark />
         {MENUS.map((menu, index) => (
-          <span key={menu} className={index === 0 ? "text-ink font-semibold" : ""}>
+          <span
+            key={menu}
+            className={`${index === 0 ? "text-ink font-semibold" : ""} ${
+              // A real menu bar drops the menus it has no room for, so the
+              // mockup does too. Keeping all six on a phone pushed the clock
+              // off the right edge, which is the one part of the bar a
+              // reader checks against their own screen.
+              index >= 2 ? "hidden sm:inline" : ""
+            }`}
+          >
             {menu}
           </span>
         ))}
       </div>
-      <div className="flex items-center gap-2.5">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
         <BatteryMark />
         <WifiMark />
         <ControlCentreMark />
@@ -150,9 +165,43 @@ const SPANS: Record<NonNullable<Widget["span"]>, string> = {
   "2x2": "col-span-2 row-span-2",
 };
 
+/**
+ * The panel is drawn at one fixed width and scaled down to fit, rather than
+ * being allowed to narrow.
+ *
+ * It is a picture of a fixed geometry: six columns, type sized in pixels
+ * against a 660px panel, tiles with a minimum height. Let the width shrink on
+ * a phone and the columns land at about fifty pixels each while the type stays
+ * where it was, so `$12,480` sits on top of its own sparkline and every label
+ * truncates to an ellipsis. Reflowing to fewer columns would be a different
+ * misstatement: the app really is six wide, and the claim this section makes
+ * is that nine numbers fit at once. Scaling keeps every proportion and costs
+ * only absolute size, which is what a notch looks like from across a room.
+ *
+ * Steps rather than a `vw` expression, because the honest version of this is
+ * `min(1, available / 660px)` and CSS cannot divide a length by a length to
+ * get the number `scale()` wants. A `min()` mixing the two is invalid and is
+ * dropped silently, which looks exactly like the bug it was meant to fix.
+ *
+ * Each step is the largest that still fits inside the frame at that width:
+ * the screen is the viewport less the 7px bezel on each side.
+ */
+const NOTCH_SCALE = [
+  "scale-[0.44]",
+  "min-[360px]:scale-[0.5]",
+  "min-[400px]:scale-[0.56]",
+  "min-[440px]:scale-[0.62]",
+  "min-[520px]:scale-[0.74]",
+  "min-[600px]:scale-[0.86]",
+  "sm:scale-[0.92]",
+  "md:scale-100",
+].join(" ");
+
 function ExpandedNotch({ widgets }: { widgets: Widget[] }) {
   return (
-    <div className="absolute left-1/2 top-[-1px] z-10 w-[min(660px,94%)] -translate-x-1/2 rounded-b-[30px] bg-black p-3 pt-[13px] shadow-[0_30px_60px_-20px_rgba(11,10,14,0.45)]">
+    <div
+      className={`absolute left-1/2 top-[-1px] z-10 w-[660px] origin-top -translate-x-1/2 rounded-b-[30px] bg-black p-3 pt-[13px] shadow-[0_30px_60px_-20px_rgba(11,10,14,0.45)] ${NOTCH_SCALE}`}
+    >
       <Flares />
       <DrawerHeader />
       <div className="grid grid-cols-6 grid-rows-3 gap-2">
