@@ -1,5 +1,17 @@
 # @notch/mac
 
+## 0.4.3
+
+### Patch Changes
+
+- [`1ff2f82`](https://github.com/haxzie/notch-metrics/commit/1ff2f8221021d57e15023a42e9ab16420277dcd3) Thanks [@haxzie](https://github.com/haxzie)! - Money with cents now reads as money: $428.60 rather than $428.6. The minimum
+  fraction digits were zero, so an amount whose cents ended in a zero lost one of
+  its two decimal places.
+
+  A metric's own format is also honoured where the widget has not overridden it,
+  which is what makes Search Console's average position read 8.4 rather than
+  rounding to the integer a rank is never quoted as.
+
 ## 0.4.2
 
 ### Patch Changes
