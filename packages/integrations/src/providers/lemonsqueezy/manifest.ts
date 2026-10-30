@@ -28,6 +28,12 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       help: "Leave empty to total every store on the account.",
     },
   ],
+  setupSteps: [
+    { text: "Open Settings, then API.", url: "https://app.lemonsqueezy.com/settings/api" },
+    { text: "Create an API key." },
+    { text: "Copy the key, then paste it above." },
+    { text: "Leave Store ID empty to total every store." },
+  ],
   notifications: [
     paymentReceivedNotification("An order marked paid. Subscription renewals count."),
   ],

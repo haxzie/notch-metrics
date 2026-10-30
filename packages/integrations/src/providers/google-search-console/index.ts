@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Granularity, MetricId, ProviderManifest } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import {
   googleErrorReason,
   googleHeaders,
@@ -68,7 +68,7 @@ async function errorFor(response: HttpResponse): Promise<ProviderError> {
       "Google refused the request. Check the Search Console API is enabled and this account can see the property.",
     );
   }
-  return errorForStatus("www.googleapis.com", response);
+  return errorForResponse("www.googleapis.com", response);
 }
 
 interface SiteEntry {

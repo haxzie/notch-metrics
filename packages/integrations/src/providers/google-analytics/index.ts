@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId, ProviderManifest } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import {
   googleErrorReason,
   googleHeaders,
@@ -77,7 +77,7 @@ async function errorFor(response: HttpResponse): Promise<ProviderError> {
       "Google refused the request. Check the Google Analytics Data API is enabled and this account can see the property.",
     );
   }
-  return errorForStatus("analyticsdata.googleapis.com", response);
+  return errorForResponse("analyticsdata.googleapis.com", response);
 }
 
 /**

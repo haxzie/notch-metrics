@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Granularity, MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { bucketSum } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -37,14 +37,14 @@ function host(creds: PosthogCredentials): string {
  * answers the same 401 either way. Somebody who picked the wrong region
  * would otherwise spend the afternoon rolling a key that was fine.
  */
-function errorFor(creds: PosthogCredentials, response: HttpResponse): ProviderError {
+async function errorFor(creds: PosthogCredentials, response: HttpResponse): Promise<ProviderError> {
   if (response.status === 401) {
     return new ProviderError(
       "auth_failed",
       `PostHog rejected this key. Check it is a ${creds.region.toUpperCase()} Cloud key — the other region answers 401 too.`,
     );
   }
-  return errorForStatus(host(creds), response);
+  return errorForResponse(host(creds), response);
 }
 
 async function request<T>(
@@ -62,7 +62,7 @@ async function request<T>(
       ...init.headers,
     },
   });
-  if (!response.ok) throw errorFor(creds, response);
+  if (!response.ok) throw await errorFor(creds, response);
   return response.json<T>();
 }
 

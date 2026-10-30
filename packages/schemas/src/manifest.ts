@@ -216,6 +216,38 @@ export const OAuthDescriptor = z.object({
 });
 export type OAuthDescriptor = z.infer<typeof OAuthDescriptor>;
 
+/**
+ * One line of "where do I get this key", rendered as a numbered list in the
+ * accordion under the connect form.
+ *
+ * Steps rather than one prose blob, because the thing being described is a
+ * sequence and a user is doing it with one eye on each window. `help` on the
+ * field stays what it is: one sentence about *this* input. These are the walk
+ * to the page the input is filled from.
+ *
+ * In the manifest rather than in `apps/web` for the same reason the taglines
+ * and the methodology strings are: a new connector then ships its own
+ * instructions with no website deploy, and `/sources` can render them from
+ * the same place.
+ *
+ * These are read by a user, so `apps/web/COPY.md` governs the wording and not
+ * the house comment style around them. British spelling, no em dashes, and
+ * under about fifteen words each.
+ */
+export const SetupStep = z.object({
+  text: z.string(),
+  /**
+   * The exact page this step happens on, when there is one.
+   *
+   * Per step rather than one `docsUrl` for the whole flow, because "open the
+   * API keys page" and "find your store id" are usually two different screens
+   * and sending somebody to the first when they need the second is the part
+   * people get stuck on.
+   */
+  url: z.url().optional(),
+});
+export type SetupStep = z.infer<typeof SetupStep>;
+
 export const ProviderManifest = z.object({
   id: ProviderId,
   name: z.string(),
@@ -258,6 +290,14 @@ export const ProviderManifest = z.object({
    * by a human — but some need something alongside, like Plausible's site id.
    */
   fields: z.array(AuthField),
+  /**
+   * How to get what `fields` asks for.
+   *
+   * Optional, on the same reasoning as `notifications`: an OAuth connector
+   * has no key to fetch and omits the key, and an app that has never heard of
+   * the field ignores it rather than failing to decode the whole catalogue.
+   */
+  setupSteps: z.array(SetupStep).optional(),
   metrics: z.array(MetricDescriptor).nonempty(),
   /**
    * What this connector can notify about.

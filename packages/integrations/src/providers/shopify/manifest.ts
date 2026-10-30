@@ -35,6 +35,14 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       pattern: "^shp(at|ca)_[A-Za-z0-9]+$",
     },
   ],
+  setupSteps: [
+    { text: "Open Settings, then Apps and sales channels." },
+    { text: "Select Develop apps, then create an app." },
+    { text: "Give it read_orders, read_customers and read_products." },
+    { text: "Install the app, then open API credentials." },
+    { text: "Copy the Admin API access token, then paste it above." },
+    { text: "Your store domain ends .myshopify.com, not your custom domain." },
+  ],
   // One wildcard label deep, which is exactly what a shop domain is. The
   // allowlist is re-checked on every redirect hop, so a store that has been
   // renamed and 30x-es to its new domain fails here rather than replaying the

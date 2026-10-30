@@ -41,6 +41,12 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       default: "us",
     },
   ],
+  setupSteps: [
+    { text: "Open Settings, then Projects, then the project you want." },
+    { text: "Open the General tab." },
+    { text: "Copy both the API key and the secret key." },
+    { text: "Pick the region that project lives in." },
+  ],
   allowedHosts: ["amplitude.com", "analytics.eu.amplitude.com"],
   // Beta until the numbers have been read back against a live project's own
   // charts. Every call here is shaped from Amplitude's documentation rather

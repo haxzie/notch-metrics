@@ -1,11 +1,12 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
 import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
 import type {
   AdapterContext,
+  HttpResponse,
   RawListItem,
   MetricRequest,
   ProviderAdapter,
@@ -58,8 +59,43 @@ async function get<T>(
       "stripe-version": "2024-06-20",
     },
   });
-  if (!response.ok) throw errorForStatus("api.stripe.com", response);
+  if (!response.ok) throw await failure(response);
   return response.json<T>();
+}
+
+/**
+ * Stripe's 4xx, with the one status the generic mapping reads backwards.
+ *
+ * 402 is documented as "the parameters were valid but the request failed",
+ * deliberately distinct from 401 (no valid key) and 403 (key lacks
+ * permission). On a read like `/v1/account` that leaves account state: an
+ * account deactivated or rejected, or a key that does not belong to the
+ * account it names. The generic mapping calls an unrecognised 4xx a
+ * `bad_response`, which `toMetricError` then reports as `provider_down` — so
+ * a permanent account-level block was being retried on a backoff forever,
+ * never tripped the auth strike limit, and never told the user anything.
+ *
+ * `unsupported` instead, which is the same call the Shopify adapter makes for
+ * a frozen store, and for the same reason: the credentials are fine and the
+ * account is not.
+ *
+ * Everything else goes to `errorForResponse` rather than `errorForStatus`,
+ * which is what carries Stripe's own sentence. That matters most on 403,
+ * where Stripe names the exact missing permission on a restricted key.
+ */
+async function failure(response: HttpResponse): Promise<ProviderError> {
+  if (response.status === 402) {
+    const detail = await errorForResponse("api.stripe.com", response);
+    return new ProviderError(
+      "unsupported",
+      // Stripe's own words first when it gave any, because the account-level
+      // reasons are many and it always names which one.
+      detail.message.includes(":")
+        ? `Stripe will not serve this account: ${detail.message.split(":").slice(1).join(":").trim()}`
+        : "Stripe will not serve API requests for this account. The key is fine, so this needs Stripe support rather than a new key.",
+    );
+  }
+  return errorForResponse("api.stripe.com", response);
 }
 
 async function walk<T extends { id: string }>(
@@ -408,7 +444,14 @@ export const stripe = provider({
     try {
       await get<StripeList<Subscription>>(ctx, creds, "/subscriptions", { limit: 1 });
     } catch (error) {
-      if (!(error instanceof ProviderError) || error.code !== "auth_failed") throw error;
+      // `unsupported` as well as `auth_failed`, because the two answers Stripe
+      // gives for "this key may not read subscriptions" land in different
+      // buckets: a restricted key without the scope is a 403, and an account
+      // that cannot serve the resource at all is a 402. Both mean offer
+      // revenue only; neither means refuse the connection.
+      const tolerable =
+        error instanceof ProviderError && ["auth_failed", "unsupported"].includes(error.code);
+      if (!tolerable) throw error;
       unavailableMetrics.push(
         "mrr",
         "active_subscribers",

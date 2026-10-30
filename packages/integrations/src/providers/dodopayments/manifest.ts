@@ -36,6 +36,15 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       help: "Must match where the key was issued. Live keys do not work against the test host.",
     },
   ],
+  setupSteps: [
+    {
+      text: "Open Developer, then API keys.",
+      url: "https://app.dodopayments.com/developer/api-keys",
+    },
+    { text: "Create a key. Read access is enough." },
+    { text: "Pick the environment the key was issued in." },
+    { text: "Copy the key, then paste it above." },
+  ],
   notifications: [
     paymentReceivedNotification("A payment that succeeded, including subscription renewals."),
   ],

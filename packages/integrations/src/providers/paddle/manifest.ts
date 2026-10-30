@@ -34,6 +34,13 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       default: "live",
     },
   ],
+  setupSteps: [
+    { text: "Open Developer Tools, then Authentication." },
+    { text: "Create a key with read access only." },
+    { text: "Give it read on transactions, subscriptions and customers." },
+    { text: "Pick Live or Sandbox to match where you made it." },
+    { text: "Copy the key, then paste it above." },
+  ],
   notifications: [
     paymentReceivedNotification(
       "A completed transaction. Paddle's own retries are collapsed into the success.",

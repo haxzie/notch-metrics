@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Granularity, MetricId, ProviderManifest } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import {
   googleErrorReason,
   googleHeaders,
@@ -172,7 +172,7 @@ async function errorFor(
           "Google refused the request. Check the YouTube Data and YouTube Analytics APIs are enabled and this account owns the channel.",
         );
   }
-  return errorForStatus(host, response);
+  return errorForResponse(host, response);
 }
 
 interface ChannelEntry {

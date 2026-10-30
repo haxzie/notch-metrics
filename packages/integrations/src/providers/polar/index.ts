@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Granularity, MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
 import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import type {
@@ -83,7 +83,7 @@ async function get<T>(
   const response = await ctx.http(url.toString(), {
     headers: { authorization: `Bearer ${creds.access_token}`, accept: "application/json" },
   });
-  if (!response.ok) throw errorForStatus(host(creds), response);
+  if (!response.ok) throw await errorForResponse(host(creds), response);
   return response.json<T>();
 }
 

@@ -28,6 +28,13 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       help: "Required when the key can see more than one project, or cannot list projects at all.",
     },
   ],
+  setupSteps: [
+    { text: "Open Project settings, then API keys." },
+    { text: "Create a new key, and choose version V2." },
+    { text: "Grant Charts and Metrics read access." },
+    { text: "Add Projects read to pick your project by name." },
+    { text: "Copy the key, then paste it above." },
+  ],
   allowedHosts: ["api.revenuecat.com"],
   status: "stable",
   minAppVersion: "0.1.0",

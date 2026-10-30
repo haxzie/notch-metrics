@@ -40,6 +40,13 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       default: "production",
     },
   ],
+  setupSteps: [
+    { text: "Open Settings, then Developers." },
+    { text: "Create an organisation access token." },
+    { text: "Give it the organizations:read, metrics:read and orders:read scopes." },
+    { text: "Pick Production or Sandbox to match where you made it." },
+    { text: "Copy the token, then paste it above." },
+  ],
   notifications: [
     paymentReceivedNotification("An order that completed. Refunds are not announced here."),
   ],

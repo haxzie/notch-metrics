@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { bucketSum, dayAt, ymd } from "../../normalise.ts";
 import type { AdapterContext, MetricRequest } from "../../types.ts";
@@ -84,7 +84,7 @@ async function get(
         `Amplitude rejected these keys. Check they are the ${creds.region.toUpperCase()} project's pair — the other region answers ${response.status} too.`,
       );
     }
-    throw errorForStatus(host(creds), response);
+    throw await errorForResponse(host(creds), response);
   }
   return response.json<ChartResponse>();
 }

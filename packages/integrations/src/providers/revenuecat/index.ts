@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { toMinorUnits } from "../../normalise.ts";
 import type {
   AdapterContext,
@@ -106,7 +106,7 @@ async function get<T>(
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
   const response = await ctx.http(url.toString(), { headers: headers(creds) });
-  if (!response.ok) throw errorForStatus(HOST, response);
+  if (!response.ok) throw await errorForResponse(HOST, response);
   return response.json<T>();
 }
 
@@ -154,7 +154,7 @@ async function resolveProject(
     ctx.log("revenuecat key cannot list projects; using the id as the label");
     return { id: creds.project_id, label: `Project ${creds.project_id}` };
   }
-  if (!response.ok) throw errorForStatus(HOST, response);
+  if (!response.ok) throw await errorForResponse(HOST, response);
 
   const projects = (await response.json<ProjectList>()).items ?? [];
 

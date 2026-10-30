@@ -1,3 +1,5 @@
+import { redactCredentials } from "@notch/integrations";
+
 /**
  * Scrubs anything that looks like a credential out of a string before it is
  * logged.
@@ -6,18 +8,14 @@
  * `console.error` goes to a log sink that outlives the request. This is the
  * last line of defence rather than the first: nothing should be putting a key
  * into an error message in the first place.
+ *
+ * The pattern list lives in `@notch/integrations` because the same scrub now
+ * guards a user-visible surface there: `errorForResponse` quotes a provider's
+ * explanation into an error message. One list, so a prefix added for that
+ * reason also covers this one.
  */
-const PATTERNS: RegExp[] = [
-  /\b(sk|rk|pk)_(live|test)_[A-Za-z0-9]{4,}/g,
-  /\bwhsec_[A-Za-z0-9+/=]{4,}/g,
-  /\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{4,}/g,
-  /\bAKIA[0-9A-Z]{8,}/g,
-  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
-  /\bBearer\s+[A-Za-z0-9._-]{12,}/gi,
-];
-
 export function redact(value: string): string {
-  return PATTERNS.reduce((acc, pattern) => acc.replace(pattern, "[redacted]"), value);
+  return redactCredentials(value);
 }
 
 /**

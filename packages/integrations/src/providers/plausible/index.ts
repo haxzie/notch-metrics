@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Granularity, MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { metricsFor, provider, type SeriesResult } from "../../metric.ts";
 import { bucketSum, instantOfWallClock } from "../../normalise.ts";
 import type { AdapterContext, HttpResponse, MetricRequest } from "../../types.ts";
@@ -74,7 +74,7 @@ async function failure(response: HttpResponse): Promise<ProviderError> {
       detail ? `Plausible: ${detail}` : `Plausible returned ${response.status}`,
     );
   }
-  return errorForStatus(HOST, response);
+  return errorForResponse(HOST, response);
 }
 
 interface QueryResult {

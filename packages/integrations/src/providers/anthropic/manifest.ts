@@ -38,6 +38,15 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       help: "Leave empty to total every workspace in the organisation.",
     },
   ],
+  setupSteps: [
+    {
+      text: "Open the Claude Console, then Settings, then Admin keys.",
+      url: "https://platform.claude.com/docs/en/manage-claude/admin-api-keys",
+    },
+    { text: "Create an admin key. A workspace key cannot read usage." },
+    { text: "Copy the key, then paste it above." },
+    { text: "Leave Workspace ID empty to total the whole organisation." },
+  ],
   allowedHosts: ["api.anthropic.com"],
   status: "stable",
   minAppVersion: "0.1.0",

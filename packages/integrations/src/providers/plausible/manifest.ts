@@ -33,6 +33,12 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       help: "The domain as it appears in Plausible, owned by the key's team.",
     },
   ],
+  setupSteps: [
+    { text: "Open Account settings, then API Keys." },
+    { text: "Create a new Stats API key. This needs a Business plan." },
+    { text: "Copy the key, then paste it above." },
+    { text: "Enter the site domain exactly as Plausible shows it." },
+  ],
   // Cloud only. Self-hosted Plausible speaks the same API on the operator's
   // own domain, which an allowlist fixed at build time cannot admit.
   allowedHosts: ["plausible.io"],

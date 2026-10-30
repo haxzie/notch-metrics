@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
 import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
@@ -91,7 +91,7 @@ async function fetchJson<T>(ctx: AdapterContext, creds: PaddleCredentials, url: 
       accept: "application/json",
     },
   });
-  if (!response.ok) throw errorForStatus(host(creds), response);
+  if (!response.ok) throw await errorForResponse(host(creds), response);
   return response.json<T>();
 }
 

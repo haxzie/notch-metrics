@@ -124,6 +124,59 @@ describe("stripe verify", () => {
     expect(result.availableMetrics).toContain("mrr");
   });
 
+  /**
+   * The ticket this came from. A restricted key without account read fails
+   * the whole connection, and the only thing the user saw was
+   * "api.stripe.com rejected the credentials (403)" — so they made a new key
+   * four times over fifteen minutes and gave up. Stripe names the missing
+   * permission in the body; the assertion is that it reaches the user.
+   */
+  it("passes Stripe's missing-permission reason through on a 403", async () => {
+    const ctx = stubContext({
+      "/account": {
+        __status: 403,
+        __body: {
+          error: {
+            code: "more_permissions_required",
+            message:
+              "Permission denied. Enabling Account read ('account_read') permissions on this key would allow this request to continue.",
+          },
+        },
+      },
+    });
+    const error = await stripe.verify(ctx, creds).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderError);
+    expect((error as ProviderError).code).toBe("auth_failed");
+    expect((error as ProviderError).message).toContain("account_read");
+  });
+
+  /**
+   * 402 is Stripe saying the account cannot be served, not that the key is
+   * wrong. It used to map to `bad_response`, which `toMetricError` reports as
+   * `provider_down` — so a permanent block was retried on a backoff forever
+   * and never trod on the auth strike limit that tells the user anything.
+   */
+  it("calls a 402 an account problem rather than a provider outage", async () => {
+    const ctx = stubContext({
+      "/account": {
+        __status: 402,
+        __body: { error: { code: "account_invalid", message: "This account is rejected." } },
+      },
+    });
+    const error = await stripe.verify(ctx, creds).catch((e: unknown) => e);
+    expect((error as ProviderError).code).toBe("unsupported");
+    expect((error as ProviderError).message).toContain("rejected");
+  });
+
+  it("narrows to revenue when a 402 is only on subscriptions", async () => {
+    const ctx = stubContext({
+      "/account": { id: "acct_1", default_currency: "usd", business_profile: { name: "Acme" } },
+      "/subscriptions": { __status: 402, __body: { error: { message: "no." } } },
+    });
+    const result = await stripe.verify(ctx, creds);
+    expectMetrics(result.availableMetrics, ["revenue", "refunds", "recent_payments"]);
+  });
+
   it("surfaces a 429 as rate_limited with the provider's own Retry-After", async () => {
     const ctx = stubContext({
       "/account": { __status: 429, __headers: { "retry-after": "30" } },

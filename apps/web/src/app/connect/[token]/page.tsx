@@ -23,6 +23,8 @@ type Field = {
   options?: { value: string; label: string }[];
 };
 
+type SetupStep = { text: string; url?: string };
+
 type Connector = {
   id: string;
   name: string;
@@ -32,6 +34,7 @@ type Connector = {
   authMode: "api_key" | "oauth2";
   oauth: { scopeSummary: string[]; requiresSelection: boolean; selectionLabel?: string } | null;
   fields: Field[];
+  setupSteps?: SetupStep[] | null;
 };
 
 type Option = { value: string; label: string; hint?: string };
@@ -370,6 +373,11 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
           </label>
         ))}
 
+        {/* Opened by a rejection. Somebody whose key was just refused is
+            exactly who needs the scopes list, and making them find and open
+            it is how the last one gave up instead. */}
+        <SetupSteps connector={connector} open={problem !== null} />
+
         {problem && (
           <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
             {problem}
@@ -397,6 +405,76 @@ export default function ConnectPage({ params }: { params: Promise<{ token: strin
         </p>
       </form>
     </Shell>
+  );
+}
+
+/**
+ * How to get the key, folded away under the form.
+ *
+ * A `<details>` rather than state and a chevron of our own: it is open and
+ * closed by the platform, it is in the tab order, it is searchable by the
+ * browser's find on an open page, and it works before React has hydrated.
+ * None of that is true of a `useState` accordion, and the whole content of
+ * this one is five short lines of text.
+ *
+ * Closed by default. Most people arriving here already have the key in the
+ * clipboard, and a panel of instructions pushing the button below the fold
+ * is a worse first screen than a line they can choose to open. It opens
+ * itself only when the submission has already failed, which is the moment
+ * the steps stop being noise.
+ */
+function SetupSteps({ connector, open }: { connector: Connector; open?: boolean }) {
+  const steps = connector.setupSteps;
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    // No border, no panel background, and the chevron sits against the text
+    // rather than out at the right margin. Every one of those is how the
+    // inputs above are drawn, and a bordered box with a chevron on the right
+    // edge is specifically how the `select` is drawn — so the first cut of
+    // this read as a third form field that would not take a value.
+    <details open={open} className="group -mt-2 [&_summary::-webkit-details-marker]:hidden">
+      <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-1 text-xs text-white/45 underline decoration-white/20 underline-offset-4 transition hover:text-white/70">
+        Where to find your {connector.name} key
+        <svg
+          viewBox="0 0 16 16"
+          aria-hidden
+          className="size-3 shrink-0 no-underline transition group-open:rotate-180"
+        >
+          <path
+            d="M4 6.5 8 10.5 12 6.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </summary>
+
+      {/* `list-decimal` on an `ol` rather than numbers in the strings, so the
+          count stays right when a step is added to a manifest. The left rule
+          ties the list to the summary it opened from, and is the one piece of
+          chrome here that no input on this page has. */}
+      <ol className="mt-2.5 flex list-decimal flex-col gap-1.5 border-l border-white/10 py-0.5 pl-6 text-xs leading-relaxed text-white/50 marker:text-white/30">
+        {steps.map((step) => (
+          <li key={step.text}>
+            {step.url ? (
+              <a
+                href={step.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-white/25 underline-offset-2 transition hover:text-white/75"
+              >
+                {step.text}
+              </a>
+            ) : (
+              step.text
+            )}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 

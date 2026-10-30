@@ -49,6 +49,13 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       default: "us",
     },
   ],
+  setupSteps: [
+    { text: "Open Settings, then Personal API keys." },
+    { text: "Create a key with the Query Read and User Read scopes." },
+    { text: "Pick PostHog Cloud US or EU to match your project." },
+    { text: "Copy the key, then paste it above." },
+    { text: "Leave Project ID blank to use the key's own project." },
+  ],
   // The private API hosts, not the `*.i.posthog.com` ingestion ones — those
   // are POST-only capture endpoints and answer nothing we ask for.
   allowedHosts: ["us.posthog.com", "eu.posthog.com"],

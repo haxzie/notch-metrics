@@ -61,15 +61,85 @@ describe("errorForResponse", () => {
     expect(error.message).toContain("must be >= 7");
   });
 
-  it("leaves 401 alone", async () => {
-    // Our own sentence about admin keys is better than "invalid x-api-key",
-    // and both at once reads as two separate problems.
+  /**
+   * 401 and 403 used to be left bare, on the reasoning that "rejected the
+   * credentials" says everything. It does for a mistyped key and not for a
+   * scoped one, and the gap cost a real signup: a Stripe restricted key
+   * missing one permission returns a 403 naming that permission, and the
+   * user saw only the number and went off to make another key.
+   */
+  it("attaches the provider's own message to a 403", async () => {
+    const error = await errorForResponse(
+      "api.stripe.com",
+      response(403, {
+        error: {
+          code: "more_permissions_required",
+          message:
+            "Permission denied. Enabling Account read ('account_read') permissions on this key would allow this request to continue.",
+        },
+      }),
+    );
+    expect(error.code).toBe("auth_failed");
+    expect(error.message).toContain("rejected the credentials (403)");
+    expect(error.message).toContain("account_read");
+  });
+
+  it("redacts a key the provider echoed back, however short", async () => {
+    // The failure this prevents: OpenAI names the key it refused, truncated.
+    // A redaction pattern tuned to the length of a whole key prints the
+    // fragment, and the fragment is still the start of a live credential.
     const error = await errorForResponse(
       "api.openai.com",
       response(401, { error: { message: "Incorrect API key provided: sk-abc" } }),
     );
     expect(error.code).toBe("auth_failed");
     expect(error.message).not.toContain("sk-abc");
+    expect(error.message).toContain("Incorrect API key provided");
+  });
+
+  /**
+   * Providers append a console deep link, which is a couple of hundred
+   * characters of account id and query string. Cutting the URL alone leaves
+   * "You can edit permissions at ." on screen, so the sentence goes with it.
+   */
+  it("drops a sentence whose point was a link", async () => {
+    const error = await errorForResponse(
+      "api.stripe.com",
+      response(403, {
+        error: {
+          message:
+            "Permission denied. You can edit permissions at https://dashboard.stripe.com/b/acct_1?destination=%2Ftest%2Fapikeys.",
+        },
+      }),
+    );
+    expect(error.message).toContain("Permission denied.");
+    expect(error.message).not.toContain("http");
+    expect(error.message).not.toMatch(/\bat\s*\.?\s*$/);
+  });
+
+  it("still says nothing extra on a 429, which Retry-After already covers", async () => {
+    const error = await errorForResponse(
+      "api.stripe.com",
+      response(429, { error: { message: "Too many requests hit the API too quickly." } }),
+    );
+    expect(error.code).toBe("rate_limited");
+    expect(error.message).toBe("api.stripe.com asked us to wait");
+  });
+
+  it("reads the body shapes the connectors actually receive", async () => {
+    // One case each for Shopify/GitHub's `errors` array and FastAPI's
+    // `detail`, both of which used to fall through to the bare status.
+    const fromErrors = await errorForResponse(
+      "shop.myshopify.com",
+      response(400, { errors: [{ message: "Field 'orders' doesn't exist" }] }),
+    );
+    expect(fromErrors.message).toContain("doesn't exist");
+
+    const fromDetail = await errorForResponse(
+      "api.polar.sh",
+      response(422, { detail: "organization_id is not a valid uuid" }),
+    );
+    expect(fromDetail.message).toContain("not a valid uuid");
   });
 
   it("does not paste in a 500's HTML error page", async () => {

@@ -1,4 +1,4 @@
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import type { AdapterContext, HttpResponse, MetricRequest } from "../../types.ts";
 import { ProviderError } from "../../types.ts";
 import type { GitHubCredentials } from "./define.ts";
@@ -16,7 +16,7 @@ const API = "https://api.github.com";
  * `x-ratelimit-remaining: 0` and a reset timestamp, and a secondary limit
  * sends `retry-after`.
  */
-export function errorFor(response: HttpResponse): ProviderError {
+export async function errorFor(response: HttpResponse): Promise<ProviderError> {
   if (response.status === 403 || response.status === 429) {
     const retryAfter = Number(response.headers.get("retry-after"));
     if (Number.isFinite(retryAfter) && retryAfter > 0) {
@@ -65,7 +65,7 @@ export function errorFor(response: HttpResponse): ProviderError {
       "That repository could not be read. Check the name, and that this account can see it.",
     );
   }
-  return errorForStatus("api.github.com", response);
+  return errorForResponse("api.github.com", response);
 }
 
 export async function get<T>(
@@ -85,7 +85,7 @@ export async function get<T>(
       "user-agent": "notch-metrics",
     },
   });
-  if (!response.ok) throw errorFor(response);
+  if (!response.ok) throw await errorFor(response);
   return response.json<T>();
 }
 

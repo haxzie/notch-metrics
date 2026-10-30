@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
 import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMonthly } from "../../normalise.ts";
@@ -56,7 +56,7 @@ async function get<T>(
   const response = await ctx.http(url.toString(), {
     headers: { authorization: `Bearer ${creds.api_key}` },
   });
-  if (!response.ok) throw errorForStatus(host(creds), response);
+  if (!response.ok) throw await errorForResponse(host(creds), response);
   return response.json<T>();
 }
 
@@ -80,7 +80,7 @@ async function probe<T extends { currency: string }>(
     headers: { authorization: `Bearer ${creds.api_key}` },
   });
   if (response.status === 403) return { allowed: false, first: undefined };
-  if (!response.ok) throw errorForStatus(host(creds), response);
+  if (!response.ok) throw await errorForResponse(host(creds), response);
   const body = await response.json<DodoList<T>>();
   return { allowed: true, first: body.items?.[0] };
 }

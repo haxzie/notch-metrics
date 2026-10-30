@@ -38,6 +38,15 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       help: "Leave empty to total every project in the organisation.",
     },
   ],
+  setupSteps: [
+    {
+      text: "Open Settings, then Organization, then Admin keys.",
+      url: "https://platform.openai.com/settings/organization/admin-keys",
+    },
+    { text: "Create an admin key. A project key cannot read usage." },
+    { text: "Copy the key, then paste it above." },
+    { text: "Leave Project ID empty to total every project." },
+  ],
   allowedHosts: ["api.openai.com"],
   status: "stable",
   minAppVersion: "0.1.0",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MetricId } from "@notch/schemas";
-import { errorForStatus } from "../../http.ts";
+import { errorForResponse } from "../../http.ts";
 import { RECENT_PAYMENTS_LIMIT, recentPaymentsMetric } from "../../list.ts";
 import { metricsFor, provider, type ScalarResult, type SeriesResult } from "../../metric.ts";
 import { bucketSum, toMinorUnits } from "../../normalise.ts";
@@ -179,7 +179,7 @@ async function graphql<T>(
         `${creds.shop_domain} does not exist, or the app has been uninstalled from it.`,
       );
     }
-    throw errorForStatus(creds.shop_domain, response);
+    throw await errorForResponse(creds.shop_domain, response);
   }
 
   const body = await response.json<GraphQLBody<T>>();

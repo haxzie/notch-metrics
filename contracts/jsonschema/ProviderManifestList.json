@@ -166,6 +166,25 @@
               "additionalProperties": false
             }
           },
+          "setupSteps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
           "metrics": {
             "minItems": 1,
             "type": "array",

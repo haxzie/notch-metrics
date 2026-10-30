@@ -93,6 +93,10 @@ link.get("/:token", rateLimitedByIp(60, 600), async (c) => {
       accentColor: adapter.manifest.accentColor,
       authMode: adapter.manifest.authMode,
       oauth: adapter.manifest.oauth ?? null,
+      // Null rather than omitted, so the page branches on one falsy check
+      // instead of distinguishing "no steps" from "an older API that did not
+      // send them".
+      setupSteps: adapter.manifest.setupSteps ?? null,
       // Only fields a human is meant to type. An OAuth connector's token
       // columns live in the same credential blob and must never be rendered
       // as a form input.
