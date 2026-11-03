@@ -1,5 +1,13 @@
 # @notch/mac
 
+## 0.4.4
+
+### Patch Changes
+
+- [`3779d29`](https://github.com/haxzie/notch-metrics/commit/3779d29cb72a0e74a9e64994606076999b345f21) Thanks [@haxzie](https://github.com/haxzie)! - The update chip in the notch is blue rather than the brand gradient. At the
+  size of a chip two colours read as decoration, and blue is the colour macOS
+  already uses for something you can act on.
+
 ## 0.4.3
 
 ### Patch Changes
