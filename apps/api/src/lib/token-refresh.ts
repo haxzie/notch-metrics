@@ -32,6 +32,69 @@ export const REFRESH_STRIKE_LIMIT = 3;
 const SWEEP_BATCH = 50;
 
 /**
+ * Claims the right to call the token endpoint for one row, or returns false
+ * because somebody else holds it.
+ *
+ * `lastRefreshAttemptAt` is written *before* the call rather than after, by a
+ * conditional update only one caller can win. The floor `isRefreshDue`
+ * applies is advisory on its own: every caller reads the row before any of
+ * them writes it, so two that arrive together both see a token that is due
+ * and both post.
+ *
+ * That gap was not theoretical. GitHub's refresh token is single-use, so the
+ * caller that lost was answered `bad_refresh_token` — read below, correctly
+ * in isolation, as a dead grant — and marked a healthy connection as needing
+ * reauthorisation. Two overlapping `/v1/metrics/batch` requests from one
+ * woken Mac were enough, and it cost roughly one GitHub connection in six
+ * refreshes. Google's refresh token survives being used, which is why only
+ * GitHub ever showed it.
+ *
+ * The claim lasts `minIntervalMs` — the floor is also the lease, so an
+ * isolate that dies mid-refresh costs one cycle of waiting rather than a
+ * stuck row.
+ */
+async function claimRefresh(
+  db: Database,
+  row: Row,
+  policy: { minIntervalMs: number },
+  now: Date,
+): Promise<boolean> {
+  const claimed = await db
+    .update(integrationTable)
+    .set({ lastRefreshAttemptAt: now })
+    .where(
+      and(
+        eq(integrationTable.id, row.id),
+        or(
+          isNull(integrationTable.lastRefreshAttemptAt),
+          lte(
+            integrationTable.lastRefreshAttemptAt,
+            new Date(now.getTime() - policy.minIntervalMs),
+          ),
+        ),
+      ),
+    )
+    .returning({ id: integrationTable.id });
+  return claimed.length > 0;
+}
+
+/**
+ * The row as it is now, if its credentials have been replaced since `row` was
+ * read — otherwise null.
+ *
+ * Compared on the fingerprint, which is a digest of the plaintext blob and so
+ * changes with every new access token. A ciphertext comparison would not do:
+ * the same credentials re-sealed produce different bytes.
+ */
+async function rotatedSince(db: Database, row: Row): Promise<Row | null> {
+  const current = (
+    await db.select().from(integrationTable).where(eq(integrationTable.id, row.id)).limit(1)
+  )[0];
+  if (!current) return null;
+  return current.credentialFingerprint === row.credentialFingerprint ? null : current;
+}
+
+/**
  * Opens a row's credentials, refreshing them first if the connector's policy
  * says they are due.
  *
@@ -81,6 +144,29 @@ export async function openFreshCredentials(
 
   const now = new Date();
   const startedAt = Date.now();
+
+  if (!(await claimRefresh(db, row, policy, now))) {
+    // Somebody else is mid-refresh on this row. Returning the blob we opened
+    // is not good enough for a connector that rotates: the winner's new
+    // token revokes ours, and our widgets would 401 on a connection that is
+    // perfectly healthy. Re-read instead, and use the winner's work if it
+    // has landed — if it has not, ours is still the current credential.
+    const rotated = await rotatedSince(db, row);
+    await recordEvent(db, {
+      userId: row.userId,
+      integrationId: row.id,
+      kind: "refresh",
+      outcome: "skipped",
+      reason: rotated ? "claimed_elsewhere_rotated" : "claimed_elsewhere",
+      durationMs: Date.now() - startedAt,
+    });
+    if (!rotated) return { credentials, refreshed: false };
+    return {
+      credentials: await openCredentials(env, scope, sealedFromRow(rotated)),
+      refreshed: false,
+    };
+  }
+
   try {
     const next = await adapter.oauth.refreshCredentials({
       credentials,
@@ -116,7 +202,18 @@ export async function openFreshCredentials(
     // out of `auth_failed` is a human, which is how a connection broken by a
     // renamed repository stayed broken. A genuinely dead grant cannot reach
     // this line — it throws `OAuthReauthRequiredError` below.
-    const recovering = row.status === "auth_failed" && row.reauthRequiredAt === null;
+    const recovering = row.status === "auth_failed";
+
+    // The reauth demand goes with it, and for the same reason. This used to
+    // be the one mark a success could not lift, on the reasoning that only
+    // the person who granted it should — but the sweep is not the only
+    // caller. The fetch path refreshes rows the sweep excludes, so a demand
+    // raised in error outlived its cause: the production GitHub row carried
+    // one for three days reading `status: ok`, refreshed by whichever
+    // request happened to notice and never pre-warmed by the cron at all.
+    // Kept separate from `recovering` so a `disabled` row is not quietly
+    // switched back on by a token refresh.
+    const demandWasStale = row.reauthRequiredAt !== null;
 
     await db
       .update(integrationTable)
@@ -133,6 +230,7 @@ export async function openFreshCredentials(
         ...(recovering
           ? { status: "ok", lastErrorCode: null, authFailures: 0, failureCount: 0 }
           : {}),
+        ...(demandWasStale ? { reauthRequiredAt: null } : {}),
       })
       .where(eq(integrationTable.id, row.id));
 
@@ -147,19 +245,45 @@ export async function openFreshCredentials(
           ? "no expiry reported"
           : `expires ${new Date(nextExpiry).toISOString()}`,
     });
-    if (recovering) {
+    if (recovering || demandWasStale) {
       await recordEvent(db, {
         userId: row.userId,
         integrationId: row.id,
         kind: "status",
         outcome: "ok",
         code: "ok",
-        detail: "recovered: refresh succeeded while marked auth_failed",
+        detail: demandWasStale
+          ? "recovered: refresh succeeded while marked as needing reauthorisation"
+          : "recovered: refresh succeeded while marked auth_failed",
       });
     }
     return { credentials: parsed, refreshed: true };
   } catch (error) {
     if (error instanceof OAuthReauthRequiredError) {
+      // Unless it is not gone at all. A single-use refresh token spent by
+      // another caller while ours was in the air answers exactly like a
+      // revoked one, and the proof that it was the former is sitting in the
+      // row: new credentials, minted from the token we were just told is
+      // dead. `claimRefresh` above is what stops the race; this is what
+      // keeps losing one from being fatal, for a lease lost to a D1 hiccup
+      // or a second isolate that read the row before the claim landed.
+      const rotated = await rotatedSince(db, row);
+      if (rotated) {
+        await recordEvent(db, {
+          userId: row.userId,
+          integrationId: row.id,
+          kind: "refresh",
+          outcome: "skipped",
+          reason: "lost_refresh_race",
+          durationMs: Date.now() - startedAt,
+          detail: "refresh token already spent by a concurrent refresh; grant is alive",
+        });
+        return {
+          credentials: await openCredentials(env, scope, sealedFromRow(rotated)),
+          refreshed: false,
+        };
+      }
+
       // The grant is gone. Retrying is how a client id gets throttled, and
       // the only fix is the person who granted it. `reauthRequiredAt` is
       // what the sweep excludes on — this is the one case where there is

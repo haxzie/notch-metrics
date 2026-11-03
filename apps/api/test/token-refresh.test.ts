@@ -4,7 +4,11 @@ import { integration } from "@notch/db";
 import { eq } from "drizzle-orm";
 import { openCredentials, sealCredentials, sealedFromRow } from "../src/lib/crypto.ts";
 import { id } from "../src/lib/ids.ts";
-import { REFRESH_STRIKE_LIMIT, sweepTokenRefresh } from "../src/lib/token-refresh.ts";
+import {
+  openFreshCredentials,
+  REFRESH_STRIKE_LIMIT,
+  sweepTokenRefresh,
+} from "../src/lib/token-refresh.ts";
 import { db, makeUser, migrate, scalar } from "./helpers.ts";
 
 beforeAll(migrate);
@@ -81,6 +85,149 @@ function stubGitHubToken(body: Record<string, unknown>, status = 200) {
   });
   return calls;
 }
+
+/**
+ * GitHub's actual contract, which the plain stub above cannot express: a
+ * refresh token works exactly once, and the second presentation of it is
+ * answered `bad_refresh_token` — indistinguishable from a revoked grant.
+ */
+function stubRotatingGitHubToken() {
+  const spent = new Set<string>();
+  const presented: string[] = [];
+  let issued = 0;
+  vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { refresh_token?: string };
+    const token = body.refresh_token ?? "";
+    presented.push(token);
+    if (spent.has(token)) {
+      // 200 with an error body, as GitHub actually answers.
+      return new Response(JSON.stringify({ error: "bad_refresh_token" }), { status: 200 });
+    }
+    spent.add(token);
+    issued += 1;
+    return new Response(
+      JSON.stringify({
+        access_token: `gho_rotated${issued}`,
+        refresh_token: `ghr_rotated${issued}`,
+        expires_in: 28800,
+      }),
+      { status: 200 },
+    );
+  });
+  return presented;
+}
+
+/**
+ * The race that logged GitHub out roughly every sixth refresh.
+ *
+ * Two callers — a woken Mac's overlapping metric batches, or one of those
+ * and the cron — both found the token due and both posted the same
+ * single-use refresh token. The loser was told `bad_refresh_token` about a
+ * grant the winner had just proved alive, and marked the connection as
+ * needing reauthorisation. Nothing in the connector could see it: the race
+ * is between two callers of `openFreshCredentials`, and every provider whose
+ * refresh token survives being used is immune.
+ */
+describe("concurrent refresh of one row", () => {
+  it("posts the refresh token once and keeps the connection", async () => {
+    const { integrationId } = await seedGitHub({
+      expiresInMs: 30 * 60 * 1000,
+      refreshToken: "ghr_first",
+    });
+    const presented = stubRotatingGitHubToken();
+    const snapshot = await row(integrationId);
+
+    const [a, b] = await Promise.all([
+      openFreshCredentials(env, db(), snapshot),
+      openFreshCredentials(env, db(), snapshot),
+    ]);
+
+    // One claim, one call. The second caller never reaches the endpoint.
+    expect(presented).toEqual(["ghr_first"]);
+    expect([a.refreshed, b.refreshed].filter(Boolean)).toHaveLength(1);
+
+    const after = await row(integrationId);
+    expect(after.status).toBe("ok");
+    expect(after.reauthRequiredAt).toBeNull();
+    expect(after.lastErrorCode).toBeNull();
+
+    const stored = await openCredentials(
+      env,
+      { userId: after.userId, integrationId, provider: "github" },
+      sealedFromRow(after),
+    );
+    expect(stored.access_token).toBe("gho_rotated1");
+    expect(stored.refresh_token).toBe("ghr_rotated1");
+  });
+
+  it("treats a spent refresh token as a lost race, not a dead grant", async () => {
+    // The claim is a lease, not a proof: a second isolate can have read the
+    // row before the claim landed, and a D1 hiccup can lose one outright. So
+    // the fatal branch has to survive being reached anyway.
+    const { integrationId } = await seedGitHub({
+      expiresInMs: 30 * 60 * 1000,
+      refreshToken: "ghr_first",
+    });
+    const presented = stubRotatingGitHubToken();
+    const stale = await row(integrationId);
+
+    await openFreshCredentials(env, db(), stale);
+    // Free the lease, then come back holding the pre-rotation row.
+    await db()
+      .update(integration)
+      .set({ lastRefreshAttemptAt: new Date(Date.now() - 10 * 60 * 1000) })
+      .where(eq(integration.id, integrationId));
+
+    const second = await openFreshCredentials(env, db(), stale);
+
+    expect(presented).toEqual(["ghr_first", "ghr_first"]);
+    // The winner's credentials, not the stale ones we arrived with.
+    expect(second.credentials.access_token).toBe("gho_rotated1");
+
+    const after = await row(integrationId);
+    expect(after.status).toBe("ok");
+    expect(after.reauthRequiredAt).toBeNull();
+    expect(after.lastErrorCode).toBeNull();
+  });
+
+  /**
+   * The mark the race left behind. The production GitHub row sat for three
+   * days reading `status: ok` with a reauth demand still on it, which the
+   * sweep excludes on — so the cron never pre-warmed it again and it lived
+   * on whichever request happened to find the token due.
+   */
+  it("lifts a stale reauth demand once a refresh succeeds, and returns to the sweep", async () => {
+    const { integrationId } = await seedGitHub({
+      expiresInMs: 30 * 60 * 1000,
+      refreshToken: "ghr_stillgood",
+    });
+    await db()
+      .update(integration)
+      .set({ reauthRequiredAt: new Date() })
+      .where(eq(integration.id, integrationId));
+    stubRotatingGitHubToken();
+
+    // The fetch path, which has no business refusing to refresh a row the
+    // sweep has written off.
+    const { refreshed } = await openFreshCredentials(env, db(), await row(integrationId));
+    expect(refreshed).toBe(true);
+    expect((await row(integrationId)).reauthRequiredAt).toBeNull();
+  });
+
+  it("still marks a genuinely dead grant when nothing else rotated it", async () => {
+    const { integrationId } = await seedGitHub({
+      expiresInMs: 30 * 60 * 1000,
+      refreshToken: "ghr_dead",
+    });
+    stubGitHubToken({ error: "bad_refresh_token" });
+
+    await openFreshCredentials(env, db(), await row(integrationId));
+
+    const after = await row(integrationId);
+    expect(after.status).toBe("auth_failed");
+    expect(after.reauthRequiredAt).not.toBeNull();
+  });
+});
 
 describe("token refresh sweep", () => {
   it("rotates a token inside the lead window and re-seals the blob", async () => {
