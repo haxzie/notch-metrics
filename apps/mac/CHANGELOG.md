@@ -1,5 +1,23 @@
 # @notch/mac
 
+## 0.4.3
+
+### Patch Changes
+
+- [`1ff2f82`](https://github.com/haxzie/notch-metrics/commit/1ff2f8221021d57e15023a42e9ab16420277dcd3) Thanks [@haxzie](https://github.com/haxzie)! - Money with cents now reads as money: $428.60 rather than $428.6. The minimum
+  fraction digits were zero, so an amount whose cents ended in a zero lost one of
+  its two decimal places.
+
+  A metric's own format is also honoured where the widget has not overridden it,
+  which is what makes Search Console's average position read 8.4 rather than
+  rounding to the integer a rank is never quoted as.
+
+- [`c994cb2`](https://github.com/haxzie/notch-metrics/commit/c994cb25fc28c04a2c93f440ab5c80e5d2debad1) Thanks [@haxzie](https://github.com/haxzie)! - A click on a tile opens the number where it lives the first time, not the
+  second. The notch deliberately never takes focus, so that brushing it does not
+  pull you out of what you are typing in. The cost was that the first click
+  arriving from another app was spent taking focus and never reached the tile
+  under the pointer.
+
 ## 0.4.2
 
 ### Patch Changes
