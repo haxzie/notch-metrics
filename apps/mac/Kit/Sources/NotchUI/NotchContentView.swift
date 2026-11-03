@@ -248,6 +248,8 @@ public struct NotchContentView: View {
     /// to report sits uninstalled for weeks. Coloured rather than grey because
     /// it is the one thing in the notch that is not a number, and it has to
     /// read as an offer rather than as a label.
+    ///
+    /// Blue rather than the brand gradient: see `NotchTheme.updateAccent`.
     @ViewBuilder
     private var updateChip: some View {
         if let version = view.availableUpdate {
@@ -261,7 +263,7 @@ public struct NotchContentView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Capsule().fill(NotchTheme.brand))
+                .background(Capsule().fill(NotchTheme.updateAccent))
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)

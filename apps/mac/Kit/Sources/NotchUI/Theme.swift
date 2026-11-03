@@ -50,6 +50,18 @@ public enum NotchTheme {
     public static let editDot = Color.white.opacity(0.22)
     public static let editHighlight = Color(nsColor: .systemBlue)
 
+    /// The update chip's fill.
+    ///
+    /// System blue rather than `brand`. The gradient is the app's mark, and on
+    /// a capsule eighty points wide two colours read as a texture rather than
+    /// as a control. Blue is what macOS already uses for "this does
+    /// something", which is the only thing the chip has to say.
+    ///
+    /// A second constant rather than `editHighlight`, which is the same colour
+    /// today. One marks a selection and one makes an offer; they should be
+    /// free to diverge without one of them changing by accident.
+    public static let updateAccent = Color(nsColor: .systemBlue)
+
     /// The app's own colour, from `MetricApp.accentHex`.
     ///
     /// Preferred over `accent(for:)` everywhere an app is known: two Stripe
