@@ -109,4 +109,37 @@ public final class HitTestingContainerView: NSView {
     /// The panel is transparent; AppKit should not treat it as opaque for
     /// hit-testing purposes either.
     public override var isOpaque: Bool { false }
+
+    /// See `FirstMouseHostingView`. Overridden here as well because which view
+    /// AppKit asks depends on what `hitTest(_:)` above hands back.
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// The hosting view, answering the click that arrives while the panel is not
+/// key.
+///
+/// The notch is never the key window: it is ordered front with
+/// `orderFrontRegardless()` and `canBecomeMain` is false, both on purpose, so
+/// that brushing it does not pull focus out of whatever is being typed in. The
+/// cost is that a click arriving from another app is a *first mouse* event.
+/// AppKit asks the hit view whether it wants it, `NSHostingView` says no by
+/// default, and that click is spent taking focus instead of doing anything.
+/// The tile looks dead; click again, now that the panel has focus, and it
+/// works. That second click is the whole tell.
+///
+/// Answering yes is what a menu bar extra does. Nobody clicks the clock twice.
+///
+/// Worth knowing if this ever looks unnecessary: a synthetic click at a pinned
+/// notch does *not* reproduce the bug, because the panel has usually taken
+/// focus by then. It needs the real path — collapsed, hovered open, clicked
+/// while another app is in front.
+public final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    @MainActor @preconcurrency required dynamic init(rootView: Content) {
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 }

@@ -356,7 +356,11 @@ public final class NotchWindowController {
         let container = HitTestingContainerView(frame: CGRect(origin: .zero, size: NotchPanel.maxSize))
         container.autoresizingMask = [.width, .height]
 
-        let hosting = NSHostingView(rootView: NotchContentView(model: model, view: viewModel))
+        // `FirstMouseHostingView`, not `NSHostingView`: the panel is never key,
+        // so without it the first click arriving from another app is spent
+        // taking focus and never reaches the tile under the pointer.
+        let hosting = FirstMouseHostingView(
+            rootView: NotchContentView(model: model, view: viewModel))
         hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
