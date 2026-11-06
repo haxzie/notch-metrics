@@ -198,12 +198,18 @@ extension AnthropicProvider {
     /// Leaving any of them out undercounts silently: a cache-heavy workload
     /// reads most of its context rather than sending it, so
     /// `uncached_input_tokens` alone can be a tenth of the real volume.
+    /// Each term is bound to an explicit `Int` rather than summed inside the
+    /// `Double(...)`. As one expression this is four `??` and three `+` with
+    /// every numeric overload of each in play at once, and the type-checker
+    /// gives up — "unable to type-check in reasonable time", on the x86_64
+    /// slice only, which no arm64-only local build ever compiles.
     static func inputTokens(_ result: UsageResult) -> Double {
         let creation = result.cacheCreation
-        return Double(
-            (result.uncachedInputTokens ?? 0) + (result.cacheReadInputTokens ?? 0)
-                + (creation?.ephemeral5mInputTokens ?? 0)
-                + (creation?.ephemeral1hInputTokens ?? 0))
+        let uncached: Int = result.uncachedInputTokens ?? 0
+        let cacheRead: Int = result.cacheReadInputTokens ?? 0
+        let ephemeral5m: Int = creation?.ephemeral5mInputTokens ?? 0
+        let ephemeral1h: Int = creation?.ephemeral1hInputTokens ?? 0
+        return Double(uncached + cacheRead + ephemeral5m + ephemeral1h)
     }
 
     // MARK: - The window
