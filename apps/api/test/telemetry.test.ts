@@ -267,13 +267,20 @@ describe("request and response bodies", () => {
   });
 
   it("keeps bodies off a successful request", async () => {
+    const { token } = await makeDevice();
     const { lines } = captureLines();
-    await get("/v1/widgets");
+    // Authenticated, because the assertion is about a 200. An unauthenticated
+    // read of this route is a 401, and a 401 *does* get its body captured —
+    // which is the next test, not this one.
+    await get("/v1/widgets", { headers: { authorization: `Bearer ${token}` } });
 
     const http = scalar(
       lines.find((l) => l.scope === "http"),
       "http line",
     );
+    // Asserted first so an unexpected 401 fails here, naming the cause,
+    // rather than two lines down as a body that should not exist.
+    expect(http.status).toBe(200);
     // A successful read is the customer's data. High volume, no diagnostic
     // value, and not ours to forward.
     expect(http.responseBody).toBeUndefined();
