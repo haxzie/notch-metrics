@@ -12,6 +12,15 @@
       "dependsOn": ["^build"],
       "outputs": ["../../contracts/**"]
     },
+    // The catalogue is written to `apps/mac/App/Resources/`, outside the
+    // package that writes it, so turbo has no way to declare it as an output
+    // and nothing to restore on a cache hit. Cached, a hit would skip the run
+    // and leave whatever `catalogue.json` happened to be committed, which is
+    // the same silent-stale-connectors failure `build-mac.sh` guards against.
+    "@notch/integrations#emit": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": []
