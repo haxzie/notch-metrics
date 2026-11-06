@@ -1,5 +1,12 @@
 # @notch/metric-runtime
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`13958af`](https://github.com/haxzie/notch-metrics/commit/13958af9221a461e355052c4f63ec24bf50f4c9b)]:
+  - @notch/schemas@0.4.0
+
 ## 0.1.0
 
 ### Minor Changes
