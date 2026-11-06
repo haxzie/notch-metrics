@@ -9,6 +9,10 @@ set -euo pipefail
 TARGET="${1:-}"
 [ -n "$TARGET" ] || { echo "usage: verify-signature.sh <path to .app or .dmg>"; exit 2; }
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/stapler.sh
+source "$ROOT/scripts/lib/stapler.sh"
+
 echo "==> codesign -dv"
 codesign -dv --verbose=4 "$TARGET" 2>&1 | sed 's/^/    /'
 
@@ -18,7 +22,11 @@ codesign --verify --deep --strict --verbose=2 "$TARGET"
 echo "==> the notarisation ticket is stapled to the artefact itself"
 # This is the check that distinguishes "notarised" from "notarised and will
 # still open on a Mac with no network".
-xcrun stapler validate "$TARGET"
+#
+# Retried: `validate` reaches for the ticket over the network the same way
+# `staple` does, and it has failed here on a staple that had just succeeded —
+# which fails a release over the *verification* of a correct artefact.
+stapler_retry validate "$TARGET"
 
 case "$TARGET" in
   *.app)
