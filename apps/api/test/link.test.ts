@@ -66,7 +66,16 @@ function stubStripe(options: { ok?: boolean } = {}) {
 
 const GOOD_KEY = "sk_test_51Abcdefghijklmnopqrstuvwx";
 
-describe("GET /v1/link/:token", () => {
+/**
+ * Skipped, not deleted, with the routes they cover.
+ *
+ * `index.ts` no longer mounts `/v1/link`, so every request here answers
+ * 404 before the handler runs. The routes are still in the tree — see the
+ * note there for why each is dark — and these come back on with them, which
+ * is the point of skipping rather than removing: a route switched back on
+ * without its tests is a route nobody is checking.
+ */
+describe.skip("GET /v1/link/:token", () => {
   it("describes the connector and only the fields a human types", async () => {
     const u = await makeUser();
     const response = await call(`/v1/link/${await makeLink(u.id)}`);
@@ -95,7 +104,7 @@ describe("GET /v1/link/:token", () => {
   });
 });
 
-describe("POST /v1/link/:token/submit", () => {
+describe.skip("POST /v1/link/:token/submit", () => {
   it("verifies, stores and burns the link", async () => {
     stubStripe();
     const u = await makeUser();
@@ -174,7 +183,7 @@ describe("POST /v1/link/:token/submit", () => {
  * generic and correct; it is waiting for the next connector whose grant is
  * the whole connection.
  */
-describe("link / oauth", () => {
+describe.skip("link / oauth", () => {
   /** Google's token endpoint and the Search Console property list. */
   function stubGoogle() {
     vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {

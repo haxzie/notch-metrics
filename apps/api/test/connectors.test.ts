@@ -44,7 +44,16 @@ interface Catalogue {
   }[];
 }
 
-describe("the connector catalogue", () => {
+/**
+ * Skipped, not deleted, with the routes they cover.
+ *
+ * `index.ts` no longer mounts `/v1/connectors` or `/v1/integrations`, so every request here answers
+ * 404 before the handler runs. The routes are still in the tree — see the
+ * note there for why each is dark — and these come back on with them, which
+ * is the point of skipping rather than removing: a route switched back on
+ * without its tests is a route nobody is checking.
+ */
+describe.skip("the connector catalogue", () => {
   it("is readable without signing in", async () => {
     // The app fetches this on first launch, before anybody has an account.
     const response = await get("/v1/connectors");
@@ -166,7 +175,7 @@ describe("the connector catalogue", () => {
   });
 });
 
-describe("managing a connection from the desktop app", () => {
+describe.skip("managing a connection from the desktop app", () => {
   it("renames and disconnects with a device token", async () => {
     // The app is where people manage connections; sending them to a browser
     // to delete one is how a dead credential sits there failing for months.
@@ -263,7 +272,7 @@ describe("managing a connection from the desktop app", () => {
   });
 });
 
-describe("catalogue caching", () => {
+describe.skip("catalogue caching", () => {
   it("does not answer 304 to a signed-in caller holding the anonymous body", async () => {
     // The ETag fingerprints the manifests, which are the same for everybody.
     // Answering 304 before resolving identity meant a signed-in app that had
@@ -328,7 +337,7 @@ describe("catalogue caching", () => {
   });
 });
 
-describe("connectors caching", () => {
+describe.skip("connectors caching", () => {
   it("tells caches the body varies by Authorization", async () => {
     // Without this a URL-keyed cache serves a signed-in client the anonymous
     // body — the one with no connections in it — for the next five minutes.

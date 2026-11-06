@@ -626,7 +626,16 @@ describe("seeding", () => {
   });
 });
 
-describe("routes", () => {
+/**
+ * Skipped, not deleted, with the routes they cover.
+ *
+ * `index.ts` no longer mounts `/v1/notifications`, so every request here answers
+ * 404 before the handler runs. The routes are still in the tree — see the
+ * note there for why each is dark — and these come back on with them, which
+ * is the point of skipping rather than removing: a route switched back on
+ * without its tests is a route nobody is checking.
+ */
+describe.skip("routes", () => {
   it("pages forward and backward without losing the live cursor", async () => {
     const { user: u, token } = await signedInUser();
     const integrationId = await makeIntegration(u.id);

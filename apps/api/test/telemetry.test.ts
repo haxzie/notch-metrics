@@ -127,15 +127,18 @@ describe("spans", () => {
 describe("the request line", () => {
   it("names the route pattern, never the path that carried a token", async () => {
     const { lines } = captureLines();
-    // `/v1/link/:token` — the path holds a live single-use credential.
-    await get("/v1/link/s1Ft9xQmAbC3dEfGhIjKlMnOpQrStUvWxYz012345");
+    // `/v1/widgets/:id` — a path parameter, which is the point: the route
+    // pattern must be logged rather than the value. This used to use
+    // `/v1/link/:token`, whose path held a live single-use credential, until
+    // that route was unmounted.
+    await get("/v1/widgets/s1Ft9xQmAbC3dEfGhIjKlMnOpQrStUvWxYz012345");
 
     const http = scalar(
       lines.find((l) => l.scope === "http"),
       "http line",
     );
     expect(String(http.route)).not.toContain("s1Ft9xQmA");
-    expect(String(http.route).startsWith("/v1/link")).toBe(true);
+    expect(String(http.route).startsWith("/v1/widgets")).toBe(true);
   });
 
   it("carries the id that went back on the response", async () => {
@@ -188,7 +191,7 @@ describe("the request line", () => {
 
   it("says nothing about a user for an unauthenticated request", async () => {
     const { lines } = captureLines();
-    await get("/v1/connectors");
+    await get("/v1/widgets");
 
     const http = scalar(
       lines.find((l) => l.scope === "http"),
@@ -265,21 +268,21 @@ describe("request and response bodies", () => {
 
   it("keeps bodies off a successful request", async () => {
     const { lines } = captureLines();
-    await get("/v1/connectors");
+    await get("/v1/widgets");
 
     const http = scalar(
       lines.find((l) => l.scope === "http"),
       "http line",
     );
-    // A successful metric batch is the customer's revenue. High volume, no
-    // diagnostic value, and not ours to forward.
+    // A successful read is the customer's data. High volume, no diagnostic
+    // value, and not ours to forward.
     expect(http.responseBody).toBeUndefined();
     expect(http.requestBody).toBeUndefined();
   });
 
   it("captures the body of a failing request that is safe to keep", async () => {
     const { lines } = captureLines();
-    await get("/v1/metrics/batch", {
+    await get("/v1/widgets", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ nonsense: true }),
