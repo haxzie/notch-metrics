@@ -84,6 +84,12 @@ public struct ProviderManifest: Codable, Sendable, Identifiable, Hashable {
     /// Present only when `authMode` is "oauth2".
     public let oauth: ConnectorOAuth?
     public let fields: [AuthField]
+    /// How to get what `fields` asks for, rendered above the form.
+    ///
+    /// Optional on the wire, like `keywords` and `notifications`: a connector
+    /// whose key needs no explaining omits it, and a server that has never
+    /// heard of the field must not fail the decode of the whole catalogue.
+    public let setupSteps: [SetupStep]?
     public let metrics: [MetricDescriptor]
     public let allowedHosts: [String]
     public let status: String
@@ -150,6 +156,27 @@ public struct AuthFieldOption: Codable, Sendable, Hashable {
     public init(value: String, label: String) {
         self.value = value
         self.label = label
+    }
+}
+
+/// One line of "where do I get this key".
+///
+/// Served from the manifest rather than written into this app, so a connector
+/// added after this build still explains itself. `url` is the page that step
+/// happens on, when there is one: "open the API keys page" and "find your
+/// store id" are usually two different screens.
+public struct SetupStep: Codable, Sendable, Hashable, Identifiable {
+    public let text: String
+    public let url: URL?
+
+    /// The text. These are a short ordered list with no ids of their own, and
+    /// two steps reading the same is a manifest bug rather than a case to
+    /// render around.
+    public var id: String { text }
+
+    public init(text: String, url: URL? = nil) {
+        self.text = text
+        self.url = url
     }
 }
 
@@ -313,6 +340,15 @@ public struct ConnectorCatalogue: Codable, Sendable {
     public let categories: [ConnectorCategoryGroup]
 
     public var allConnectors: [ConnectorEntry] { categories.flatMap(\.connectors) }
+
+    /// Public for the same reason `ConnectorCategoryGroup`'s is: the app
+    /// target folds connections made on this Mac into the served catalogue,
+    /// and a memberwise initialiser is internal however public its
+    /// properties are.
+    public init(version: String, categories: [ConnectorCategoryGroup]) {
+        self.version = version
+        self.categories = categories
+    }
 }
 
 public struct ConnectorCategoryGroup: Codable, Sendable, Identifiable, Hashable {
@@ -348,6 +384,12 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
     public let authMode: String
     public let oauth: ConnectorOAuth?
     public let fields: [AuthField]
+    /// How to get what `fields` asks for, rendered above the form.
+    ///
+    /// Optional on the wire, like `keywords` and `notifications`: a connector
+    /// whose key needs no explaining omits it, and a server that has never
+    /// heard of the field must not fail the decode of the whole catalogue.
+    public let setupSteps: [SetupStep]?
     public let metrics: [MetricDescriptor]
     /// What this connector can notify about.
     ///
@@ -374,6 +416,31 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
     public var isConnectable: Bool { status != "coming_soon" }
     public var isConnected: Bool { !connections.isEmpty }
 
+    /// Whether this connector has anything to connect.
+    ///
+    /// False for `authMode: "none"` — npm publishes its download counts to
+    /// anyone, so there is no credential, no account and nothing for a
+    /// widget to be bound to. Such a connector must not mint a connection:
+    /// an empty row in `settings.json` that exists only to satisfy a
+    /// `integrationId` would be a thing to name, rename, disconnect and
+    /// reconnect, all of which would do nothing.
+    public var needsConnection: Bool { authMode != "none" }
+
+    /// The same entry with a different set of accounts behind it.
+    ///
+    /// Used to fold in connections made on this Mac, which the served
+    /// catalogue cannot know about — the keys for those never reach the
+    /// server, so neither does the fact that they exist.
+    public func withConnections(_ connections: [ConnectorConnection]) -> ConnectorEntry {
+        ConnectorEntry(
+            id: id, name: name, category: category, tagline: tagline, docsUrl: docsUrl,
+            dashboardUrl: dashboardUrl, accentColor: accentColor, keywords: keywords,
+            authMode: authMode, oauth: oauth, fields: fields, setupSteps: setupSteps,
+            metrics: metrics, notifications: notifications, status: status,
+            minAppVersion: minAppVersion, connections: connections,
+            customIcon: customIcon, customIconFile: customIconFile)
+    }
+
     /// A custom app built on this machine, rather than a connector we ship.
     ///
     /// Derived from the id prefix rather than from `category`, because
@@ -393,6 +460,7 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
         id: String, name: String, category: String, tagline: String, docsUrl: String = "",
         dashboardUrl: String? = nil, accentColor: String, keywords: [String]? = nil,
         authMode: String, oauth: ConnectorOAuth? = nil, fields: [AuthField] = [],
+        setupSteps: [SetupStep]? = nil,
         metrics: [MetricDescriptor], notifications: [AlertDefinition]? = nil,
         status: String, minAppVersion: String = "0.0.0",
         connections: [ConnectorConnection] = [], customIcon: CustomAppIcon? = nil,
@@ -409,6 +477,7 @@ public struct ConnectorEntry: Codable, Sendable, Identifiable, Hashable {
         self.authMode = authMode
         self.oauth = oauth
         self.fields = fields
+        self.setupSteps = setupSteps
         self.metrics = metrics
         self.notifications = notifications
         self.status = status
@@ -425,4 +494,12 @@ public struct ConnectorConnection: Codable, Sendable, Identifiable, Hashable {
     public let status: String
 
     public var needsAttention: Bool { status == "auth_failed" }
+
+    /// Public so the app target can build one for a connection made on this
+    /// Mac, which the served catalogue has no way to know about.
+    public init(id: String, label: String, status: String) {
+        self.id = id
+        self.label = label
+        self.status = status
+    }
 }

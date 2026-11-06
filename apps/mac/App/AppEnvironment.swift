@@ -4,6 +4,7 @@ import MetricsAPI
 import MetricsCore
 import NotchUI
 import PluginRuntime
+import Providers
 import SwiftUI
 import Updater
 
@@ -48,6 +49,14 @@ final class AppEnvironment {
     /// The provider of each connection, so a pane holding an integration id can
     /// find that connection's definitions.
     private var providerByIntegration: [String: String] = [:]
+    /// Each metric's unit, from the catalogue, for the local fetch path.
+    private(set) var metricUnits: [String: MetricUnit] = [:]
+    /// Metrics whose descriptor says a previous-period figure exists, so the
+    /// local path asks for one exactly where the Worker would.
+    private(set) var metricComparable: Set<String> = []
+    /// Providers with nothing to connect — `authMode: "none"`. Their widgets
+    /// carry no `integrationId` and must not be asked to pick one.
+    private(set) var connectionlessProviders: Set<String> = []
 
     /// Opens the Settings window. Injected by the delegate, which owns the
     /// window — the same convention as `notch.onOpenSettings`.
@@ -728,14 +737,13 @@ final class AppEnvironment {
     /// a connection, not when a number does, and a failure here should leave
     /// the tiles showing numbers rather than take them down with it.
     func refreshConnectionNames() async {
-        guard isSignedIn else { return }
-        guard let all = try? await api.connections() else {
-            // Only downgrade a first attempt. A poll that fails while the
-            // list is already known should leave the tiles reading off the
-            // list we have rather than fall back to "offline".
-            if case .unknown = connectionsKnowledge { connectionsKnowledge = .unreachable }
-            return
-        }
+        // No network, and not gated on sign-in. The names come from
+        // `settings.json`, so this cannot fail and cannot be stale — which
+        // is why `connectionsKnowledge` only ever reaches `.loaded` now. The
+        // `.unreachable` case is kept because a widget bound to a connection
+        // that no longer exists still has to read as something other than
+        // "loading" forever.
+        let all = allConnections
         connectionsKnowledge = .loaded
         notch.update(
             connectionNames: Dictionary(
@@ -776,7 +784,10 @@ final class AppEnvironment {
         // Not gated on sign-in: the catalogue is readable either way, and a
         // demo or signed-out notch should label its tiles the same as a live one.
         var links: WidgetLink.Catalogue?
-        if let catalogue = try? await api.catalogue() {
+        var units: [String: MetricUnit] = [:]
+        var comparable: Set<String> = []
+        var connectionless: Set<String> = []
+        if let catalogue = try? await catalogue() {
             links = WidgetLink.Catalogue()
             for connector in catalogue.allConnectors {
                 // Where a tile of this connector's goes when it is clicked,
@@ -785,7 +796,15 @@ final class AppEnvironment {
                 if let dashboard = connector.dashboardUrl {
                     links?.byApp[connector.id] = dashboard
                 }
+                if !connector.needsConnection { connectionless.insert(connector.id) }
                 for metric in connector.metrics {
+                    // How a local fetch knows whether its number is money.
+                    // Taken from the catalogue rather than guessed from the
+                    // adapter's answer, because the unit decides how the tile
+                    // formats it and two sources for that is how a count ends
+                    // up rendered as a sum of money.
+                    units[metric.id] = metric.unit
+                    if metric.supportsCompare { comparable.insert(metric.id) }
                     if metric.supportsSeries || metric.supportsCompare {
                         keys.insert("\(connector.id)/\(metric.id)")
                     }
@@ -794,6 +813,11 @@ final class AppEnvironment {
                     }
                 }
             }
+        }
+        if !units.isEmpty {
+            metricUnits = units
+            metricComparable = comparable
+            connectionlessProviders = connectionless
         }
         notch.update(timeWindowedMetrics: keys)
         // Only when the catalogue actually answered. Pushing an empty one
@@ -862,8 +886,14 @@ final class AppEnvironment {
             return
         }
 
+        // A connector with nothing to connect has no `integrationId` and
+        // never will, so requiring one here left an npm tile on its skeleton
+        // for ever: it was filtered out before the fetch and then reported as
+        // unfetchable, with no way for the user to satisfy the condition.
         let widgets = layoutModel.layout.widgets.filter {
-            $0.integrationId?.isEmpty == false && $0.metric?.isEmpty == false
+            $0.metric?.isEmpty == false
+                && ($0.integrationId?.isEmpty == false
+                    || connectionlessProviders.contains($0.appId))
         }
 
         // A widget that lost its account keeps its last number otherwise —
@@ -947,110 +977,90 @@ final class AppEnvironment {
         notch.update(refreshing: Set(widgets.map(\.id)))
         defer { notch.update(refreshing: []) }
 
-        do {
-            let results = try await api.batch(widgets.map(MetricQueryRequest.init(widget:)))
-            // Belt to `commit`'s braces, and no longer the thing that keeps a
-            // superseded answer off the tiles. `refresh()` runs this in a task
-            // of its own so that one caller walking away does not cancel a
-            // batch the others are queued behind — which means a caller's
-            // cancellation no longer reaches here. `commit` is what declines
-            // the stale write now, per widget and on the evidence rather than
-            // on the caller's lifetime.
-            guard !Task.isCancelled else { return }
-            guard results.count == widgets.count else { return }
+        // No `do`/`catch` any more. Every failure is now per widget:
+        // `answers(for:)` turns an adapter's error into a
+        // `MetricResult.failure` for that tile and cannot throw. The
+        // whole-batch arms that used to live here — a lapsed plan, a
+        // cancelled URLSession task — belonged to a single network call
+        // on behalf of every widget at once, and there is no longer one.
+        let results = await answers(for: widgets)
+        // Belt to `commit`'s braces, and no longer the thing that keeps a
+        // superseded answer off the tiles. `refresh()` runs this in a task
+        // of its own so that one caller walking away does not cancel a
+        // batch the others are queued behind — which means a caller's
+        // cancellation no longer reaches here. `commit` is what declines
+        // the stale write now, per widget and on the evidence rather than
+        // on the caller's lifetime.
+        guard !Task.isCancelled else { return }
+        guard results.count == widgets.count else { return }
 
-            for (widget, result) in zip(widgets, results) {
-                switch result {
-                case .success(let series):
-                    next[widget.id] = .value(series)
-                    await cache.store(
-                        series, widgetID: widget.id, range: widget.range, params: widget.params)
-                case .failure(let failure):
-                    logMetricFailure(widget, failure)
-                    // `not_found` is the server saying this widget points at
-                    // an account that is gone — disconnected, or reconnected
-                    // under a new id. Left alone the tile reads "That
-                    // integration no longer exists", which is both alarming
-                    // and useless: there is no such thing to go and look at.
-                    // Clearing the id turns it back into an unbound widget,
-                    // which `adoptConnections` rebinds on the next pass when
-                    // the provider has exactly one account — so the usual
-                    // case fixes itself and the rest say "Pick a connection".
-                    if failure.code == .notFound {
-                        // The verdict either way — never the server's
-                        // sentence, which names a thing there is no way to
-                        // go and look at.
-                        next[widget.id] = setupState(for: widget)
-                        if rebindAllowed {
-                            var rebound = widget
-                            rebound.integrationId = nil
-                            rebinds.append(rebound)
-                            staleBindings = true
-                        }
-                        continue
+        for (widget, result) in zip(widgets, results) {
+            switch result {
+            case .success(let series):
+                next[widget.id] = .value(series)
+                await cache.store(
+                    series, widgetID: widget.id, range: widget.range, params: widget.params)
+            case .failure(let failure):
+                logMetricFailure(widget, failure)
+                // `not_found` is the server saying this widget points at
+                // an account that is gone — disconnected, or reconnected
+                // under a new id. Left alone the tile reads "That
+                // integration no longer exists", which is both alarming
+                // and useless: there is no such thing to go and look at.
+                // Clearing the id turns it back into an unbound widget,
+                // which `adoptConnections` rebinds on the next pass when
+                // the provider has exactly one account — so the usual
+                // case fixes itself and the rest say "Pick a connection".
+                if failure.code == .notFound {
+                    // The verdict either way — never the server's
+                    // sentence, which names a thing there is no way to
+                    // go and look at.
+                    next[widget.id] = setupState(for: widget)
+                    if rebindAllowed {
+                        var rebound = widget
+                        rebound.integrationId = nil
+                        rebinds.append(rebound)
+                        staleBindings = true
                     }
-                    // Keep a cached number on screen rather than replacing
-                    // it with an error: a stale figure beats a blank tile
-                    // while a provider is down.
-                    //
-                    // Only while it still answers the question being asked.
-                    // The number carries the window and the metric it was
-                    // fetched for, and holding it through a failure on a
-                    // *different* range left the old figure under the new
-                    // range's title — "Tokens · 7d" showing the 30-day total,
-                    // with nothing on screen to say the switch had failed.
-                    // A wrong number labelled confidently is worse than the
-                    // error it is standing in for.
-                    if case .value(let shown) = next[widget.id],
-                       shown.range == widget.range,
-                       widget.metric == nil || shown.metric == widget.metric {
-                        continue
-                    }
-                    // `unsupported` is the server saying the widget is not
-                    // finished — a GitHub tile with no repository picked yet,
-                    // say. That is a setup step, not a failure, and a freshly
-                    // dropped tile should not greet somebody in red.
-                    next[widget.id] =
-                        failure.code == .unsupported
-                        ? .needsSetup(failure.message)
-                        : .failed(reason: failure.message)
+                    continue
                 }
+                // Keep a cached number on screen rather than replacing
+                // it with an error: a stale figure beats a blank tile
+                // while a provider is down.
+                //
+                // Only while it still answers the question being asked.
+                // The number carries the window and the metric it was
+                // fetched for, and holding it through a failure on a
+                // *different* range left the old figure under the new
+                // range's title — "Tokens · 7d" showing the 30-day total,
+                // with nothing on screen to say the switch had failed.
+                // A wrong number labelled confidently is worse than the
+                // error it is standing in for.
+                if case .value(let shown) = next[widget.id],
+                   shown.range == widget.range,
+                   widget.metric == nil || shown.metric == widget.metric {
+                    continue
+                }
+                // `unsupported` is the server saying the widget is not
+                // finished — a GitHub tile with no repository picked yet,
+                // say. That is a setup step, not a failure, and a freshly
+                // dropped tile should not greet somebody in red.
+                next[widget.id] =
+                    failure.code == .unsupported
+                    ? .needsSetup(failure.message)
+                    : .failed(reason: failure.message)
             }
-            // The batch answered, so the plan is live again — subscribing
-            // takes effect on the next poll rather than needing a relaunch.
-            needsUpgrade = false
-            commit(next, queried: widgets, unchangedFrom: before)
-            for rebound in rebinds { layoutModel.update(rebound) }
+        }
+        // The batch answered, so the plan is live again — subscribing
+        // takes effect on the next poll rather than needing a relaunch.
+        needsUpgrade = false
+        commit(next, queried: widgets, unchangedFrom: before)
+        for rebound in rebinds { layoutModel.update(rebound) }
 
-            // Once, and only when something actually came loose: adoption only
-            // reports a change when it bound a widget that had nothing.
-            if staleBindings, await adoptConnections() {
-                await performRefresh(rebindAllowed: false)
-            }
-        } catch {
-            // A cancelled request is not a failure, it is a request nobody
-            // wants the answer to any more. URLSession surfaces cancellation
-            // as a transport error, which `tileState` reads as "could not
-            // reach Notch Metrics" — so without this, changing a setting
-            // twice quickly painted a network error across the whole notch.
-            //
-            // Rarely reached since `refresh()` began running this in its own
-            // task; the same guard now lives per widget in `commit`.
-            if Task.isCancelled { return }
-
-            Task {
-                await LogFile.shared.write(
-                    "metric", "batch of \(widgets.count) failed: \(error)")
-            }
-            // A lapsed plan is not a per-tile failure. Painting "Subscription
-            // needed" across eight widgets says the same thing eight times and
-            // leaves nowhere to press; the notch swaps to one panel instead.
-            if Self.isSubscriptionRequired(error) { needsUpgrade = true }
-            let state = Self.tileState(for: error)
-            for widget in widgets where !isValue(next[widget.id]) {
-                next[widget.id] = state
-            }
-            commit(next, queried: widgets, unchangedFrom: before)
+        // Once, and only when something actually came loose: adoption only
+        // reports a change when it bound a widget that had nothing.
+        if staleBindings, await adoptConnections() {
+            await performRefresh(rebindAllowed: false)
         }
     }
 
@@ -1082,7 +1092,7 @@ final class AppEnvironment {
         case .unauthorized:
             return .needsSetup("Sign in again")
         case .subscriptionRequired:
-            return .needsSetup("Subscription needed")
+            return .needsSetup("Purchase needed")
         case .rateLimited:
             return .failed(reason: "Too many requests — retrying shortly")
         case .server(_, _, let message):
@@ -1465,6 +1475,12 @@ final class AppEnvironment {
     /// launch. Saying nothing for a moment costs nothing; sending somebody to
     /// reconnect an account that works costs them the trip.
     private func setupState(for widget: NotchWidget) -> TileState {
+        // Nothing to connect, so nothing to wait for. Without this a npm
+        // tile would sit on "Connect npm" forever, next to a Connect button
+        // that correctly refuses to exist.
+        if connectionlessProviders.contains(widget.appId) {
+            return .needsSetup("Pick a package")
+        }
         switch connectionsKnowledge {
         case .unknown:
             return .loading
@@ -1700,6 +1716,193 @@ final class AppEnvironment {
         } catch {
             return (false, Self.pluginFailure(error))
         }
+    }
+
+    /// The credentials form's state, for as long as the pane is up.
+    ///
+    /// Held here rather than as the pane's own `@State` because it has two
+    /// views over it now: the form, and Connect and Cancel in the notch's
+    /// header. Keyed on the connector so reopening the pane on a different
+    /// one starts clean, and reopening the *same* one brings back what was
+    /// typed — which is what makes a trip to the provider's website for the
+    /// key survivable.
+    private var connectModels: [String: ConnectModel] = [:]
+
+    func connectModel(for connectorId: String) -> ConnectModel {
+        if let existing = connectModels[connectorId] { return existing }
+        let model = ConnectModel()
+        connectModels[connectorId] = model
+        return model
+    }
+
+    /// Forgets a half-filled form. Called when the pane closes for good, so a
+    /// typed-but-never-connected key does not sit in memory for the rest of
+    /// the session.
+    func discardConnectModel(for connectorId: String) {
+        connectModels.removeValue(forKey: connectorId)
+    }
+
+    /// One answer per widget, from this Mac or from the Worker.
+    ///
+    /// The split is per widget rather than per refresh, because during the
+    /// port both kinds are on the grid at once: a Stripe tile on a connection
+    /// made in the notch reads itself, and everything else is still served.
+    /// Index-aligned with `widgets`, which the caller's `zip` depends on.
+    ///
+    /// A local fetch never throws — `LocalMetrics.fetch` turns its failures
+    /// into `MetricResult.failure` — so one broken tile cannot take the
+    /// server half of the refresh down with it.
+    private func answers(for widgets: [NotchWidget]) async -> [MetricResult] {
+        let connections = Dictionary(
+            settings.localConnections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        // Everything the fetches need, read off the actor first. The task
+        // group below then touches nothing isolated, which is what lets the
+        // fetches actually run in parallel rather than queueing behind the
+        // main actor one at a time.
+        var jobs: [LocalMetrics.Job] = []
+        var unbound: [Int: MetricFailure] = [:]
+
+        for (index, widget) in widgets.enumerated() {
+            let metric = widget.metric ?? ""
+            // A connector with nothing to connect answers from its params
+            // alone — no credential, no connection, no row anywhere.
+            if connectionlessProviders.contains(widget.appId), ProviderRegistry.isLocal(widget.appId) {
+                jobs.append(
+                    LocalMetrics.Job(
+                        index: index,
+                        widget: widget,
+                        connection: LocalConnection(
+                            id: "", provider: widget.appId, label: widget.appId),
+                        unit: metricUnits[metric],
+                        comparePrevious: metricComparable.contains(metric),
+                        credentials: [:]))
+                continue
+            }
+
+            guard let id = widget.integrationId, let connection = connections[id] else {
+                // A widget bound to a connection this app no longer knows
+                // about: almost always an `int_…` id from when the server
+                // held the credentials. Its key was never readable from here,
+                // so there is nothing to migrate and nothing to retry — the
+                // tile has to be pointed at a connection made in the notch.
+                unbound[index] = MetricFailure(
+                    integrationId: widget.integrationId, metric: metric,
+                    code: .notFound,
+                    message: "Connect this app again to use this widget.",
+                    retryAfterSeconds: nil)
+                continue
+            }
+            guard ProviderRegistry.isLocal(connection.provider) else {
+                // A connector with no adapter in this build. Nothing answers
+                // it now that the Worker does not, so it says so rather than
+                // spinning.
+                unbound[index] = MetricFailure(
+                    integrationId: id, metric: metric, code: .unsupported,
+                    message: "This version cannot read \(connection.provider) yet.",
+                    retryAfterSeconds: nil)
+                continue
+            }
+            jobs.append(
+                LocalMetrics.Job(
+                    index: index,
+                    widget: widget,
+                    connection: connection,
+                    unit: metricUnits[metric],
+                    comparePrevious: metricComparable.contains(metric),
+                    credentials: connectionCredentials(
+                        connection, fields: connection.credentialFields)))
+        }
+
+        // Concurrently, because each one is a provider round trip and they
+        // are independent. Still one task group, so the whole refresh stays
+        // one unit of work that can be cancelled.
+        let local = await withTaskGroup(of: (Int, MetricResult).self) { group in
+            for job in jobs {
+                group.addTask { (job.index, await LocalMetrics.fetch(job)) }
+            }
+            var collected: [(Int, MetricResult)] = []
+            for await answer in group { collected.append(answer) }
+            return collected
+        }
+
+        var answers = [MetricResult?](repeating: nil, count: widgets.count)
+        for (index, failure) in unbound { answers[index] = .failure(failure) }
+        for (index, answer) in local { answers[index] = answer }
+
+        // A nil cannot happen — every index took exactly one of the three
+        // paths above. Reported rather than force-unwrapped, because a crash
+        // in the refresh loop takes the whole notch with it.
+        return answers.enumerated().map { index, answer in
+            answer
+                ?? .failure(
+                    MetricFailure(
+                        integrationId: widgets[index].integrationId,
+                        metric: widgets[index].metric ?? "",
+                        code: .unknown, message: "No answer was produced for this widget.",
+                        retryAfterSeconds: nil))
+        }
+    }
+
+    /// Records a connection made on this Mac, and keeps its credentials.
+    ///
+    /// Called only after the provider has accepted them — see
+    /// `ConnectModel.connect`. The order here matters the same way it does on
+    /// the server: the Keychain first, the settings entry second. A settings
+    /// entry with no key behind it is a connection that looks made and
+    /// answers nothing, and it is the one of the two the user can see.
+    func storeConnection(
+        provider: String, credentials: [String: String], account: ProviderAccount
+    ) async throws {
+        let connection = LocalConnection(
+            provider: provider,
+            label: account.label,
+            currency: account.currency,
+            unavailableMetrics: account.unavailableMetrics,
+            credentialFields: Array(credentials.keys))
+
+        for (field, value) in credentials {
+            try secrets.set(value, for: .connection(connection.id, field))
+        }
+
+        updateSettings { settings in
+            settings.localConnections.append(connection)
+        }
+        await LogFile.shared.write("app", "connected \(provider) as \(account.label)")
+        // Every catalogue-backed view was rendered against a user with one
+        // fewer connection than they now have.
+        catalogueChanged()
+    }
+
+    /// Forgets a connection and its credentials.
+    ///
+    /// The Keychain by prefix rather than field by field: the manifest may
+    /// have changed since the connection was made, so iterating the fields it
+    /// declares *now* can leave a key behind under a name nothing mentions
+    /// any more.
+    func removeConnection(_ connection: LocalConnection) {
+        try? secrets.deleteAll(matching: SecretKey.connectionPrefix(connection.id))
+        updateSettings { settings in
+            settings.localConnections.removeAll { $0.id == connection.id }
+        }
+        catalogueChanged()
+    }
+
+    /// One connection's stored credentials, for a fetch or a re-verify.
+    func connectionCredentials(_ connection: LocalConnection, fields: [String]) -> [String: String] {
+        fields.reduce(into: [:]) { out, field in
+            if let value = try? secrets.string(for: .connection(connection.id, field)),
+               !value.isEmpty {
+                out[field] = value
+            }
+        }
+    }
+
+    /// Connections made on this Mac for one provider.
+    var localConnections: [LocalConnection] { settings.localConnections }
+
+    func localConnections(for provider: String) -> [LocalConnection] {
+        settings.localConnections.filter { $0.provider == provider }
     }
 
     /// Installs a custom app from a folder the user picked.
@@ -2277,6 +2480,11 @@ extension AppEnvironment {
     /// rather than inside the feed: the notification work is what forced the
     /// abstraction to exist, and the existing loop gets it for free.
     func startAlerts() {
+        // See `FeatureFlags.alertsEnabled`. Returning here rather than at the
+        // call sites keeps the pump, the poll and the banner plumbing
+        // compiling and type-checked while they are switched off.
+        guard FeatureFlags.alertsEnabled else { return }
+
         // Demo mode shows the sample feed and starts no network work, so a
         // screenshot of the pane is the same every run.
         if Self.isDemo {

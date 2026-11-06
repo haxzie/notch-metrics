@@ -6,7 +6,7 @@ import { integration as integrationTable } from "@notch/db";
 import { authenticate, rateLimited, sessionOnly, type AppContext } from "../middleware.ts";
 import { seedSubscriptions } from "../lib/notifications.ts";
 import { fingerprint, sealCredentials } from "../lib/crypto.ts";
-import { openFreshCredentials } from "../lib/token-refresh.ts";
+import { openIntegrationCredentials } from "../lib/credentials.ts";
 import { callRecorder, recordEvent } from "../lib/events.ts";
 import { adapterContext, toMetricError } from "../lib/adapter.ts";
 import { id } from "../lib/ids.ts";
@@ -295,7 +295,7 @@ integrations.post("/:id/verify", sessionOnly, async (c) => {
   if (!user) return c.json({ code: "NOT_FOUND", message: "No such account." }, 404);
 
   const adapter = getAdapter(row.provider);
-  const { credentials } = await openFreshCredentials(c.env, db, row);
+  const credentials = await openIntegrationCredentials(c.env, row);
   const recorder = callRecorder();
   const startedAt = Date.now();
 

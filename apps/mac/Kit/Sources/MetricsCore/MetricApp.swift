@@ -140,6 +140,12 @@ public enum AppCatalog {
         MetricApp(
             id: "github", name: "GitHub", symbol: "chevron.left.forwardslash.chevron.right",
             accentHex: "F0F6FC"),
+        // Lower case, deliberately: npm writes its own name that way, and
+        // `titlecase` would otherwise render it "Npm". Without an entry here
+        // the fallback also gave it the grey unknown-app accent, which
+        // `chartTint` reads as having no hue to raise and flattens to a white
+        // sparkline — so a missing row here is visible twice over.
+        MetricApp(id: "npm", name: "npm", symbol: "shippingbox.fill", accentHex: "CB3837"),
         // Apps with no connector in the registry, which is why they are down
         // here rather than in its order. A custom metric names the app its
         // number came from, and these are ones somebody plausibly reads

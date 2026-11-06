@@ -1,19 +1,64 @@
 ---
 name: add-integration
-description: Add a payment or SaaS provider to packages/integrations. Use when someone wants to support Paddle, Polar, Chargebee, Gumroad or similar, asks how the Mac app learns about a new provider, or is about to add a vendor SDK to the Worker. Four files and no app release — but it touches the credential path, which is where a mistake costs money or leaks a key.
+description: Add a payment or SaaS provider. Use when someone wants to support Paddle, Polar, Chargebee, Gumroad or similar, asks how the Mac app learns about a new provider, or is about to add a vendor SDK. A manifest, a TypeScript adapter and a Swift one that is what actually runs — it ships in a Mac release, not a deploy, and it touches the credential path, which is where a mistake costs money or leaks a key.
 ---
 
 # Adding a provider
 
-Four things, and deliberately no more:
+**This is now a Mac release, not a deploy.** It used to be four files and a
+`wrangler deploy`, because the Worker held the credentials and did the
+fetching. It does neither now: keys live in each Mac's Keychain, the adapter
+that reads them is compiled into the app, and the catalogue ships as a bundled
+resource. Nothing a server serves can add a connector any more.
+
+So it is eight things:
+
+**The manifest and the TypeScript adapter.** Still the source of truth for
+what a connector _is_, and still what the website's `/sources` pages and the
+bundled catalogue are generated from.
 
 1. `packages/integrations/src/providers/<id>/manifest.ts`
 2. `packages/integrations/src/providers/<id>/index.ts`
-3. One line in `src/registry.ts`, and a bump of `REGISTRY_VERSION`
+3. One line in `src/registry.ts` — typed as a total record, so a missing
+   registration is a compile error rather than a runtime surprise
 4. `test/<id>.test.ts` with recorded fixtures
 
-No route changes. No Mac release — the settings UI renders from
-`GET /v1/providers`, so a deployed Worker is the whole shipping story.
+**The Swift adapter.** This is what actually runs. Without it the connector
+appears in the list and cannot be connected: `ProviderRegistry.isLocal`
+returns false and the Connect button falls back to a browser flow that no
+longer exists.
+
+5. `apps/mac/Kit/Sources/Providers/<Name>Provider.swift` — `LocalProvider`
+   conformance: `id`, `allowedHosts`, `verify`
+6. `apps/mac/Kit/Sources/Providers/<Name>Metrics.swift` — `fetch` and the
+   metrics, with the wire types nested in the extension
+7. `apps/mac/Kit/Tests/ProvidersTests/<Name>Tests.swift`
+8. One line in `Kit/Sources/Providers/ProviderRegistry.swift`
+
+**New ids go in the enums first.** `ProviderId` and `MetricId` in
+`packages/schemas/src/ids.ts` are closed enums, and the registry will not
+compile until yours is in them.
+
+**The icon.** Drop `<id>.svg` in `packages/ui/assets/connectors/overrides/`
+and run `node scripts/sync-connector-icons.mjs`. `registry.test.ts` fails by
+name if you forget, and tells you the path.
+
+**Then regenerate the bundled catalogue**, or the app ships listing the old
+fields:
+
+```bash
+pnpm catalogue      # also run by pnpm mac:gen
+```
+
+## Keep the two adapters honest
+
+A widget must not change its number because the fetch moved. Match the
+bucketing, the currency exclusion, the monthly normalisation and the
+pagination caps exactly, and port the _reasoning_ in the comments rather than
+just the arithmetic. `MetricWindow.comparePrevious` is the one thing with no
+TypeScript equivalent: when true, widen the window backwards by its own
+length, put the earlier half in `previousValue`, and sum both halves from the
+rows rather than from the buckets.
 
 ## The adapter
 
@@ -84,9 +129,8 @@ and kept showing them as unavailable, forever.
 
 ```bash
 pnpm --filter @notch/integrations test     # registry.test.ts checks every manifest parses
-pnpm --filter @notch/api test
-pnpm --filter @notch/api dev &
-curl -s localhost:8787/v1/providers | jq '.providers[] | {id, status}'
+pnpm mac:gen && pnpm mac:test              # the Swift adapter and the bundled catalogue
+pnpm mac:run                               # connect it for real, in the notch
 ```
 
 Your test file owes one sweep as well as its fixtures:

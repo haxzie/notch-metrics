@@ -66,7 +66,7 @@ const BRAND_TILE = new Set(["dodopayments", "polar", "posthog", "openai", "anthr
  * than inset into it — the usual 54% inset would float a lime square inside a
  * second square and read as a sticker.
  */
-const FULL_BLEED = new Set(["dodopayments"]);
+const FULL_BLEED = new Set(["dodopayments", "npm"]);
 
 /**
  * Light-background overrides that are a single dark colour, so they can be

@@ -10,7 +10,6 @@ type Icon = (props: { className?: string }) => React.ReactElement;
 
 const NAV: { href: string; label: string; icon: Icon }[] = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
-  { href: "/app/integrations", label: "Integrations", icon: IntegrationsIcon },
   { href: "/app/settings/billing", label: "Billing", icon: BillingIcon },
 ];
 
@@ -183,22 +182,6 @@ function OverviewIcon({ className }: { className?: string }) {
       <rect x="9" y="2" width="5" height="5" rx="1.25" />
       <rect x="2" y="9" width="5" height="5" rx="1.25" />
       <rect x="9" y="9" width="5" height="5" rx="1.25" />
-    </svg>
-  );
-}
-
-function IntegrationsIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      className={className}
-    >
-      <path d="M6 2v3M10 2v3" strokeLinecap="round" />
-      <path d="M3.5 5h9v2.5a4.5 4.5 0 0 1-9 0V5Z" strokeLinejoin="round" />
-      <path d="M8 12v2.5" strokeLinecap="round" />
     </svg>
   );
 }

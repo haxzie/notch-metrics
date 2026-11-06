@@ -199,24 +199,6 @@ export const NotificationDescriptor = z.object({
 export type NotificationDescriptor = z.infer<typeof NotificationDescriptor>;
 
 /**
- * What the connect page needs to know about an OAuth connector before the
- * user has authorised anything.
- */
-export const OAuthDescriptor = z.object({
-  /** Shown on the connect page so the user knows what they are granting. */
-  scopeSummary: z.array(z.string()),
-  /**
-   * Whether the user has to choose something after authorising — a GA4
-   * property, a Search Console site, an Ads customer. The link flow pauses on
-   * `awaiting_configuration` when this is set.
-   */
-  requiresSelection: z.boolean().default(false),
-  /** What they are choosing, for the picker's heading. */
-  selectionLabel: z.string().optional(),
-});
-export type OAuthDescriptor = z.infer<typeof OAuthDescriptor>;
-
-/**
  * One line of "where do I get this key", rendered as a numbered list in the
  * accordion under the connect form.
  *
@@ -280,22 +262,24 @@ export const ProviderManifest = z.object({
   /** What someone might call this app other than its name — "payments",
    *  "billing", "analytics". Searched alongside the name. */
   keywords: z.array(z.string()).optional(),
-  authMode: z.enum(["api_key", "oauth2"]),
-  /** Present only when `authMode` is `oauth2`. */
-  oauth: OAuthDescriptor.optional(),
   /**
-   * What the connect page asks for.
+   * How a connection is made.
    *
-   * For an OAuth connector this is usually empty — tokens are never typed in
-   * by a human — but some need something alongside, like Plausible's site id.
+   * `oauth2` was a third arm until the four OAuth connectors were retired.
+   * `none` is for a connector with nothing to authenticate: npm's download
+   * counts are public, so asking for a token would buy a trip through 2FA
+   * and name the connection, and nothing else. A `none` connector has an
+   * empty `fields` and its connect pane is a sentence and a button.
    */
+  authMode: z.enum(["api_key", "none"]),
+  /** What the connect page asks for. */
   fields: z.array(AuthField),
   /**
    * How to get what `fields` asks for.
    *
-   * Optional, on the same reasoning as `notifications`: an OAuth connector
-   * has no key to fetch and omits the key, and an app that has never heard of
-   * the field ignores it rather than failing to decode the whole catalogue.
+   * Optional, on the same reasoning as `notifications`: an app that has never
+   * heard of the field ignores it rather than failing to decode the whole
+   * catalogue.
    */
   setupSteps: z.array(SetupStep).optional(),
   metrics: z.array(MetricDescriptor).nonempty(),

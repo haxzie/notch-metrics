@@ -58,6 +58,8 @@
         "open_issues",
         "open_pull_requests",
         "ci_runs",
+        "downloads",
+        "weekly_downloads",
         "tokens",
         "input_tokens",
         "output_tokens",

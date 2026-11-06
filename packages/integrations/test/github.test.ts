@@ -1,10 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { github } from "../src/providers/github/index.ts";
-import { OAuthReauthRequiredError } from "../src/oauth.ts";
 import { ProviderError } from "../src/types.ts";
 import { stubContext } from "./helpers.ts";
 
-const creds = { access_token: "gho_11ABCDEFGHIJKLMNOP" };
+const creds = { access_token: "ghp_11ABCDEFGHIJKLMNOP" };
 /** A connection made before the repository moved onto the widget. */
 const legacyCreds = { ...creds, repository: "haxzie/notch-metrics" };
 const account = { login: "haxzie", followers: 128 };
@@ -327,18 +326,17 @@ describe("github", () => {
   });
 
   /**
-   * A connection made before this connector asked for `repo` still holds a
-   * `public_repo` token. It keeps working for public repositories, so a
-   * private one 404s with nothing to say why, and the repository name looks
-   * like the fault. GitHub returns the granted scopes on every response.
+   * A `public_repo` token keeps working for public repositories, so a private
+   * one 404s with nothing to say why and the repository name looks like the
+   * fault. A classic token's granted scopes come back on every response.
    */
-  it("tells an older, narrower connection to reconnect", async () => {
+  it("names the narrow scope when a classic token cannot reach private repositories", async () => {
     const ctx = stubContext({
       "/repos/": { __status: 404, __headers: { "x-oauth-scopes": "public_repo, read:user" } },
     });
     const error = await github.fetchMetric(ctx, creds, request).catch((e: unknown) => e);
     expect((error as ProviderError).code).toBe("unsupported");
-    expect((error as ProviderError).message).toMatch(/reconnect/i);
+    expect((error as ProviderError).message).toMatch(/public repositories only/i);
   });
 
   it("does not blame the scope when the token already has repo", async () => {
@@ -346,8 +344,22 @@ describe("github", () => {
       "/repos/": { __status: 404, __headers: { "x-oauth-scopes": "repo, read:user" } },
     });
     const error = await github.fetchMetric(ctx, creds, request).catch((e: unknown) => e);
-    expect((error as ProviderError).message).not.toMatch(/reconnect/i);
+    expect((error as ProviderError).message).not.toMatch(/public repositories only/i);
     expect((error as ProviderError).message).toMatch(/could not be read/i);
+  });
+
+  /**
+   * A fine-grained token sends no `x-oauth-scopes` at all. Guessing from its
+   * absence would blame the permissions for a repository that was simply
+   * renamed, which is the more common fault and the one a user can fix.
+   */
+  it("blames the repository when the token's permissions cannot be read", async () => {
+    const ctx = stubContext({ "/repos/": { __status: 404 } });
+    const error = await github
+      .fetchMetric(ctx, { access_token: "github_pat_11ABCDEFGH" }, request)
+      .catch((e: unknown) => e);
+    expect((error as ProviderError).message).toMatch(/could not be read/i);
+    expect((error as ProviderError).message).not.toMatch(/public repositories only/i);
   });
 
   it("refuses a metric it does not provide", async () => {
@@ -359,87 +371,42 @@ describe("github", () => {
   });
 });
 
-/** GitHub's token endpoint answering with `body`, and recording what was asked. */
-function stubTokenEndpoint(body: Record<string, unknown>, status = 200) {
-  const calls: Record<string, unknown>[] = [];
-  vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
-    calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-    return new Response(JSON.stringify(body), { status });
+describe("github credentials", () => {
+  it("takes a personal access token and nothing else from a human", () => {
+    // The legacy `repository` is in the schema so an old blob still parses.
+    // It must not come back as a second box on the connect form, inviting
+    // somebody to fill in a field nothing writes any more.
+    expect(github.manifest.authMode).toBe("api_key");
+    expect(github.userInputFields).toEqual(["access_token"]);
+    expect(github.manifest.fields.map((f) => f.key)).toEqual(["access_token"]);
+    // No assertion that `oauth` is undefined: the field no longer exists on
+    // either type, so its absence is a compile error rather than something a
+    // test has to watch for. Asserting it stopped type-checking the moment
+    // the OAuth machinery was removed.
   });
-  return calls;
-}
 
-const client = { clientId: "Iv1.client", clientSecret: "secret" };
+  it("accepts both token families, and the OAuth tokens already in the database", () => {
+    for (const token of [
+      "ghp_11ABCDEFGHIJKLMNOP",
+      "github_pat_11ABCDEFGH_abcdefghijklmnop",
+      // A connection made under the old OAuth flow. Rejecting this would
+      // break every GitHub tile that existed before the switch, on the first
+      // fetch after deploying, because the schema also parses stored blobs.
+      "gho_11ABCDEFGHIJKLMNOP",
+    ]) {
+      expect(github.credentialSchema.safeParse({ access_token: token }).success).toBe(true);
+    }
+  });
 
-describe("github oauth tokens", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("keeps the refresh token and expiry when GitHub issues expiring tokens", async () => {
-    stubTokenEndpoint({ access_token: "gho_new", refresh_token: "ghr_new", expires_in: 28800 });
-    const before = Date.now();
-    const creds = await github.oauth!.exchangeCode({
-      code: "c",
-      redirectUri: "https://api/callback",
-      ...client,
+  it("drops the refresh token and expiry an old blob still carries", () => {
+    // Nothing refreshes a PAT, so these are dead weight. Stripped on parse
+    // rather than migrated: the row is re-sealed without them the next time
+    // it is written, and nothing reads them in between.
+    const parsed = github.credentialSchema.parse({
+      access_token: "gho_11ABCDEFGHIJKLMNOP",
+      refresh_token: "ghr_11ABCDEFGHIJKLMNOP",
+      expires_at: "1762300000000",
     });
-    expect(creds.access_token).toBe("gho_new");
-    expect(creds.refresh_token).toBe("ghr_new");
-    // Eight hours out, give or take the test's own clock.
-    expect(Number(creds.expires_at)).toBeGreaterThanOrEqual(before + 28800 * 1000);
-    expect(Number(creds.expires_at)).toBeLessThan(before + 28800 * 1000 + 5_000);
-  });
-
-  it("stores no expiry for a token that does not expire", async () => {
-    stubTokenEndpoint({ access_token: "gho_forever" });
-    const creds = await github.oauth!.exchangeCode({
-      code: "c",
-      redirectUri: "https://api/callback",
-      ...client,
-    });
-    expect(creds.refresh_token).toBeUndefined();
-    expect(creds.expires_at).toBeUndefined();
-  });
-
-  it("has nothing to refresh without a refresh token", async () => {
-    const calls = stubTokenEndpoint({});
-    const result = await github.oauth!.refreshCredentials({ credentials: creds, ...client });
-    expect(result).toBeNull();
-    expect(calls).toHaveLength(0);
-  });
-
-  it("trades the refresh token for a new pair", async () => {
-    const calls = stubTokenEndpoint({
-      access_token: "gho_second",
-      refresh_token: "ghr_second",
-      expires_in: 28800,
-    });
-    const result = await github.oauth!.refreshCredentials({
-      credentials: { ...creds, refresh_token: "ghr_first", expires_at: "1" },
-      ...client,
-    });
-    expect(calls[0]).toMatchObject({ grant_type: "refresh_token", refresh_token: "ghr_first" });
-    expect(result).toMatchObject({ access_token: "gho_second", refresh_token: "ghr_second" });
-    expect(Number(result?.expires_at)).toBeGreaterThan(Date.now());
-  });
-
-  it("asks for a human when the refresh token is dead", async () => {
-    // GitHub answers 200 with an error body, so the status proves nothing.
-    stubTokenEndpoint({ error: "bad_refresh_token" });
-    await expect(
-      github.oauth!.refreshCredentials({
-        credentials: { ...creds, refresh_token: "ghr_used" },
-        ...client,
-      }),
-    ).rejects.toBeInstanceOf(OAuthReauthRequiredError);
-  });
-
-  it("treats anything else as a reason to try again later", async () => {
-    stubTokenEndpoint({}, 502);
-    await expect(
-      github.oauth!.refreshCredentials({
-        credentials: { ...creds, refresh_token: "ghr_x" },
-        ...client,
-      }),
-    ).rejects.not.toBeInstanceOf(OAuthReauthRequiredError);
+    expect(parsed).toEqual({ access_token: "gho_11ABCDEFGHIJKLMNOP" });
   });
 });

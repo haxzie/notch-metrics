@@ -18,6 +18,52 @@ public final class NotchPanel: NSPanel {
     public static let maxSize = CGSize(width: 900, height: 680)
 
     public override var canBecomeKey: Bool { true }
+
+    /// Cut, copy, paste, select all and undo, handled here rather than by the
+    /// Edit menu.
+    ///
+    /// The menu cannot do it. Key equivalents are dispatched through the main
+    /// menu of the **active application**, and this app is `.accessory` with
+    /// a `nonactivatingPanel` — clicking the notch deliberately does not
+    /// activate it, so the active app stays whatever the user was working in.
+    /// Cmd-V therefore pasted into *that*, while the notch's own field sat
+    /// focused and empty. Typing worked the whole time, because plain key
+    /// events do follow the key window, which is what made this look like a
+    /// field that was ignoring some keys rather than a routing problem.
+    ///
+    /// Activating instead was the obvious fix and the wrong one: an
+    /// accessory app only truly activates after `setActivationPolicy(.regular)`
+    /// — see `openSettings`, which does exactly that — and that puts a Dock
+    /// icon up. A Dock icon appearing because somebody opened a credentials
+    /// form in the notch is a worse bug than the one being fixed.
+    ///
+    /// So the panel answers them itself, to whatever is first responder
+    /// inside it. `sendAction(to: nil)` walks the responder chain, so a field
+    /// that cannot paste simply returns false and the event carries on.
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags == .command || flags == [.command, .shift],
+              let key = event.charactersIgnoringModifiers?.lowercased()
+        else { return super.performKeyEquivalent(with: event) }
+
+        let action: Selector?
+        switch key {
+        case "a": action = #selector(NSText.selectAll(_:))
+        case "c": action = #selector(NSText.copy(_:))
+        case "v": action = #selector(NSText.paste(_:))
+        case "x": action = #selector(NSText.cut(_:))
+        // Raw selectors: `undo:` and `redo:` are declared on the responder
+        // chain by AppKit's text system rather than on a type this package
+        // can name.
+        case "z": action = Selector(flags.contains(.shift) ? "redo:" : "undo:")
+        default: action = nil
+        }
+
+        guard let action, NSApp.sendAction(action, to: nil, from: self) else {
+            return super.performKeyEquivalent(with: event)
+        }
+        return true
+    }
     /// Never main. Becoming the main window would steal focus from whatever
     /// the user is actually working in every time the pointer brushes the
     /// notch.

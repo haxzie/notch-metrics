@@ -21,7 +21,7 @@ const FAQ: FaqEntry[] = [
   {
     question: "Do I pay per source?",
     answer:
-      "No. Every connector is included on both plans, with no per-integration charge. Notch Metrics is $9 a month or $49 a year, after a seven-day trial that needs no card.",
+      "No. Every connector is included, with no per-integration charge. Notch Metrics is $5, paid once, after a seven-day trial that needs no card.",
   },
   {
     question: "Does my API key reach my Mac?",

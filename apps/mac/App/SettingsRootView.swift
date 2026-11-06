@@ -56,10 +56,16 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
 
     /// Grouped the way System Settings groups things: the thing you came to
     /// change, then your data, then the app itself.
-    static let sections: [(String?, [SettingsPane])] = [
-        ("Data", [.connections, .apps, .customApps, .notifications]),
-        ("App", [.account, .general, .updates, .about]),
-    ]
+    /// The Notifications pane is listed only when alerts are on. The pane
+    /// itself stays in the tree and still builds — see
+    /// `FeatureFlags.alertsEnabled`.
+    static var sections: [(String?, [SettingsPane])] {
+        let data: [SettingsPane] =
+            FeatureFlags.alertsEnabled
+            ? [.connections, .apps, .customApps, .notifications]
+            : [.connections, .apps, .customApps]
+        return [("Data", data), ("App", [.account, .general, .updates, .about])]
+    }
 }
 
 /// The System Settings look: a sidebar, and `Form`s with grouped sections.

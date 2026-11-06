@@ -20,6 +20,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       // The plan requirement is here rather than in the docs link because a
       // Growth-plan key is accepted by the form, rejected by Plausible, and
       // the rejection reads as a mistyped key.
+      placeholder: "Your Stats API key",
       help: "Account settings → API Keys → new Stats API key. Needs a Business plan.",
     },
     {

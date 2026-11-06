@@ -28,8 +28,7 @@ faq:
   - question: Can I show Polar and Stripe revenue together?
     answer: >-
       Yes. Notch Metrics connects Polar, Stripe, Paddle, Dodo Payments, Lemon
-      Squeezy, RevenueCat and Shopify, with every connector included on both
-      plans and no per-integration charge.
+      Squeezy, RevenueCat and Shopify, with every connector included and no per-integration charge.
 ---
 
 Polar's dashboard is good. It is also a browser tab, and a browser tab is
@@ -88,6 +87,5 @@ Revenue also comes from [Stripe](/sources/stripe),
 
 ## Getting it
 
-Apple silicon, macOS 14 and later. Seven days with no card, then $9 a month
-or $49 a year with every connector included.
+Apple silicon, macOS 14 and later. Seven days with no card, then $5, paid once, with every connector included.
 [Download Notch Metrics](/download).

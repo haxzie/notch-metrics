@@ -1,4 +1,4 @@
-import { PLANS, annualSavingPercent, formatPrice } from "@notch/schemas";
+import { PLANS, formatPrice } from "@notch/schemas";
 import { Check, Plus } from "./icons";
 import { PlanPicker } from "./PlanPicker";
 
@@ -69,9 +69,8 @@ export function PricingSection() {
         </h2>
         <p className="text-ink/55 mx-auto mt-5 max-w-xl text-pretty text-[17px] leading-relaxed">
           Try it for a week with your real numbers, no card. Then{" "}
-          {formatPrice(PLANS.pro.amount, "USD")} a month, or{" "}
-          {formatPrice(PLANS.pro_annual.amount, "USD")} a year and keep {annualSavingPercent()}% of
-          it.
+          {formatPrice(PLANS.pro.amount, "USD")}, paid once. No subscription, and no second plan to
+          compare it against.
         </p>
       </header>
 
@@ -80,7 +79,7 @@ export function PricingSection() {
       </div>
 
       <div className="mx-auto mt-14 max-w-3xl">
-        <p className="eyebrow text-center">Every plan includes</p>
+        <p className="eyebrow text-center">What you get</p>
         <ul className="mt-6 grid gap-x-10 gap-y-3 sm:grid-cols-2">
           {INCLUDED.map((item) => (
             <li key={item} className="text-ink/75 flex items-start gap-3 text-[15px]">

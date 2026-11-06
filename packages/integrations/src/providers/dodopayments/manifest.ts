@@ -18,6 +18,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "API key",
       type: "secret",
       required: true,
+      placeholder: "Your live or test API key",
       help: "Developer → API keys. A read key is enough.",
     },
     {

@@ -62,6 +62,7 @@ The notch is awkward to inspect because it hides when the pointer leaves it.
 | `NOTCH_DEBUG_WELCOME=1`  | The welcome screen, with a token still in the Keychain.      |
 | `NOTCH_DEBUG_SKELETON=1` | Every tile loading, over the demo layout. Implies demo.      |
 | `NOTCH_DEBUG_CONFIG=…`   | Configure pane: `1` for one with no account, or a metric id. |
+| `NOTCH_DEBUG_CONNECT=…`  | The credentials form, on a connector id: `stripe`.           |
 | `NOTCH_DEBUG_SHARE=…`    | Share editor: `1` for the first widget, or a metric id.      |
 | `NOTCH_SUPPORT_DIR=…`    | Point Application Support somewhere disposable.              |
 | `NOTCH_RUNNER_PATH=…`    | Use a locally built custom-metric runner.                    |

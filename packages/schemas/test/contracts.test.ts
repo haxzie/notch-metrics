@@ -68,26 +68,23 @@ describe("wire enums", () => {
 });
 
 describe("pricing", () => {
-  it("states the two plans the website and the app both quote", () => {
-    expect(S.PLANS.pro.amount).toBe(900);
-    expect(S.PLANS.pro.interval).toBe("month");
-    expect(S.PLANS.pro_annual.amount).toBe(4900);
-    expect(S.PLANS.pro_annual.interval).toBe("year");
+  it("states the one plan the website and the app both quote", () => {
+    expect(S.PLANS.pro.amount).toBe(500);
+    // Paid once. Nothing renews, so nothing lapses after it is bought.
+    expect(S.PLANS.pro.interval).toBe("lifetime");
     // Minor units, like every other amount that crosses this wire.
     expect(Number.isInteger(S.PLANS.pro.amount)).toBe(true);
-    expect(Number.isInteger(S.PLANS.pro_annual.amount)).toBe(true);
   });
 
   it("drops the decimals on a whole amount", () => {
-    expect(S.formatPrice(900, "USD")).toBe("$9");
-    expect(S.formatPrice(4900, "USD")).toBe("$49");
+    expect(S.formatPrice(500, "USD")).toBe("$5");
     // And keeps them when there is something to show, so a future
     // $19.50 does not silently render as $20.
     expect(S.formatPrice(1950, "USD")).toBe("$19.50");
   });
 
-  it("quotes the annual saving against twelve monthly payments", () => {
-    expect(S.annualSavingPercent()).toBe(55);
+  it("quotes one price, formatted the way every surface shows it", () => {
+    expect(S.proPrice()).toBe("$5");
   });
 
   it("only offers plans the checkout route accepts", () => {

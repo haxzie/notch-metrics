@@ -12,6 +12,9 @@ gen() {
   command -v xcodegen >/dev/null || { echo "::error::xcodegen is not installed. brew install xcodegen"; exit 1; }
   node "$ROOT/scripts/sync-mac-version.mjs"
   node "$ROOT/scripts/sync-mac-config.mjs"
+  # The bundled connector catalogue. Regenerated here rather than by hand, so
+  # a manifest edit cannot ship an app that still lists the old fields.
+  (cd "$ROOT" && pnpm --silent catalogue >/dev/null)
   (cd "$MAC" && xcodegen generate)
 }
 

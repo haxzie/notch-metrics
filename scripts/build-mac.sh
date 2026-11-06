@@ -41,6 +41,21 @@ echo "==> building the metric runner"
   exit 1
 }
 
+# The connector catalogue, before xcodegen, because project.yml copies it in
+# as a resource.
+#
+# Generated here as well as in `mac.sh gen`, because this script does not
+# call that one — it repeats the same three steps above. Without this line a
+# *release* shipped whatever `catalogue.json` happened to be committed: npm's
+# weekly metric was changed from a scalar to a series and the installed app
+# still described it as a scalar, because only the dev loop regenerated it.
+echo "==> generating the connector catalogue"
+(cd "$ROOT" && pnpm --silent catalogue >/dev/null)
+[ -s "$MAC/App/Resources/catalogue.json" ] || {
+  echo "::error::the catalogue did not generate; the app would ship with no connectors"
+  exit 1
+}
+
 (cd "$MAC" && xcodegen generate)
 
 mkdir -p "$BUILD"

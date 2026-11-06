@@ -163,54 +163,18 @@ describe("POST /v1/link/:token/submit", () => {
 /**
  * The OAuth leg.
  *
- * Two shapes, and both are covered because the difference is where a flow
- * can go wrong. GitHub finishes at the callback — the grant *is* the
- * connection, and which repository a tile counts is settled per widget.
- * Search Console still pauses on a choice, which is the path that holds a
- * live token encrypted between two requests.
+ * Every OAuth connector left pauses on a choice — a GA4 property, a Search
+ * Console site, a YouTube channel — so Search Console covers the shape:
+ * authorize, callback, and the step in between that holds a live token
+ * encrypted across two requests.
+ *
+ * `link.ts` still has the branch that completes at the callback with no
+ * choice to make. GitHub was the only connector that took it, and GitHub now
+ * takes a personal access token, so nothing exercises it. The branch is
+ * generic and correct; it is waiting for the next connector whose grant is
+ * the whole connection.
  */
 describe("link / oauth", () => {
-  function stubGitHub(options: { exchange?: unknown; repos?: unknown; status?: number } = {}) {
-    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
-      const url = String(input instanceof Request ? input.url : input);
-      const json = (body: unknown, status = 200) =>
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { "content-type": "application/json" },
-        });
-
-      if (url.includes("login/oauth/access_token")) {
-        return json(options.exchange ?? { access_token: "gho_token", scope: "repo" });
-      }
-      // Before the `/repos/` branch: `verify` now reads the account, which is
-      // what names the connection since the repository moved onto the widget.
-      if (url.endsWith("/user")) {
-        return json({ login: "haxzie", followers: 128 });
-      }
-      if (url.includes("/user/repos")) {
-        return json(
-          options.repos ?? [
-            { full_name: "haxzie/notch-metrics", stargazers_count: 412, private: false },
-            { full_name: "haxzie/other", stargazers_count: 3, private: false },
-          ],
-        );
-      }
-      if (url.includes("/repos/")) {
-        return json(
-          {
-            full_name: "haxzie/notch-metrics",
-            stargazers_count: 412,
-            forks_count: 37,
-            open_issues_count: 23,
-            private: false,
-          },
-          options.status ?? 200,
-        );
-      }
-      throw new Error(`unexpected fetch to ${url}`);
-    });
-  }
-
   /** Google's token endpoint and the Search Console property list. */
   function stubGoogle() {
     vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
@@ -238,11 +202,7 @@ describe("link / oauth", () => {
   }
 
   /** The env the Worker sees has no connector client unless a test adds one. */
-  const withClient = {
-    ...env,
-    OAUTH_GITHUB_CLIENT_ID: "Ov23liTEST",
-    OAUTH_GITHUB_CLIENT_SECRET: "secret",
-  };
+  const withClient = { ...env, GOOGLE_CLIENT_ID: "g.apps", GOOGLE_CLIENT_SECRET: "gsecret" };
 
   function callWith(path: string, e: typeof env, init?: RequestInit) {
     return worker.fetch(new Request(`http://localhost:8787${path}`, init), e, ctx);
@@ -250,17 +210,13 @@ describe("link / oauth", () => {
 
   it("says so plainly when the server has no client configured", async () => {
     const u = await makeUser();
-    const token = await makeLink(u.id, "github");
+    const token = await makeLink(u.id, "google-search-console");
 
     // Explicitly blank rather than relying on the ambient env: the pool
     // loads `.dev.vars`, so a developer who has configured the connector
-    // locally would otherwise see this test redirect to GitHub and fail for
+    // locally would otherwise see this test redirect to Google and fail for
     // a reason that has nothing to do with the code.
-    const bare = {
-      ...env,
-      OAUTH_GITHUB_CLIENT_ID: undefined,
-      OAUTH_GITHUB_CLIENT_SECRET: undefined,
-    };
+    const bare = { ...env, GOOGLE_CLIENT_ID: undefined, GOOGLE_CLIENT_SECRET: undefined };
     const response = await callWith(`/v1/link/${token}/authorize`, bare as typeof env);
     // A redirect carrying the message, not JSON: a human clicked a button to
     // get here, and a raw error object in the address bar is a dead end.
@@ -268,22 +224,27 @@ describe("link / oauth", () => {
     expect(response.headers.get("location")).toContain("not+set+up+on+this+server");
   });
 
-  it("redirects to GitHub and remembers the state hashed", async () => {
+  it("redirects to the provider and remembers the state hashed", async () => {
     const u = await makeUser();
-    const token = await makeLink(u.id, "github");
+    const token = await makeLink(u.id, "google-search-console");
 
     const response = await callWith(`/v1/link/${token}/authorize`, withClient);
     expect(response.status).toBe(302);
 
     const location = new URL(scalar(response.headers.get("location") ?? undefined, "location"));
-    expect(location.host).toBe("github.com");
-    expect(location.searchParams.get("client_id")).toBe("Ov23liTEST");
+    expect(location.host).toBe("accounts.google.com");
+    expect(location.searchParams.get("client_id")).toBe("g.apps");
     expect(location.searchParams.get("redirect_uri")).toBe(
       "http://localhost:8787/v1/link/oauth/callback",
     );
-    // Least privilege: `repo` would be read *and write* on every repository.
-    expect(location.searchParams.get("scope")).toBe("repo read:user");
+    // Read-only, and only Search Console: signing in with Google does not
+    // grant this, and this does not grant GA4.
+    expect(location.searchParams.get("scope")).toBe(
+      "https://www.googleapis.com/auth/webmasters.readonly",
+    );
 
+    // The state in the URL is the secret; the row keeps only its hash, so a
+    // leaked database cannot complete somebody's flow.
     const state = scalar(location.searchParams.get("state") ?? undefined, "state");
     const row = scalar(
       (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
@@ -294,15 +255,15 @@ describe("link / oauth", () => {
   });
 
   it("refuses a callback whose state nobody issued", async () => {
-    stubGitHub();
+    stubGoogle();
     const response = await callWith("/v1/link/oauth/callback?code=abc&state=madeup", withClient);
     expect(response.status).toBe(404);
   });
 
-  it("finishes GitHub at the callback, with no repository to choose", async () => {
+  it("pauses on a choice, then finishes once it is made", async () => {
     const u = await makeUser();
-    const token = await makeLink(u.id, "github");
-    stubGitHub();
+    const token = await makeLink(u.id, "google-search-console");
+    stubGoogle();
 
     const start = await callWith(`/v1/link/${token}/authorize`, withClient);
     const state = new URL(
@@ -310,46 +271,6 @@ describe("link / oauth", () => {
     ).searchParams.get("state");
 
     const back = await callWith(`/v1/link/oauth/callback?code=abc&state=${state}`, withClient, {
-      headers: { cookie: `nm_connect_link=${token}` },
-    });
-    expect(back.status).toBe(302);
-    // No `step=select`: one connection per account, and the repository is a
-    // field on each widget rather than a property of the connection.
-    expect(back.headers.get("location")).not.toContain("step=select");
-
-    const saved = scalar(
-      (await db().select().from(integration).where(eq(integration.userId, u.id)))[0],
-      "integration",
-    );
-    // Named after the account, so it stays right when a tile is repointed.
-    expect(saved.label).toBe("GitHub — haxzie");
-    expect(saved.accountLabel).toBe("haxzie");
-    expect(JSON.stringify(saved)).not.toContain("gho_token");
-
-    const row = scalar(
-      (await db().select().from(connectLink).where(eq(connectLink.userId, u.id)))[0],
-      "link",
-    );
-    expect(row.completedAt).toBeTruthy();
-    expect(row.pendingCiphertext).toBeNull();
-    expect(row.oauthState).toBeNull();
-  });
-
-  it("still pauses on a choice for a connector that has one", async () => {
-    // Search Console, not GitHub: the selection machinery is live for GA4 and
-    // Search Console, and letting its only coverage leave with GitHub's
-    // repository picker would retire the tests rather than the code.
-    const u = await makeUser();
-    const token = await makeLink(u.id, "google-search-console");
-    stubGoogle();
-
-    const google = { ...env, GOOGLE_CLIENT_ID: "g.apps", GOOGLE_CLIENT_SECRET: "gsecret" };
-    const start = await callWith(`/v1/link/${token}/authorize`, google);
-    const state = new URL(
-      scalar(start.headers.get("location") ?? undefined, "location"),
-    ).searchParams.get("state");
-
-    const back = await callWith(`/v1/link/oauth/callback?code=abc&state=${state}`, google, {
       headers: { cookie: `nm_connect_link=${token}` },
     });
     expect(back.headers.get("location")).toContain("step=select");
@@ -362,12 +283,12 @@ describe("link / oauth", () => {
     expect(row.pendingCiphertext).toBeTruthy();
     expect(JSON.stringify(row)).not.toContain("ya29.token");
 
-    const options = await callWith(`/v1/link/${token}/options`, google);
+    const options = await callWith(`/v1/link/${token}/options`, withClient);
     expect(await options.json<{ options: { value: string }[] }>()).toMatchObject({
       options: [{ value: "sc-domain:example.com" }],
     });
 
-    const forged = await callWith(`/v1/link/${token}/select`, google, {
+    const forged = await callWith(`/v1/link/${token}/select`, withClient, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ value: "sc-domain:someone-else.com" }),
@@ -376,7 +297,7 @@ describe("link / oauth", () => {
     // covers, so it is checked against the provider's own list.
     expect(forged.status).toBe(400);
 
-    const done = await callWith(`/v1/link/${token}/select`, google, {
+    const done = await callWith(`/v1/link/${token}/select`, withClient, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ value: "sc-domain:example.com" }),

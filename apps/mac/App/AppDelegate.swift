@@ -52,6 +52,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return AnyView(EmptyView()) }
             return AnyView(WidgetBrowserPane().environment(self.env))
         }
+        // Asking for a connector's credentials, in the notch for the same
+        // reason browsing and configuring are: it is a change to the thing
+        // already on screen. It used to be a tab in the browser, because the
+        // key was going to the server and an OAuth flow needed a real address
+        // bar. Neither is true any more.
+        env.notch.connectPanel = { [weak self] connectorId in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(
+                ConnectIntegrationPane(
+                    connectorId: connectorId,
+                    model: self.env.connectModel(for: connectorId),
+                    onDone: { self.env.notch.endConnecting() }
+                ).environment(self.env))
+        }
+        // The same model the pane is showing: these are its commit and its
+        // way out, moved into the header where every other pane keeps them.
+        env.notch.connectActions = { [weak self] in
+            guard let self, let connectorId = self.env.notch.connectingConnectorId else {
+                return AnyView(EmptyView())
+            }
+            return AnyView(
+                ConnectHeaderActions(model: self.env.connectModel(for: connectorId))
+                    .environment(self.env))
+        }
         env.notch.onConfigureWidget = { [weak self] widget in
             self?.env.beginConfiguring(widget.id)
         }
@@ -147,6 +171,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1))
                 env.notch.beginBrowsing()
+            }
+        }
+
+        // Same deferral, same reason: the credentials form is reached by
+        // pressing Connect on a row in Settings, which a screenshot cannot
+        // do. The value is a connector id — `stripe`.
+        if let wanted = ProcessInfo.processInfo.environment["NOTCH_DEBUG_CONNECT"],
+           !wanted.isEmpty {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                env.notch.beginConnecting(wanted)
             }
         }
 

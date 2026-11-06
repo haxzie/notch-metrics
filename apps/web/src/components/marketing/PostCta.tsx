@@ -37,7 +37,7 @@ export function PostCta() {
             Download for Mac
           </Link>
           <p className="text-ink/40 mt-3 text-center font-mono text-[10.5px] tracking-wide">
-            Seven days free · {formatPrice(PLANS.pro.amount, "USD")} a month
+            Seven days free · {formatPrice(PLANS.pro.amount, "USD")} once
           </p>
         </div>
       </div>

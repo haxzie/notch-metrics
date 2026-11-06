@@ -2,7 +2,6 @@ import { provider } from "../../metric.ts";
 import { get, type Account } from "./client.ts";
 import { credentialSchema } from "./define.ts";
 import { manifest } from "./manifest.ts";
-import { oauth } from "./oauth.ts";
 import { ciRuns } from "./metrics/ci-runs.ts";
 import { followers } from "./metrics/followers.ts";
 import { forks } from "./metrics/forks.ts";
@@ -15,10 +14,10 @@ export { manifest } from "./manifest.ts";
 export const github = provider({
   manifest,
   credentialSchema,
-  // Tokens are never typed in or accepted from a submission, and there is
-  // nothing else in the blob to ask a human for.
-  userInputFields: [],
-  oauth,
+  // The token, and only the token. Omitting this would mean "every field in
+  // the schema", which would render the legacy `repository` as a second form
+  // field and invite somebody to fill in a value nothing writes any more.
+  userInputFields: ["access_token"],
 
   // Declaration order is the order the widget browser lists them in.
   metrics: [stars, forks, openIssues, openPullRequests, ciRuns, followers],

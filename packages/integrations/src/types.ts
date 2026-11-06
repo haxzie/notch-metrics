@@ -1,7 +1,6 @@
 import type { MetricFormat } from "@notch/schemas";
 import type { ZodType } from "zod";
 import type { CurrencyCode, Granularity, MetricId, ProviderManifest } from "@notch/schemas";
-import type { OAuthConfig } from "./oauth.ts";
 
 export interface HttpResponse {
   ok: boolean;
@@ -140,9 +139,9 @@ export interface VerifyResult {
  * A connector: one external account the notch can read numbers from.
  *
  * Adding one is a directory under `providers/`, a line in the registry, and a
- * test. Nothing else changes — the catalogue, the connect flow, the settings
- * UI and the OAuth callback all read the registry generically, which is the
- * property that lets a provider ship without a Mac release.
+ * test. Nothing else changes — the catalogue, the connect flow and the
+ * settings UI all read the registry generically, which is the property that
+ * lets a provider ship without a Mac release.
  */
 export interface ProviderAdapter<C extends Record<string, unknown> = Record<string, unknown>> {
   readonly manifest: ProviderManifest;
@@ -152,15 +151,12 @@ export interface ProviderAdapter<C extends Record<string, unknown> = Record<stri
   /**
    * Which credential fields a human types.
    *
-   * OAuth connectors store tokens in the same blob, and those must never be
-   * rendered as a form field or accepted from a submission. Omitted means
-   * "every field in the schema", which is right for a bare API key and wrong
-   * for anything with tokens in it.
+   * Omitted means "every field in the schema", which is right for a bare API
+   * key. A blob holding anything else — GitHub keeps a legacy repository
+   * beside its token — has to name the typed fields, or the connect page
+   * renders a box for a value nothing writes.
    */
   readonly userInputFields?: readonly string[];
-
-  /** Present only for `authMode: "oauth2"`. */
-  readonly oauth?: OAuthConfig<C>;
 
   /**
    * How long one request to this provider may take, when eight seconds is

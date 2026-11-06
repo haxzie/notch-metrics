@@ -1,0 +1,2049 @@
+{
+  "version": "0jkgoiz",
+  "categories": [
+    {
+      "id": "revenue",
+      "label": "Revenue",
+      "connectors": [
+        {
+          "id": "dodopayments",
+          "name": "Dodo Payments",
+          "category": "revenue",
+          "tagline": "Revenue and subscriptions from your Dodo Payments account.",
+          "docsUrl": "https://app.dodopayments.com/developer/api-keys",
+          "dashboardUrl": "https://app.dodopayments.com",
+          "iconPath": "/connectors/dodopayments.svg",
+          "accentColor": "#111111",
+          "keywords": ["payments", "billing", "merchant of record", "subscriptions", "dodo"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "api_key",
+              "label": "API key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your live or test API key",
+              "help": "Developer → API keys. A read key is enough."
+            },
+            {
+              "key": "mode",
+              "label": "Environment",
+              "type": "select",
+              "required": true,
+              "default": "live",
+              "options": [
+                {
+                  "value": "live",
+                  "label": "Live"
+                },
+                {
+                  "value": "test",
+                  "label": "Test"
+                }
+              ],
+              "help": "Must match where the key was issued. Live keys do not work against the test host."
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Developer, then API keys.",
+              "url": "https://app.dodopayments.com/developer/api-keys"
+            },
+            {
+              "text": "Create a key. Read access is enough."
+            },
+            {
+              "text": "Pick the environment the key was issued in."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            }
+          ],
+          "notifications": [
+            {
+              "id": "payment_received",
+              "kind": "event",
+              "label": "New payment",
+              "shortLabel": "New payment",
+              "severity": "success",
+              "methodology": "A payment that succeeded, including subscription renewals.",
+              "source": {
+                "from": "metric_items",
+                "metric": "recent_payments"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            }
+          ],
+          "allowedHosts": ["live.dodopayments.com", "test.dodopayments.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "mrr",
+              "label": "Monthly recurring revenue",
+              "shortLabel": "MRR",
+              "unit": "currency",
+              "freshnessSeconds": 180,
+              "methodology": "Active subscriptions, each `recurring_pre_tax_amount` normalised to a monthly amount using its payment frequency. A snapshot of the book right now, not a total over the window.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["recurring", "revenue", "monthly", "subscription", "arr", "run rate"]
+            },
+            {
+              "id": "revenue",
+              "label": "Total revenue",
+              "shortLabel": "Revenue",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Every succeeded payment in the window, subscription renewals and one-time purchases together, by `total_amount`. Gross, before refunds and fees.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "one_time_sales",
+              "label": "One-time sales",
+              "shortLabel": "One-time",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Succeeded payments in the window that are not tied to a subscription, by `total_amount`. Gross, before refunds and fees.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": []
+            },
+            {
+              "id": "active_subscribers",
+              "label": "Active subscribers",
+              "shortLabel": "Active",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions in status `active` right now.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["customers", "subscriptions", "paying", "members", "seats"]
+            },
+            {
+              "id": "recent_payments",
+              "label": "Recent payments",
+              "shortLabel": "Payments",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "The latest succeeded payments, newest first, with the customer's name or email. The headline is their total in your currency.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": [
+                "payments",
+                "transactions",
+                "orders",
+                "charges",
+                "latest",
+                "list",
+                "feed"
+              ]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "lemonsqueezy",
+          "name": "Lemon Squeezy",
+          "category": "revenue",
+          "tagline": "Store revenue and subscriptions from Lemon Squeezy.",
+          "docsUrl": "https://app.lemonsqueezy.com/settings/api",
+          "dashboardUrl": "https://app.lemonsqueezy.com",
+          "iconPath": "/connectors/lemonsqueezy.svg",
+          "accentColor": "#FFC233",
+          "keywords": ["payments", "billing", "merchant of record", "store", "lemon"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "api_key",
+              "label": "API key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "eyJ0eXAiOiJKV1Qi…",
+              "help": "Settings → API. A key is read-write; Lemon Squeezy has no read-only option."
+            },
+            {
+              "key": "store_id",
+              "label": "Store ID",
+              "type": "string",
+              "required": false,
+              "placeholder": "12345",
+              "help": "Leave empty to total every store on the account."
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then API.",
+              "url": "https://app.lemonsqueezy.com/settings/api"
+            },
+            {
+              "text": "Create an API key."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            },
+            {
+              "text": "Leave Store ID empty to total every store."
+            }
+          ],
+          "notifications": [
+            {
+              "id": "payment_received",
+              "kind": "event",
+              "label": "New payment",
+              "shortLabel": "New payment",
+              "severity": "success",
+              "methodology": "An order marked paid. Subscription renewals count.",
+              "source": {
+                "from": "metric_items",
+                "metric": "recent_payments"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            }
+          ],
+          "allowedHosts": ["api.lemonsqueezy.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "mrr",
+              "label": "Monthly recurring revenue",
+              "shortLabel": "MRR",
+              "unit": "currency",
+              "freshnessSeconds": 180,
+              "methodology": "Active subscriptions, each price normalised to a monthly amount by its renewal interval. A snapshot of the book right now, not a total over the window.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["recurring", "revenue", "monthly", "subscription", "arr", "run rate"]
+            },
+            {
+              "id": "revenue",
+              "label": "Revenue",
+              "shortLabel": "Revenue",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Orders in the window that took payment, by `total`. Gross: a later refund does not remove the order from the day it was paid.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "active_subscribers",
+              "label": "Active subscribers",
+              "shortLabel": "Active",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions in status `active` right now, trials included.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["customers", "subscriptions", "paying", "members", "seats"]
+            },
+            {
+              "id": "refunds",
+              "label": "Refunds",
+              "shortLabel": "Refunds",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "`refunded_amount` on orders in the window, bucketed by the order date rather than the refund date, which the API does not expose.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["chargeback", "returned", "refunded", "credit"]
+            },
+            {
+              "id": "recent_payments",
+              "label": "Recent payments",
+              "shortLabel": "Payments",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "The latest orders that took payment, newest first, with the buyer's name or email and the first product on the order. The headline is their total in your currency.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": [
+                "payments",
+                "transactions",
+                "orders",
+                "charges",
+                "latest",
+                "list",
+                "feed"
+              ]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "paddle",
+          "name": "Paddle",
+          "category": "revenue",
+          "tagline": "Subscriptions and revenue from Paddle Billing.",
+          "docsUrl": "https://developer.paddle.com/api-reference/about/authentication",
+          "dashboardUrl": "https://vendors.paddle.com",
+          "iconPath": "/connectors/paddle.svg",
+          "accentColor": "#FDDD35",
+          "keywords": ["payments", "billing", "merchant of record", "subscriptions"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "api_key",
+              "label": "API key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "pdl_live_apikey_…",
+              "help": "Developer Tools → Authentication. Read permission on transactions, subscriptions and customers is enough."
+            },
+            {
+              "key": "mode",
+              "label": "Environment",
+              "type": "select",
+              "required": true,
+              "help": "Must match where the key was issued; a live key against the sandbox is rejected as invalid.",
+              "options": [
+                {
+                  "value": "live",
+                  "label": "Live"
+                },
+                {
+                  "value": "sandbox",
+                  "label": "Sandbox"
+                }
+              ],
+              "default": "live"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Developer Tools, then Authentication."
+            },
+            {
+              "text": "Create a key with read access only."
+            },
+            {
+              "text": "Give it read on transactions, subscriptions and customers."
+            },
+            {
+              "text": "Pick Live or Sandbox to match where you made it."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            }
+          ],
+          "notifications": [
+            {
+              "id": "payment_received",
+              "kind": "event",
+              "label": "New payment",
+              "shortLabel": "New payment",
+              "severity": "success",
+              "methodology": "A completed transaction. Paddle's own retries are collapsed into the success.",
+              "source": {
+                "from": "metric_items",
+                "metric": "recent_payments"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            }
+          ],
+          "allowedHosts": ["api.paddle.com", "sandbox-api.paddle.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "mrr",
+              "label": "Monthly recurring revenue",
+              "shortLabel": "MRR",
+              "unit": "currency",
+              "freshnessSeconds": 180,
+              "methodology": "Active subscriptions, each recurring item's unit price times quantity normalised to a month by its billing cycle. Discounts are not applied. A snapshot of the book right now.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["recurring", "revenue", "monthly", "subscription", "arr", "run rate"]
+            },
+            {
+              "id": "revenue",
+              "label": "Revenue",
+              "shortLabel": "Revenue",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Transactions billed in the window that are paid or completed, by their total including tax, before Paddle's fee. Bucketed by billing date.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "active_subscribers",
+              "label": "Active subscriptions",
+              "shortLabel": "Active",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions in status `active` right now. Trialing and paused are not counted.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["customers", "subscriptions", "paying", "members", "seats"]
+            },
+            {
+              "id": "new_subscribers",
+              "label": "New subscriptions",
+              "shortLabel": "New",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions whose `started_at` falls in the window, in any status. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["signups", "new customers", "growth", "acquisition"]
+            },
+            {
+              "id": "churned_subscribers",
+              "label": "Churned subscriptions",
+              "shortLabel": "Churn",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions whose `canceled_at` falls in the window. Paddle cannot filter subscriptions by date, so the whole list is read and bounded.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["churn", "cancellations", "lost", "attrition"]
+            },
+            {
+              "id": "recent_payments",
+              "label": "Recent payments",
+              "shortLabel": "Payments",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "The latest paid or completed transactions by billing date, with the customer's name or email and the first product on the transaction. Totals include tax.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": [
+                "payments",
+                "transactions",
+                "orders",
+                "charges",
+                "latest",
+                "list",
+                "feed"
+              ]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "polar",
+          "name": "Polar",
+          "category": "revenue",
+          "tagline": "Revenue and subscriptions from your Polar storefront.",
+          "docsUrl": "https://polar.sh/docs/integrate/authentication",
+          "dashboardUrl": "https://polar.sh/dashboard",
+          "iconPath": "/connectors/polar.svg",
+          "accentColor": "#090909",
+          "keywords": ["payments", "billing", "open source", "storefront", "merchant of record"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "access_token",
+              "label": "Organization access token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "polar_oat_…",
+              "help": "Settings → Developers. Needs the organizations:read, metrics:read and orders:read scopes."
+            },
+            {
+              "key": "mode",
+              "label": "Environment",
+              "type": "select",
+              "required": true,
+              "help": "Must match where the token was issued; a production token is rejected by the sandbox.",
+              "options": [
+                {
+                  "value": "production",
+                  "label": "Production"
+                },
+                {
+                  "value": "sandbox",
+                  "label": "Sandbox"
+                }
+              ],
+              "default": "production"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then Developers."
+            },
+            {
+              "text": "Create an organisation access token."
+            },
+            {
+              "text": "Give it the organizations:read, metrics:read and orders:read scopes."
+            },
+            {
+              "text": "Pick Production or Sandbox to match where you made it."
+            },
+            {
+              "text": "Copy the token, then paste it above."
+            }
+          ],
+          "notifications": [
+            {
+              "id": "payment_received",
+              "kind": "event",
+              "label": "New payment",
+              "shortLabel": "New payment",
+              "severity": "success",
+              "methodology": "An order that completed. Refunds are not announced here.",
+              "source": {
+                "from": "metric_items",
+                "metric": "recent_payments"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            }
+          ],
+          "allowedHosts": ["api.polar.sh", "sandbox-api.polar.sh"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "mrr",
+              "label": "Monthly recurring revenue",
+              "shortLabel": "MRR",
+              "unit": "currency",
+              "freshnessSeconds": 180,
+              "methodology": "Polar's own MRR: active subscriptions normalised to a month, yearly plans divided by twelve, trials excluded. The latest day Polar has computed.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["recurring", "revenue", "monthly", "subscription", "arr", "run rate"]
+            },
+            {
+              "id": "revenue",
+              "label": "Revenue",
+              "shortLabel": "Revenue",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Order subtotals in the window as Polar reports them, before Polar's fees and before tax. In the organization's currency.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "active_subscribers",
+              "label": "Active subscriptions",
+              "shortLabel": "Active",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Active subscriptions on the latest day Polar has computed, including paused and past-due ones, excluding trials.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["customers", "subscriptions", "paying", "members", "seats"]
+            },
+            {
+              "id": "new_subscribers",
+              "label": "New subscriptions",
+              "shortLabel": "New",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions started in the window, as Polar counts them.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["signups", "new customers", "growth", "acquisition"]
+            },
+            {
+              "id": "churned_subscribers",
+              "label": "Churned subscriptions",
+              "shortLabel": "Churn",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions that ended in the window, as Polar counts them.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["churn", "cancellations", "lost", "attrition"]
+            },
+            {
+              "id": "recent_payments",
+              "label": "Recent payments",
+              "shortLabel": "Payments",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "The latest paid orders, newest first, with the customer's name or email and the product. Amounts are what the customer paid, after discounts and including tax.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": [
+                "payments",
+                "transactions",
+                "orders",
+                "charges",
+                "latest",
+                "list",
+                "feed"
+              ]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "revenuecat",
+          "name": "RevenueCat",
+          "category": "revenue",
+          "tagline": "In-app subscription revenue, subscribers and trials from RevenueCat.",
+          "docsUrl": "https://www.revenuecat.com/docs/projects/authentication",
+          "dashboardUrl": "https://app.revenuecat.com",
+          "iconPath": "/connectors/revenuecat.svg",
+          "accentColor": "#F2545B",
+          "keywords": [
+            "in-app purchases",
+            "iap",
+            "app store",
+            "play store",
+            "subscriptions",
+            "mobile"
+          ],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "secret_key",
+              "label": "Secret API key (v2)",
+              "type": "secret",
+              "required": true,
+              "placeholder": "sk_…",
+              "help": "Project settings → API keys → New, version V2. Grant Charts & Metrics read; add Projects read to pick the project by name."
+            },
+            {
+              "key": "project_id",
+              "label": "Project ID",
+              "type": "string",
+              "required": false,
+              "placeholder": "proj1ab2c3d4",
+              "help": "Required when the key can see more than one project, or cannot list projects at all."
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Project settings, then API keys."
+            },
+            {
+              "text": "Create a new key, and choose version V2."
+            },
+            {
+              "text": "Grant Charts and Metrics read access."
+            },
+            {
+              "text": "Add Projects read to pick your project by name."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            }
+          ],
+          "allowedHosts": ["api.revenuecat.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "mrr",
+              "label": "Monthly recurring revenue",
+              "shortLabel": "MRR",
+              "unit": "currency",
+              "freshnessSeconds": 180,
+              "methodology": "RevenueCat's own MRR figure for the project: active paid subscriptions normalised to a month, as shown on the Overview. A snapshot of the book right now.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["recurring", "revenue", "monthly", "subscription", "arr", "run rate"]
+            },
+            {
+              "id": "revenue",
+              "label": "Revenue",
+              "shortLabel": "Revenue",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Gross revenue across every app in the project for the days in the window, before store commission and taxes. Today is partial while transactions are still arriving.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "active_subscribers",
+              "label": "Active subscriptions",
+              "shortLabel": "Active subs",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Paid subscriptions active right now, including ones that are cancelled or in a grace period until they expire. Trials are not counted.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["customers", "subscriptions", "paying", "members", "seats"]
+            },
+            {
+              "id": "trials",
+              "label": "Active trials",
+              "shortLabel": "Trials",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Free trials active right now, including cancelled ones, until they convert to paid or expire.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["free trial", "trialling", "evaluating"]
+            },
+            {
+              "id": "new_users",
+              "label": "New customers · 28 days",
+              "shortLabel": "New · 28d",
+              "unit": "count",
+              "methodology": "App User IDs first seen in the last 28 days, as RevenueCat's Overview counts them. The window is fixed by RevenueCat and ignores the widget's range. Aliased IDs count once.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["signups", "registrations", "acquisition", "growth"]
+            },
+            {
+              "id": "active_users",
+              "label": "Active customers · 28 days",
+              "shortLabel": "Active · 28d",
+              "unit": "count",
+              "methodology": "App User IDs that contacted RevenueCat in the last 28 days. The window is fixed by RevenueCat and ignores the widget's range. May lag by one to two hours.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["dau", "mau", "engagement", "usage", "retention"]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "stripe",
+          "name": "Stripe",
+          "category": "revenue",
+          "tagline": "Revenue, MRR and subscribers straight from your Stripe account.",
+          "docsUrl": "https://dashboard.stripe.com/apikeys",
+          "dashboardUrl": "https://dashboard.stripe.com",
+          "iconPath": "/connectors/stripe.svg",
+          "accentColor": "#635BFF",
+          "keywords": ["payments", "billing", "checkout", "subscriptions", "revenue"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "secret_key",
+              "label": "Secret key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "rk_live_…",
+              "help": "A restricted key with read access to all core and billing resources is enough, and is safer than a full secret key.",
+              "pattern": "^(sk|rk)_(live|test)_[A-Za-z0-9]+$"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open the API keys page in your Stripe dashboard.",
+              "url": "https://dashboard.stripe.com/apikeys"
+            },
+            {
+              "text": "Select Create restricted key."
+            },
+            {
+              "text": "Set All core resources and All billing resources to Read."
+            },
+            {
+              "text": "Leave everything else at None. Notch Metrics only reads."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            }
+          ],
+          "notifications": [
+            {
+              "id": "payment_received",
+              "kind": "event",
+              "label": "New payment",
+              "shortLabel": "New payment",
+              "severity": "success",
+              "methodology": "A charge that succeeded. One that fails and is later retried successfully arrives once, when it succeeds.",
+              "source": {
+                "from": "metric_items",
+                "metric": "recent_payments"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            },
+            {
+              "id": "payment_failed",
+              "kind": "event",
+              "label": "Failed payment",
+              "shortLabel": "Failed payment",
+              "severity": "warning",
+              "methodology": "A charge Stripe declined, with the reason it gave. A charge that fails and is then retried successfully still arrives once, when it fails.",
+              "source": {
+                "from": "adapter_events",
+                "stream": "charges"
+              },
+              "defaultEnabled": true,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            },
+            {
+              "id": "refund_issued",
+              "kind": "event",
+              "label": "Refund issued",
+              "shortLabel": "Refund",
+              "severity": "info",
+              "methodology": "A charge refunded in full or in part. The amount shown is what was refunded, not what was originally charged.",
+              "source": {
+                "from": "adapter_events",
+                "stream": "charges"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            },
+            {
+              "id": "metric_threshold_crossed",
+              "kind": "threshold",
+              "label": "MRR crosses a figure",
+              "shortLabel": "Threshold",
+              "severity": "info",
+              "methodology": "Checked against the same monthly recurring revenue figure the tile shows, so it can be announced on a reading up to fifteen minutes old.",
+              "source": {
+                "from": "metric_value",
+                "metric": "mrr"
+              },
+              "threshold": {
+                "metric": "mrr",
+                "comparators": ["above", "below", "pct_change_down", "pct_change_up"],
+                "unit": "currency",
+                "suggestedValue": 1000000
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 3600,
+              "maxBurst": 1
+            }
+          ],
+          "allowedHosts": ["api.stripe.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "mrr",
+              "label": "Monthly recurring revenue",
+              "shortLabel": "MRR",
+              "unit": "currency",
+              "freshnessSeconds": 180,
+              "methodology": "Active subscriptions right now, each item normalised to a monthly amount (annual ÷ 12, weekly × 52/12) and reduced by any percentage coupon. A snapshot, not a sum over the window.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["recurring", "revenue", "monthly", "subscription", "arr", "run rate"]
+            },
+            {
+              "id": "revenue",
+              "label": "Revenue",
+              "shortLabel": "Revenue",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Gross charges from balance transactions in the window, before Stripe fees. Refunds are reported separately rather than netted off.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "active_subscribers",
+              "label": "Active subscribers",
+              "shortLabel": "Active",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions in Stripe status `active` right now. Trials are not counted.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["customers", "subscriptions", "paying", "members", "seats"]
+            },
+            {
+              "id": "new_subscribers",
+              "label": "New subscribers",
+              "shortLabel": "New",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions created in the window, bucketed by creation time.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["signups", "new customers", "growth", "acquisition"]
+            },
+            {
+              "id": "churned_subscribers",
+              "label": "Churned subscribers",
+              "shortLabel": "Churn",
+              "unit": "count",
+              "freshnessSeconds": 180,
+              "methodology": "Subscriptions cancelled in the window, bucketed by cancellation time.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["churn", "cancellations", "lost", "attrition"]
+            },
+            {
+              "id": "refunds",
+              "label": "Refunds",
+              "shortLabel": "Refunds",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Refund balance transactions in the window, as a positive amount.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["chargeback", "returned", "refunded", "credit"]
+            },
+            {
+              "id": "recent_payments",
+              "label": "Recent payments",
+              "shortLabel": "Payments",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "The latest succeeded charges, newest first, with the payer's billing name or receipt email and the charge description. The headline is their total in your currency.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": [
+                "payments",
+                "transactions",
+                "orders",
+                "charges",
+                "latest",
+                "list",
+                "feed"
+              ]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "shopify",
+          "name": "Shopify",
+          "category": "revenue",
+          "tagline": "Sales, orders and customers from your Shopify store.",
+          "docsUrl": "https://help.shopify.com/en/manual/apps/app-types/custom-apps",
+          "dashboardUrl": "https://admin.shopify.com",
+          "iconPath": "/connectors/shopify.svg",
+          "accentColor": "#7AB55C",
+          "keywords": ["ecommerce", "e-commerce", "store", "shop", "orders", "retail", "commerce"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "shop_domain",
+              "label": "Store domain",
+              "type": "string",
+              "required": true,
+              "placeholder": "my-store.myshopify.com",
+              "help": "The .myshopify.com domain, not your custom storefront domain. Settings → Domains.",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*(\\.myshopify\\.com)?$"
+            },
+            {
+              "key": "access_token",
+              "label": "Admin API access token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "shpat_…",
+              "help": "Settings → Apps and sales channels → Develop apps → your app → API credentials. Scopes: read_orders, read_customers, read_products.",
+              "pattern": "^shp(at|ca)_[A-Za-z0-9]+$"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then Apps and sales channels."
+            },
+            {
+              "text": "Select Develop apps, then create an app."
+            },
+            {
+              "text": "Give it read_orders, read_customers and read_products."
+            },
+            {
+              "text": "Install the app, then open API credentials."
+            },
+            {
+              "text": "Copy the Admin API access token, then paste it above."
+            },
+            {
+              "text": "Your store domain ends .myshopify.com, not your custom domain."
+            }
+          ],
+          "notifications": [
+            {
+              "id": "payment_received",
+              "kind": "event",
+              "label": "New payment",
+              "shortLabel": "New payment",
+              "severity": "success",
+              "methodology": "A paid order. An order placed but unpaid is not announced until it is paid.",
+              "source": {
+                "from": "metric_items",
+                "metric": "recent_payments"
+              },
+              "defaultEnabled": false,
+              "userConfigurable": true,
+              "minIntervalSeconds": 60,
+              "maxBurst": 5
+            }
+          ],
+          "allowedHosts": ["*.myshopify.com"],
+          "status": "beta",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "revenue",
+              "label": "Sales",
+              "shortLabel": "Sales",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Order totals for orders placed in the window that took payment, in the store's own currency. Gross: a later refund does not remove the order from the day it was placed. The Refunds widget is the other half.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "income", "earnings", "gross", "money", "turnover"]
+            },
+            {
+              "id": "orders",
+              "label": "Orders",
+              "shortLabel": "Orders",
+              "unit": "count",
+              "freshnessSeconds": 60,
+              "methodology": "Orders placed in the window that took payment. Test orders and abandoned or unpaid checkouts are excluded, so this sits below the Shopify admin's own order count when the store has pending orders.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["sales", "purchases", "transactions", "checkouts", "volume", "store"]
+            },
+            {
+              "id": "average_order_value",
+              "label": "Average order value",
+              "shortLabel": "AOV",
+              "unit": "currency",
+              "freshnessSeconds": 300,
+              "methodology": "Sales divided by orders over the whole window. Each point is that day's own ratio, so the headline is not the average of the points.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["aov", "basket", "cart", "average order", "order size", "spend"]
+            },
+            {
+              "id": "refunds",
+              "label": "Refunds",
+              "shortLabel": "Refunds",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "Amounts refunded against orders placed in the window, bucketed by the order's date rather than the refund's. A refund of a much older order is not counted here.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["chargeback", "returned", "refunded", "credit"]
+            },
+            {
+              "id": "new_customers",
+              "label": "New customers",
+              "shortLabel": "New",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Customer records created in the window. Shopify creates one at checkout, so a guest who buys twice counts once. Somebody who only signed up for the newsletter counts too.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["first time", "buyers", "acquisition", "growth", "signups", "store"]
+            },
+            {
+              "id": "customers",
+              "label": "Customers",
+              "shortLabel": "Customers",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Every customer record on the store right now, which is what the admin's Customers page counts. Shopify reports this as an estimate above ten thousand.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["buyers", "shoppers", "people", "store", "accounts"]
+            },
+            {
+              "id": "recent_payments",
+              "label": "Recent payments",
+              "shortLabel": "Payments",
+              "unit": "currency",
+              "freshnessSeconds": 60,
+              "methodology": "The latest orders that took payment, newest first, with the buyer's name and the first product on the order. The headline is their total in the store's currency.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": [
+                "payments",
+                "transactions",
+                "orders",
+                "charges",
+                "latest",
+                "list",
+                "feed"
+              ]
+            }
+          ],
+          "connections": []
+        }
+      ]
+    },
+    {
+      "id": "analytics",
+      "label": "Product analytics",
+      "connectors": [
+        {
+          "id": "amplitude",
+          "name": "Amplitude",
+          "category": "analytics",
+          "tagline": "Active users and events from Amplitude.",
+          "docsUrl": "https://amplitude.com/docs/apis/authentication",
+          "dashboardUrl": "https://analytics.amplitude.com",
+          "iconPath": "/connectors/amplitude.svg",
+          "accentColor": "#1E61F0",
+          "keywords": ["product analytics", "events", "behaviour", "cohorts"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "api_key",
+              "label": "API key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "32 hexadecimal characters",
+              "help": "Settings → Projects → your project → General. Both keys are per project."
+            },
+            {
+              "key": "secret_key",
+              "label": "Secret key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "32 hexadecimal characters",
+              "help": "Beside the API key. Amplitude signs Dashboard API requests with the pair."
+            },
+            {
+              "key": "region",
+              "label": "Data residency",
+              "type": "select",
+              "required": true,
+              "help": "An EU project's keys answer 401 on the US host, exactly like a wrong key.",
+              "options": [
+                {
+                  "value": "us",
+                  "label": "United States"
+                },
+                {
+                  "value": "eu",
+                  "label": "European Union"
+                }
+              ],
+              "default": "us"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then Projects, then the project you want."
+            },
+            {
+              "text": "Open the General tab."
+            },
+            {
+              "text": "Copy both the API key and the secret key."
+            },
+            {
+              "text": "Pick the region that project lives in."
+            }
+          ],
+          "allowedHosts": ["amplitude.com", "analytics.eu.amplitude.com"],
+          "status": "beta",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "active_users",
+              "label": "Active users",
+              "shortLabel": "Users",
+              "unit": "count",
+              "methodology": "Users who did anything in the window, which Amplitude calls \"Any Active Event\". The headline is Amplitude's own de-duplicated figure for the whole window, so the bars do not add up to it: one person active on three days is one user and three bars. Days are your Amplitude project's timezone, so the figures match its own charts.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["dau", "mau", "engagement", "usage", "retention"]
+            },
+            {
+              "id": "new_users",
+              "label": "New users",
+              "shortLabel": "New",
+              "unit": "count",
+              "methodology": "Users whose first ever event Amplitude recorded in the window. A user is new on exactly one day, so these bars do add up to the headline. Days are your Amplitude project's timezone, so the figures match its own charts.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["signups", "registrations", "acquisition", "growth"]
+            },
+            {
+              "id": "events",
+              "label": "Events",
+              "shortLabel": "Events",
+              "unit": "count",
+              "methodology": "Every event recorded in the window, of every type, which Amplitude calls \"Any Event\". Days are your Amplitude project's timezone, so the figures match its own charts.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["actions", "tracking", "telemetry"]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "plausible",
+          "name": "Plausible",
+          "category": "analytics",
+          "tagline": "Privacy-friendly traffic numbers from Plausible.",
+          "docsUrl": "https://plausible.io/docs/stats-api",
+          "dashboardUrl": "https://plausible.io",
+          "iconPath": "/connectors/plausible.svg",
+          "accentColor": "#5850EC",
+          "keywords": ["web analytics", "privacy", "traffic", "visitors"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "api_key",
+              "label": "API key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your Stats API key",
+              "help": "Account settings → API Keys → new Stats API key. Needs a Business plan."
+            },
+            {
+              "key": "site_id",
+              "label": "Site",
+              "type": "string",
+              "required": true,
+              "placeholder": "example.com",
+              "help": "The domain as it appears in Plausible, owned by the key's team."
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Account settings, then API Keys."
+            },
+            {
+              "text": "Create a new Stats API key. This needs a Business plan."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            },
+            {
+              "text": "Enter the site domain exactly as Plausible shows it."
+            }
+          ],
+          "allowedHosts": ["plausible.io"],
+          "status": "beta",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "visitors",
+              "label": "Unique visitors",
+              "shortLabel": "Visitors",
+              "unit": "count",
+              "methodology": "Distinct visitors in the window. The headline counts each visitor once across the whole window, so the bars do not add up to it. Buckets are your Plausible site's reporting timezone, so the figures match its own dashboard.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["users", "traffic", "uniques", "audience", "people"]
+            },
+            {
+              "id": "pageviews",
+              "label": "Pageviews",
+              "shortLabel": "Views",
+              "unit": "count",
+              "methodology": "Total pages viewed in the window, with repeat views by one visitor all counted. Buckets are your Plausible site's reporting timezone, so the figures match its own dashboard.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["views", "hits", "traffic", "impressions"]
+            },
+            {
+              "id": "bounce_rate",
+              "label": "Bounce rate",
+              "shortLabel": "Bounce",
+              "unit": "ratio",
+              "methodology": "Share of sessions that left after one interaction. Plausible computes each bar over its own bucket, so a week is weighted by its sessions rather than being the mean of seven daily rates. Buckets are your Plausible site's reporting timezone, so the figures match its own dashboard.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["bounces", "engagement", "quality"]
+            },
+            {
+              "id": "sessions",
+              "label": "Sessions",
+              "shortLabel": "Sessions",
+              "unit": "count",
+              "methodology": "Visits started in the window, which Plausible calls \"visits\". A session that spans midnight is counted in the bucket it started in. Buckets are your Plausible site's reporting timezone, so the figures match its own dashboard.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["visits", "traffic"]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "posthog",
+          "name": "PostHog",
+          "category": "analytics",
+          "tagline": "Product analytics: users, events and conversion from PostHog.",
+          "docsUrl": "https://posthog.com/docs/api/personal-api-keys",
+          "dashboardUrl": "https://app.posthog.com",
+          "iconPath": "/connectors/posthog.svg",
+          "accentColor": "#1D1D1D",
+          "keywords": ["product analytics", "events", "funnels", "sessions"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "api_key",
+              "label": "Personal API key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "phx_…",
+              "help": "Settings → Personal API keys. Needs the Query Read and User Read scopes."
+            },
+            {
+              "key": "project_id",
+              "label": "Project ID",
+              "type": "string",
+              "required": false,
+              "placeholder": "Leave blank for your default project",
+              "help": "The number in your PostHog project URL. Blank uses the key's current project."
+            },
+            {
+              "key": "region",
+              "label": "Region",
+              "type": "select",
+              "required": true,
+              "help": "PostHog Cloud US or EU. The wrong one returns 401, exactly like a bad key.",
+              "options": [
+                {
+                  "value": "us",
+                  "label": "United States"
+                },
+                {
+                  "value": "eu",
+                  "label": "European Union"
+                }
+              ],
+              "default": "us"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then Personal API keys."
+            },
+            {
+              "text": "Create a key with the Query Read and User Read scopes."
+            },
+            {
+              "text": "Pick PostHog Cloud US or EU to match your project."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            },
+            {
+              "text": "Leave Project ID blank to use the key's own project."
+            }
+          ],
+          "allowedHosts": ["us.posthog.com", "eu.posthog.com"],
+          "status": "beta",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "active_users",
+              "label": "Active users",
+              "shortLabel": "Users",
+              "unit": "count",
+              "methodology": "People with at least one event in the window, de-duplicated. The headline counts each person once across the whole window, so the bars do not add up to it: one person on three days is one user and three bars. Days are your PostHog project's timezone, so the figures match its own dashboards.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["dau", "mau", "engagement", "usage", "retention"]
+            },
+            {
+              "id": "new_users",
+              "label": "New users",
+              "shortLabel": "New",
+              "unit": "count",
+              "methodology": "Person profiles PostHog first created in the window. Anonymous visitors who are never identified do not create one, so this counts people PostHog can tell apart rather than every first visit.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["signups", "registrations", "acquisition", "growth"]
+            },
+            {
+              "id": "events",
+              "label": "Events",
+              "shortLabel": "Events",
+              "unit": "count",
+              "methodology": "Every event recorded in the window, of every name.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["actions", "tracking", "telemetry"]
+            },
+            {
+              "id": "pageviews",
+              "label": "Pageviews",
+              "shortLabel": "Views",
+              "unit": "count",
+              "methodology": "`$pageview` events in the window. Repeat views by one person all count.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["views", "hits", "traffic", "impressions"]
+            },
+            {
+              "id": "sessions",
+              "label": "Sessions",
+              "shortLabel": "Sessions",
+              "unit": "count",
+              "methodology": "Distinct `$session_id`s seen in the window. The headline de-duplicates across the whole window, so a session spanning midnight is one session and two bars.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["visits", "traffic"]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "mixpanel",
+          "name": "Mixpanel",
+          "category": "analytics",
+          "tagline": "Events and active users from Mixpanel.",
+          "docsUrl": "https://developer.mixpanel.com/reference/service-accounts",
+          "dashboardUrl": "https://mixpanel.com",
+          "iconPath": "/connectors/mixpanel.svg",
+          "accentColor": "#7856FF",
+          "keywords": ["product analytics", "events", "funnels"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "username",
+              "label": "Service account username",
+              "type": "string",
+              "required": true,
+              "placeholder": "my-account.1a2b3c.mp-service-account",
+              "help": "Organization Settings → Service Accounts."
+            },
+            {
+              "key": "secret",
+              "label": "Service account secret",
+              "type": "secret",
+              "required": true,
+              "placeholder": "Your service account secret",
+              "help": "Shown once when the service account is created, and not again."
+            },
+            {
+              "key": "project_id",
+              "label": "Project ID",
+              "type": "string",
+              "required": true,
+              "placeholder": "1234567",
+              "help": "Project Settings → Project Details."
+            },
+            {
+              "key": "region",
+              "label": "Data residency",
+              "type": "select",
+              "required": true,
+              "help": "EU projects reject requests to the US host.",
+              "options": [
+                {
+                  "value": "us",
+                  "label": "United States"
+                },
+                {
+                  "value": "eu",
+                  "label": "European Union"
+                }
+              ],
+              "default": "us"
+            }
+          ],
+          "allowedHosts": ["mixpanel.com", "eu.mixpanel.com"],
+          "status": "coming_soon",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "active_users",
+              "label": "Active users",
+              "shortLabel": "Users",
+              "unit": "count",
+              "methodology": "Users with at least one event in the window.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["dau", "mau", "engagement", "usage", "retention"]
+            },
+            {
+              "id": "new_users",
+              "label": "New users",
+              "shortLabel": "New",
+              "unit": "count",
+              "methodology": "Users seen for the first time in the window.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["signups", "registrations", "acquisition", "growth"]
+            },
+            {
+              "id": "events",
+              "label": "Events",
+              "shortLabel": "Events",
+              "unit": "count",
+              "methodology": "Events recorded in the window.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["actions", "tracking", "telemetry"]
+            }
+          ],
+          "connections": []
+        }
+      ]
+    },
+    {
+      "id": "developer",
+      "label": "Developer",
+      "connectors": [
+        {
+          "id": "github",
+          "name": "GitHub",
+          "category": "developer",
+          "tagline": "Stars, forks and open work, per repository.",
+          "docsUrl": "https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api",
+          "dashboardUrl": "https://github.com/settings/tokens",
+          "iconPath": "/connectors/github.svg",
+          "accentColor": "#181717",
+          "keywords": ["repo", "repository", "open source", "code", "issues"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "access_token",
+              "label": "Personal access token",
+              "type": "secret",
+              "required": true,
+              "placeholder": "github_pat_… or ghp_…",
+              "help": "Settings → Developer settings → Personal access tokens. Read access is enough.",
+              "pattern": "^(ghp_|github_pat_)[A-Za-z0-9_]+$"
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then Developer settings.",
+              "url": "https://github.com/settings/tokens"
+            },
+            {
+              "text": "Select Personal access tokens, then Tokens (classic)."
+            },
+            {
+              "text": "Tick repo for private repositories, or public_repo for public ones."
+            },
+            {
+              "text": "Tick read:user, which names the connection after your account."
+            },
+            {
+              "text": "Generate the token, then paste it above."
+            },
+            {
+              "text": "A fine-grained token works too, with Metadata, Issues, Pull requests and Actions set to read."
+            }
+          ],
+          "allowedHosts": ["api.github.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "stars",
+              "linkTemplate": "https://github.com/{repository}/stargazers",
+              "label": "Stars",
+              "shortLabel": "Stars",
+              "unit": "count",
+              "freshnessSeconds": 120,
+              "methodology": "Stargazers on the repository right now.",
+              "params": [
+                {
+                  "key": "repository",
+                  "label": "Repository",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "owner/name",
+                  "help": "Which repository this tile counts.",
+                  "pattern": "^[\\w.-]+/[\\w.-]+$"
+                }
+              ],
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["github", "stargazers", "popularity", "repo"]
+            },
+            {
+              "id": "forks",
+              "linkTemplate": "https://github.com/{repository}/forks",
+              "label": "Forks",
+              "shortLabel": "Forks",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Forks of the repository right now.",
+              "params": [
+                {
+                  "key": "repository",
+                  "label": "Repository",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "owner/name",
+                  "help": "Which repository this tile counts.",
+                  "pattern": "^[\\w.-]+/[\\w.-]+$"
+                }
+              ],
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["github", "repo", "clones"]
+            },
+            {
+              "id": "open_issues",
+              "linkTemplate": "https://github.com/{repository}/issues",
+              "label": "Open issues",
+              "shortLabel": "Issues",
+              "unit": "count",
+              "freshnessSeconds": 120,
+              "methodology": "Open issues, excluding pull requests.",
+              "params": [
+                {
+                  "key": "repository",
+                  "label": "Repository",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "owner/name",
+                  "help": "Which repository this tile counts.",
+                  "pattern": "^[\\w.-]+/[\\w.-]+$"
+                }
+              ],
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["github", "bugs", "tickets", "repo"]
+            },
+            {
+              "id": "open_pull_requests",
+              "linkTemplate": "https://github.com/{repository}/pulls",
+              "label": "Open pull requests",
+              "shortLabel": "PRs",
+              "unit": "count",
+              "freshnessSeconds": 120,
+              "methodology": "Pull requests currently open.",
+              "params": [
+                {
+                  "key": "repository",
+                  "label": "Repository",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "owner/name",
+                  "help": "Which repository this tile counts.",
+                  "pattern": "^[\\w.-]+/[\\w.-]+$"
+                }
+              ],
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false,
+              "keywords": ["github", "prs", "reviews", "repo"]
+            },
+            {
+              "id": "ci_runs",
+              "linkTemplate": "https://github.com/{repository}/actions?query=branch%3A{branch}",
+              "label": "CI runs",
+              "shortLabel": "CI",
+              "unit": "count",
+              "keywords": [
+                "ci",
+                "build",
+                "builds",
+                "actions",
+                "workflow",
+                "pipeline",
+                "checks",
+                "green",
+                "red"
+              ],
+              "freshnessSeconds": 60,
+              "methodology": "The ten most recent GitHub Actions runs, newest first. Private repositories included, for the account this connection signed in as.",
+              "params": [
+                {
+                  "key": "repository",
+                  "label": "Repository",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "owner/name",
+                  "help": "Which repository this tile counts.",
+                  "pattern": "^[\\w.-]+/[\\w.-]+$"
+                },
+                {
+                  "key": "branch",
+                  "label": "Branch",
+                  "type": "string",
+                  "required": false,
+                  "placeholder": "main",
+                  "help": "Leave empty for every branch.",
+                  "pattern": "^[^\\s?&#]+$"
+                }
+              ],
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false
+            },
+            {
+              "id": "followers",
+              "label": "Followers",
+              "shortLabel": "Followers",
+              "unit": "count",
+              "keywords": ["github", "audience", "profile"],
+              "freshnessSeconds": 300,
+              "methodology": "People following the GitHub account this connection signed in as.",
+              "granularities": ["hour", "day", "week", "month"],
+              "supportsSeries": false,
+              "supportsCompare": false
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "npm",
+          "name": "npm",
+          "category": "developer",
+          "tagline": "Downloads for the packages you publish.",
+          "docsUrl": "https://github.com/npm/registry/blob/master/docs/download-counts.md",
+          "dashboardUrl": "https://www.npmjs.com",
+          "iconPath": "/connectors/npm.svg",
+          "accentColor": "#CB3837",
+          "keywords": ["package", "registry", "node", "javascript", "downloads", "publish"],
+          "authMode": "none",
+          "fields": [],
+          "setupSteps": [
+            {
+              "text": "Nothing to connect. npm's download counts are public."
+            },
+            {
+              "text": "Add a widget and name the package it counts."
+            },
+            {
+              "text": "Private package downloads are not published by npm, so not shown here."
+            }
+          ],
+          "allowedHosts": ["api.npmjs.org"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "downloads",
+              "label": "Downloads",
+              "shortLabel": "Downloads",
+              "unit": "count",
+              "params": [
+                {
+                  "key": "package",
+                  "label": "Package",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "react or @scope/name",
+                  "help": "Which package this tile counts.",
+                  "pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
+                }
+              ],
+              "freshnessSeconds": 900,
+              "methodology": "Downloads of this package in the window, as npm counts them. Includes CI and mirrors, which is what npmjs.com shows too. Days npm has not finished aggregating come back as zero and are named in the note rather than hidden. Days are npm's own UTC days, so the figures match npmjs.com.",
+              "granularities": ["day", "week", "month"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["installs", "package downloads", "npm downloads"]
+            },
+            {
+              "id": "weekly_downloads",
+              "label": "Weekly downloads",
+              "shortLabel": "Weekly",
+              "unit": "count",
+              "params": [
+                {
+                  "key": "package",
+                  "label": "Package",
+                  "type": "string",
+                  "required": true,
+                  "placeholder": "react or @scope/name",
+                  "help": "Which package this tile counts.",
+                  "pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
+                }
+              ],
+              "freshnessSeconds": 900,
+              "methodology": "npm's own weekly downloads: the seven days ending on each point, which is the figure and the line npmjs.com shows. The headline is the most recent complete week, so it matches the package page exactly. Days are npm's own UTC days, so the figures match npmjs.com.",
+              "granularities": ["day"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["weekly installs", "downloads a week", "npm weekly"]
+            }
+          ],
+          "connections": []
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "label": "AI",
+      "connectors": [
+        {
+          "id": "anthropic",
+          "name": "Claude",
+          "category": "ai",
+          "tagline": "Token usage and spend across your Claude organisation.",
+          "docsUrl": "https://platform.claude.com/docs/en/manage-claude/admin-api-keys",
+          "dashboardUrl": "https://console.anthropic.com",
+          "iconPath": "/connectors/anthropic.svg",
+          "accentColor": "#D97757",
+          "keywords": ["llm", "ai", "claude", "anthropic", "inference", "api"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "admin_key",
+              "label": "Admin key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "sk-ant-admin01-…",
+              "help": "Console → Settings → Admin keys. Workspace-scoped keys cannot read usage, and individual accounts have no Admin API.",
+              "pattern": "^sk-ant-"
+            },
+            {
+              "key": "workspace_id",
+              "label": "Workspace ID",
+              "type": "string",
+              "required": false,
+              "placeholder": "wrkspc_…",
+              "help": "Leave empty to total every workspace in the organisation."
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open the Claude Console, then Settings, then Admin keys.",
+              "url": "https://platform.claude.com/docs/en/manage-claude/admin-api-keys"
+            },
+            {
+              "text": "Create an admin key. A workspace key cannot read usage."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            },
+            {
+              "text": "Leave Workspace ID empty to total the whole organisation."
+            }
+          ],
+          "allowedHosts": ["api.anthropic.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "tokens",
+              "label": "Tokens",
+              "shortLabel": "Tokens",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Input plus output tokens on Messages requests in the window. Input is uncached input, cache reads and cache writes added together, which is what the Usage page shows. It is not what you were billed, since cache reads cost a tenth of the rest.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["llm", "ai", "usage", "consumption", "context", "prompt"]
+            },
+            {
+              "id": "input_tokens",
+              "label": "Input tokens",
+              "shortLabel": "Input",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Uncached input, cache reads and both cache-write tiers added together. Each is priced differently; this is the volume, not the bill.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["prompt", "llm", "ai", "context", "usage"]
+            },
+            {
+              "id": "output_tokens",
+              "label": "Output tokens",
+              "shortLabel": "Output",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Output tokens generated on Messages requests in the window. Thinking tokens are output tokens and are counted here.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["completion", "generated", "llm", "ai", "usage"]
+            },
+            {
+              "id": "api_spend",
+              "label": "API spend",
+              "shortLabel": "Spend",
+              "unit": "currency",
+              "freshnessSeconds": 300,
+              "methodology": "Billed cost per day from the cost report: tokens, web search and code execution. Priority Tier is billed differently and is not included, which is Anthropic's own caveat, not ours.",
+              "granularities": ["day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["cost", "bill", "burn", "llm", "ai", "spend", "inference"]
+            }
+          ],
+          "connections": []
+        },
+        {
+          "id": "openai",
+          "name": "OpenAI",
+          "category": "ai",
+          "tagline": "Token usage and spend across your OpenAI organisation.",
+          "docsUrl": "https://platform.openai.com/settings/organization/admin-keys",
+          "dashboardUrl": "https://platform.openai.com/usage",
+          "iconPath": "/connectors/openai.svg",
+          "accentColor": "#000000",
+          "keywords": ["llm", "ai", "gpt", "chatgpt", "inference", "api"],
+          "authMode": "api_key",
+          "fields": [
+            {
+              "key": "admin_key",
+              "label": "Admin key",
+              "type": "secret",
+              "required": true,
+              "placeholder": "sk-admin-…",
+              "help": "Settings → Organization → Admin keys. A project or user key cannot read usage and will be rejected.",
+              "pattern": "^sk-"
+            },
+            {
+              "key": "project_id",
+              "label": "Project ID",
+              "type": "string",
+              "required": false,
+              "placeholder": "proj_…",
+              "help": "Leave empty to total every project in the organisation."
+            }
+          ],
+          "setupSteps": [
+            {
+              "text": "Open Settings, then Organization, then Admin keys.",
+              "url": "https://platform.openai.com/settings/organization/admin-keys"
+            },
+            {
+              "text": "Create an admin key. A project key cannot read usage."
+            },
+            {
+              "text": "Copy the key, then paste it above."
+            },
+            {
+              "text": "Leave Project ID empty to total every project."
+            }
+          ],
+          "allowedHosts": ["api.openai.com"],
+          "status": "stable",
+          "minAppVersion": "0.1.0",
+          "metrics": [
+            {
+              "id": "tokens",
+              "label": "Tokens",
+              "shortLabel": "Tokens",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Input plus output tokens on chat and completions requests in the window. Input includes cached reads and cache writes, so this matches what the Usage page totals rather than what you were charged for.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["llm", "ai", "usage", "consumption", "context", "prompt"]
+            },
+            {
+              "id": "input_tokens",
+              "label": "Input tokens",
+              "shortLabel": "Input",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Input tokens on completions requests, cached reads and cache writes included. Audio and image inputs are counted in their own token units, as OpenAI reports them.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["prompt", "llm", "ai", "context", "usage"]
+            },
+            {
+              "id": "output_tokens",
+              "label": "Output tokens",
+              "shortLabel": "Output",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Output tokens generated on completions requests in the window.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["completion", "generated", "llm", "ai", "usage"]
+            },
+            {
+              "id": "api_requests",
+              "label": "API requests",
+              "shortLabel": "Requests",
+              "unit": "count",
+              "freshnessSeconds": 300,
+              "methodology": "Model requests on the completions endpoint. One batch job counts as the requests inside it, not as one.",
+              "granularities": ["hour", "day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["calls", "requests", "llm", "ai", "volume", "traffic"]
+            },
+            {
+              "id": "api_spend",
+              "label": "API spend",
+              "shortLabel": "Spend",
+              "unit": "currency",
+              "freshnessSeconds": 300,
+              "methodology": "Billed cost per day from OpenAI's cost report, every line item included: tokens, tools and storage. Rounded to the cent per day, so it tracks the invoice rather than the fractional amounts the API returns.",
+              "granularities": ["day", "week"],
+              "supportsSeries": true,
+              "supportsCompare": true,
+              "keywords": ["cost", "bill", "burn", "llm", "ai", "spend", "inference"]
+            }
+          ],
+          "connections": []
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "Secret API key (v2)",
       type: "secret",
       required: true,
+      placeholder: "sk_…",
       help: "Project settings → API keys → New, version V2. Grant Charts & Metrics read; add Projects read to pick the project by name.",
     },
     {

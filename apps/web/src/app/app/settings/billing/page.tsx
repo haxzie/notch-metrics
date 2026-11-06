@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PLANS, annualSavingPercent, formatPrice, type BillingState } from "@notch/schemas";
+import { PLANS, formatPrice, type BillingState } from "@notch/schemas";
 import { ApiError, api } from "@/lib/api";
 
 export default function Billing() {
@@ -43,8 +43,7 @@ export default function Billing() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
         <p className="mt-1 text-sm text-white/55">
-          Seven days free, then {formatPrice(PLANS.pro.amount, "USD")} a month or{" "}
-          {formatPrice(PLANS.pro_annual.amount, "USD")} a year.
+          Seven days free, then {formatPrice(PLANS.pro.amount, "USD")} once.
         </p>
       </div>
 
@@ -86,20 +85,12 @@ export default function Billing() {
       {!isPro && (
         <section className="grid gap-4 sm:grid-cols-2">
           <Option
-            title="Monthly"
-            price={`${formatPrice(PLANS.pro.amount, "USD")} / month`}
+            title="Lifetime"
+            price={`${formatPrice(PLANS.pro.amount, "USD")} once`}
+            highlighted
             busy={busy === "pro"}
             disabled={busy !== null}
             onChoose={() => void go("/v1/billing/checkout", "pro", { plan: "pro" })}
-          />
-          <Option
-            title="Yearly"
-            price={`${formatPrice(PLANS.pro_annual.amount, "USD")} / year`}
-            badge={`Save ${annualSavingPercent()}%`}
-            highlighted
-            busy={busy === "pro_annual"}
-            disabled={busy !== null}
-            onChoose={() => void go("/v1/billing/checkout", "pro_annual", { plan: "pro_annual" })}
           />
         </section>
       )}

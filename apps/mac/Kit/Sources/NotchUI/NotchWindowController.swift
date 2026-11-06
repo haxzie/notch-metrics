@@ -57,6 +57,9 @@ public final class NotchWindowController {
         didSet { view?.configuratorPanel = configuratorPanel }
     }
 
+    /// Which connector's credentials the notch is asking for, if any.
+    public var connectingConnectorId: String? { view?.connectingConnectorId }
+
     /// Which widget the notch is configuring, if any.
     public var configuringID: String? {
         get { view?.configuringID }
@@ -78,6 +81,17 @@ public final class NotchWindowController {
     /// `NotchViewModel.alertCentrePanel`.
     public var alertCentrePanel: @MainActor () -> AnyView = { AnyView(EmptyView()) } {
         didSet { view?.alertCentrePanel = alertCentrePanel }
+    }
+
+    /// One connector's credentials form. See `NotchViewModel.connectPanel`.
+    public var connectPanel: @MainActor (String) -> AnyView = { _ in AnyView(EmptyView()) } {
+        didSet { view?.connectPanel = connectPanel }
+    }
+
+    /// That form's Connect and Cancel, drawn in the header. See
+    /// `NotchViewModel.connectActions`.
+    public var connectActions: @MainActor () -> AnyView = { AnyView(EmptyView()) } {
+        didSet { view?.connectActions = connectActions }
     }
 
     /// Drives the bell's badge and the dot on the collapsed notch.
@@ -124,6 +138,9 @@ public final class NotchWindowController {
         view.configuringIsNew = isNew
         // The pane replaces the browser, which is where this was picked.
         view.isBrowsing = false
+        // The widget's name is a text field, so the same applies here as to
+        // the credentials form. See `takeKeyboardFocus`.
+        takeKeyboardFocus()
         // The pointer is over the browser's list, which the pane has just
         // replaced — so without the hold the exit watch collapses the form
         // within a tick of it appearing.
@@ -332,6 +349,8 @@ public final class NotchWindowController {
         viewModel.configuratorPanel = configuratorPanel
         viewModel.browserPanel = browserPanel
         viewModel.alertCentrePanel = alertCentrePanel
+        viewModel.connectPanel = connectPanel
+        viewModel.connectActions = connectActions
         viewModel.unreadAlertCount = unreadAlertCount
         viewModel.availableUpdate = availableUpdate
         viewModel.onOpenUpdate = { [weak self] in self?.onOpenUpdate() }
@@ -347,6 +366,7 @@ public final class NotchWindowController {
         viewModel.onRefresh = { [weak self] in self?.onRefresh() }
         viewModel.onEndConfiguring = { [weak self] in self?.paneEnded() }
         viewModel.onEndBrowsing = { [weak self] in self?.paneEnded() }
+        viewModel.onEndConnecting = { [weak self] in self?.endConnecting() }
         viewModel.onTogglePin = { [weak self] in self?.togglePin() }
         viewModel.onClose = { [weak self] in self?.close() }
         self.view = viewModel
@@ -646,11 +666,16 @@ public final class NotchWindowController {
         view.configuringID = nil
         view.configuringSnapshot = nil
         view.configuringIsNew = false
+        view.connectingConnectorId = nil
         expand()
         model.isEditing = false
         // The pane swap animates from the view, which watches `isBrowsing` —
         // see `expandedContent`.
         view.isBrowsing = true
+        // The search field is the first thing most people reach for here, and
+        // Cmd-V into it has to paste here rather than into whatever was
+        // frontmost. See `takeKeyboardFocus`.
+        takeKeyboardFocus()
         holdOpenForPane()
     }
 
@@ -665,6 +690,7 @@ public final class NotchWindowController {
         view.configuringSnapshot = nil
         view.configuringIsNew = false
         view.isBrowsing = false
+        view.connectingConnectorId = nil
         view.alertsFocus = focus
         expand()
         model.isEditing = false
@@ -678,6 +704,50 @@ public final class NotchWindowController {
         guard let view else { return }
         view.isShowingAlerts = false
         view.alertsFocus = nil
+        paneEnded()
+    }
+
+    /// Opens one connector's credentials form in the notch.
+    ///
+    /// Leaves browsing on purpose rather than stacking on top of it. The form
+    /// is a step on the way to a widget, and coming back to a browser that
+    /// had scrolled somewhere else was worse than coming back to it fresh.
+    public func beginConnecting(_ connectorId: String) {
+        guard let view else { return }
+        view.configuringID = nil
+        view.configuringSnapshot = nil
+        view.configuringIsNew = false
+        view.isBrowsing = false
+        view.isShowingAlerts = false
+        view.connectContentHeight = 0
+        expand()
+        model.isEditing = false
+        view.connectingConnectorId = connectorId
+        takeKeyboardFocus()
+        // A form is typed into, not hovered: without the hold, the exit watch
+        // collapses the notch the moment the pointer stops moving — which,
+        // while somebody is typing a key, is immediately.
+        holdOpenForPane()
+    }
+
+    /// Makes the notch the window keystrokes reach.
+    ///
+    /// Only the key window, never the active app. Activating would need
+    /// `setActivationPolicy(.regular)` on an accessory app and so would put a
+    /// Dock icon up; `NotchPanel.performKeyEquivalent` is what makes Cmd-V
+    /// and friends work without it.
+    ///
+    /// Called when a pane that takes text opens, never on hover and never on
+    /// expand: brushing the notch must not take the keyboard away from what
+    /// somebody is working in.
+    private func takeKeyboardFocus() {
+        panel?.makeKey()
+    }
+
+    public func endConnecting() {
+        guard let view else { return }
+        view.connectingConnectorId = nil
+        view.connectContentHeight = 0
         paneEnded()
     }
 

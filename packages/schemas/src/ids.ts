@@ -33,12 +33,9 @@ export const ProviderId = z.enum([
   "plausible",
   "mixpanel",
   "amplitude",
-  "google-analytics",
-  // Marketing and SEO
-  "google-search-console",
-  "youtube",
   // Developer
   "github",
+  "npm",
   // AI
   "openai",
   "anthropic",
@@ -52,13 +49,12 @@ export type ProviderId = z.infer<typeof ProviderId>;
  * "where do my signups come from" should find one short list, not eleven
  * categories of one.
  */
-export const ConnectorCategory = z.enum(["revenue", "analytics", "marketing", "developer", "ai"]);
+export const ConnectorCategory = z.enum(["revenue", "analytics", "developer", "ai"]);
 export type ConnectorCategory = z.infer<typeof ConnectorCategory>;
 
 export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
   revenue: "Revenue",
   analytics: "Product analytics",
-  marketing: "Marketing & SEO",
   developer: "Developer",
   ai: "AI",
 };
@@ -151,6 +147,13 @@ export const MetricId = z.enum([
   "open_issues",
   "open_pull_requests",
   "ci_runs",
+  // Package registries. `downloads` answers whatever window the widget asks
+  // for; `weekly_downloads` is npm's own headline figure, which is a fixed
+  // seven days and therefore a different number rather than the same one at
+  // a different range. Two ids, so a widget cannot silently swap between a
+  // figure the user chose the window for and one npm chose it for.
+  "downloads",
+  "weekly_downloads",
   // AI
   "tokens",
   "input_tokens",

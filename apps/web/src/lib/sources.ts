@@ -206,10 +206,8 @@ export function statusNote(status: ProviderManifest["status"]): string | null {
   return null;
 }
 
-export function authPhrase(manifest: ProviderManifest): string {
-  return manifest.authMode === "oauth2"
-    ? "Sign in through the provider. No key is typed in anywhere."
-    : "Paste a key on the web, once.";
+export function authPhrase(_manifest: ProviderManifest): string {
+  return "Paste a key in the notch, once. It stays on your Mac.";
 }
 
 /**
@@ -237,21 +235,17 @@ export function generatedSourceFaq(
     },
     {
       question: `How do you connect ${manifest.name} to Notch Metrics?`,
-      answer:
-        manifest.authMode === "oauth2"
-          ? `Sign in to notchmetrics.com, choose ${manifest.name} and approve the prompt. Nothing is typed in, and every Mac on your account picks the connection up.`
-          : `Sign in to notchmetrics.com, choose ${manifest.name} and paste your key. ${
-              plain(manifest.fields[0]?.help ?? "") ||
-              "The key is encrypted the moment it arrives and never reaches your Mac."
-            }`,
+      answer: `Open the notch, choose ${manifest.name} and paste your key. ${
+        plain(manifest.fields[0]?.help ?? "") || "The key goes straight into your Mac's Keychain."
+      }`,
     },
     {
-      question: `Does the Notch Metrics Mac app hold my ${manifest.name} key?`,
-      answer: `No. Our server calls ${manifest.name} and hands your Mac a normalised number. Your ${manifest.name} credential is encrypted with its own key, bound to your account and the provider, so a row copied anywhere else does not decrypt.`,
+      question: `Does Notch Metrics send my ${manifest.name} key to a server?`,
+      answer: `No. The key is stored in your Mac's Keychain, and the app calls ${manifest.name} directly from your Mac. The key never reaches our servers, so there is nothing of yours for us to lose.`,
     },
     {
       question: `What does ${manifest.name} in the notch cost?`,
-      answer: `Every connector is included, with no per-integration charge. Notch Metrics is $9 a month or $49 a year, after a seven-day trial that needs no card. ${manifest.name} counts as one of the connectors on every plan.`,
+      answer: `Every connector is included, with no per-integration charge. Notch Metrics is $5, paid once, after a seven-day trial that needs no card. There is no subscription and no second plan, so ${manifest.name} costs nothing extra.`,
     },
   ];
 
@@ -309,7 +303,7 @@ export function generatedMetricFaq(
 
   faq.push({
     question: `What does it cost to put ${full} in the notch?`,
-    answer: `$9 a month, or $49 a year, with every connector included and no per-integration charge. The seven-day trial needs no card, so you can see your own ${metric.label.toLowerCase()} before deciding.`,
+    answer: `$5, paid once, with every connector included and no per-integration charge. The seven-day trial needs no card, so you can see your own ${metric.label.toLowerCase()} before deciding.`,
   });
 
   return faq;

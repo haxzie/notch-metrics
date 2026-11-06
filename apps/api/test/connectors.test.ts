@@ -54,17 +54,10 @@ describe("the connector catalogue", () => {
 
   it("returns every category in a deliberate order", async () => {
     const body = await (await get("/v1/connectors")).json<Catalogue>();
-    expect(body.categories.map((c) => c.id)).toEqual([
-      "revenue",
-      "analytics",
-      "marketing",
-      "developer",
-      "ai",
-    ]);
+    expect(body.categories.map((c) => c.id)).toEqual(["revenue", "analytics", "developer", "ai"]);
     expect(body.categories.map((c) => c.label)).toEqual([
       "Revenue",
       "Product analytics",
-      "Marketing & SEO",
       "Developer",
       "AI",
     ]);

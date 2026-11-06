@@ -232,7 +232,7 @@ async function mrrValue(
     value,
     note: join(
       unpriced > 0
-        ? `${unpriced} subscription${unpriced === 1 ? "" : "s"} had no recurring price and were excluded.`
+        ? `${unpriced} subscription${unpriced === 1 ? " was" : "s were"} excluded for having no recurring price.`
         : undefined,
       truncationNote(truncated),
     ),

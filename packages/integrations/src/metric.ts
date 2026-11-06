@@ -17,7 +17,6 @@ import type {
   VerifyResult,
 } from "./types.ts";
 import { ProviderError } from "./types.ts";
-import type { OAuthConfig } from "./oauth.ts";
 import type { ZodType } from "zod";
 
 /**
@@ -235,8 +234,7 @@ export function listMetric<C extends Record<string, unknown>>(
  *
  * Without this every metric file repeats `<GitHubCredentials>`, and a file
  * that forgets it silently widens `creds` to the base record — which still
- * compiles and then fails on the first property read. Same trick as
- * `googleOAuth<C>`.
+ * compiles and then fails on the first property read.
  */
 export function metricsFor<C extends Record<string, unknown>>(): {
   scalar: (options: ScalarOptions<C>) => MetricDefinition<C>;
@@ -377,7 +375,6 @@ export interface ProviderOptions<C extends Record<string, unknown>> {
   manifest: Omit<ProviderManifest, "metrics">;
   credentialSchema: ZodType<C>;
   userInputFields?: readonly string[];
-  oauth?: OAuthConfig<C>;
   requestTimeoutMs?: number;
   metrics: MetricDefinition<C>[];
   /**
@@ -442,7 +439,6 @@ export function provider<C extends Record<string, unknown>>(
     manifest,
     credentialSchema: options.credentialSchema,
     ...(options.userInputFields !== undefined ? { userInputFields: options.userInputFields } : {}),
-    ...(options.oauth !== undefined ? { oauth: options.oauth } : {}),
     ...(options.requestTimeoutMs !== undefined
       ? { requestTimeoutMs: options.requestTimeoutMs }
       : {}),

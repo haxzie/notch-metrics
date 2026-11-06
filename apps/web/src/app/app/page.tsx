@@ -1,27 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { BillingState, Integration } from "@notch/schemas";
+import type { BillingState } from "@notch/schemas";
 import { api } from "@/lib/api";
 
 export default function Overview() {
-  const [integrations, setIntegrations] = useState<Integration[] | null>(null);
   const [billing, setBilling] = useState<BillingState | null>(null);
 
+  // Billing only. Connections are not the server's any more: a key is
+  // entered in the notch and lives in that Mac's Keychain, so this dashboard
+  // has no way to count them and no business knowing they exist.
   useEffect(() => {
-    // Settled rather than awaited in sequence: a billing failure should not
-    // blank the integration count, and vice versa.
-    void Promise.allSettled([
-      api<Integration[]>("/v1/integrations"),
-      api<BillingState>("/v1/billing"),
-    ]).then(([list, state]) => {
-      if (list.status === "fulfilled") setIntegrations(list.value);
-      if (state.status === "fulfilled") setBilling(state.value);
-    });
+    void api<BillingState>("/v1/billing")
+      .then(setBilling)
+      .catch(() => {});
   }, []);
-
-  const failing = integrations?.filter((row) => row.status === "auth_failed") ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -32,12 +25,7 @@ export default function Overview() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat
-          label="Connected"
-          value={integrations === null ? "—" : String(integrations.length)}
-          hint={integrations === null ? "Loading" : "integrations"}
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
         <Stat
           label="Plan"
           value={
@@ -51,34 +39,13 @@ export default function Overview() {
           }
           hint={describeBilling(billing)}
         />
-        <Stat
-          label="Needs attention"
-          value={integrations === null ? "—" : String(failing.length)}
-          hint={failing.length ? "reconnect required" : "everything healthy"}
-        />
       </div>
-
-      {failing.length > 0 && (
-        <section className="bg-amber-500/8 rounded-xl border border-amber-500/25 p-5">
-          <h2 className="font-medium">Some integrations stopped working</h2>
-          <p className="mt-1 text-sm text-white/60">
-            {failing.map((row) => row.label).join(", ")} rejected our last request. We stop polling
-            after a failed key, so these need reconnecting before their widgets fill in again.
-          </p>
-          <Link
-            href="/app/integrations"
-            className="mt-3 inline-block rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:bg-white/5"
-          >
-            Fix them
-          </Link>
-        </section>
-      )}
 
       <section className="rounded-xl border border-white/10 p-5">
         <h2 className="font-medium">Get the app</h2>
         <p className="mt-1 text-sm text-white/60">
-          Notch Metrics is a Mac app. This dashboard exists for the things a notch is a bad place
-          for — connecting accounts and managing your subscription.
+          Notch Metrics is a Mac app. Accounts are connected in the notch, where the keys stay. This
+          dashboard is for your subscription.
         </p>
         <a
           href="/download"

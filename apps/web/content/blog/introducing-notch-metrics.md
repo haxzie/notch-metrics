@@ -27,7 +27,7 @@ faq:
       provider key.
   - question: How much does Notch Metrics cost?
     answer: >-
-      $9 a month, or $49 a year. Every connector is included on both plans,
+      $5, paid once. Every connector is included,
       with no per-integration charge. The seven-day trial needs no card.
   - question: Can Notch Metrics show a number that has no connector?
     answer: >-

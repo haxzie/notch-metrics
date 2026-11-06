@@ -40,6 +40,12 @@ public struct AppSettings: Codable, Sendable, Equatable {
     /// carry the same id — and merging them would let approving one bless the
     /// other.
     public var approvedConnectors: [String: String] = [:]
+    /// Every provider account connected on this Mac.
+    ///
+    /// The list only; the credentials themselves are in the Keychain under
+    /// `SecretKey.connection`. A key in a file this app rewrites on every
+    /// preference change would be a key in a Time Machine backup.
+    public var localConnections: [LocalConnection] = []
     public var checkForUpdatesAutomatically: Bool = true
 
     // MARK: Notifications
@@ -101,11 +107,79 @@ public struct AppSettings: Codable, Sendable, Equatable {
         // path has never shipped, so in practice there is nothing to migrate.
         approvedPlugins = value(.approvedPlugins, fallback.approvedPlugins)
         approvedConnectors = value(.approvedConnectors, fallback.approvedConnectors)
+        localConnections = value(.localConnections, fallback.localConnections)
         checkForUpdatesAutomatically = value(
             .checkForUpdatesAutomatically, fallback.checkForUpdatesAutomatically)
         alertBannerSeconds = value(.alertBannerSeconds, fallback.alertBannerSeconds)
         alertBannersEnabled = value(.alertBannersEnabled, fallback.alertBannersEnabled)
         alertSound = value(.alertSound, fallback.alertSound)
+    }
+}
+
+/// One provider account connected on this Mac.
+///
+/// What the server used to return as `ConnectorConnection`, kept here instead.
+/// The shape is deliberately close to it: the widget configure pane, the
+/// browser and the connections list all read those fields, and a different
+/// shape would mean a second code path through every one of them.
+public struct LocalConnection: Codable, Sendable, Hashable, Identifiable {
+    /// Unique per connection, not per provider: two Stripe accounts are two
+    /// of these, and the Keychain is keyed on this for the same reason.
+    public let id: String
+    /// The `ProviderId` the catalogue serves.
+    public let provider: String
+    /// What the provider called the account when it was verified. Shown as
+    /// the connection's name, so it survives being repointed.
+    public var label: String
+    /// ISO 4217, or nil for a connector that is not about money.
+    public var currency: String?
+    /// Metrics this credential cannot answer: a restricted Stripe key reads
+    /// charges and not subscriptions. The widget browser greys these out
+    /// rather than offering a tile that can only ever fail.
+    public var unavailableMetrics: [String]
+    /// Which credential fields were stored for this connection.
+    ///
+    /// Recorded here rather than read off the manifest at fetch time, for two
+    /// reasons. A manifest can gain or lose a field between the connection
+    /// being made and the next read, and reading the manifest would need the
+    /// catalogue — which needs the network, on a path whose whole point is
+    /// that it does not.
+    public var credentialFields: [String]
+    public var connectedAt: Date
+
+    public init(
+        id: String = UUID().uuidString,
+        provider: String,
+        label: String,
+        currency: String? = nil,
+        unavailableMetrics: [String] = [],
+        credentialFields: [String] = [],
+        connectedAt: Date = Date()
+    ) {
+        self.id = id
+        self.provider = provider
+        self.label = label
+        self.currency = currency
+        self.unavailableMetrics = unavailableMetrics
+        self.credentialFields = credentialFields
+        self.connectedAt = connectedAt
+    }
+
+    /// Decoded field by field for the same reason `AppSettings` is: this is
+    /// inside `settings.json`, so a release that adds a property here must not
+    /// make every existing user's whole settings file fail to decode.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        provider = try c.decode(String.self, forKey: .provider)
+        label = (try? c.decode(String.self, forKey: .label)) ?? provider
+        currency = try? c.decodeIfPresent(String.self, forKey: .currency)
+        unavailableMetrics =
+            (try? c.decodeIfPresent([String].self, forKey: .unavailableMetrics)) .flatMap { $0 }
+            ?? []
+        credentialFields =
+            (try? c.decodeIfPresent([String].self, forKey: .credentialFields)) .flatMap { $0 } ?? []
+        connectedAt = (try? c.decode(Date.self, forKey: .connectedAt)) ?? Date()
     }
 }
 

@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "emit": "node --experimental-strip-types scripts/emit-catalogue.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo node_modules *.tsbuildinfo"

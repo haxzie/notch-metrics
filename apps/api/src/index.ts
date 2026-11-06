@@ -54,17 +54,37 @@ app.on(["GET", "POST"], "/api/auth/*", (c) =>
 
 app.route("/v1/me", me);
 app.route("/v1/desktop", desktop);
-app.route("/v1/providers", providers);
-app.route("/v1/connectors", connectors);
-app.route("/v1/connect", connect);
-app.route("/v1/link", link);
-app.route("/v1/integrations", integrations);
-app.route("/v1/metrics", metrics);
 app.route("/v1/widgets", widgets);
-app.route("/v1/notifications", notifications);
 app.route("/v1/billing", billing);
 app.route("/v1/updates", updates);
 app.route("/v1/webhooks/dodo", dodoWebhook);
+
+/**
+ * Unmounted, not deleted.
+ *
+ * Credentials live in each Mac's Keychain now, and the adapters that read
+ * them are compiled into the app — so nothing on this server holds a
+ * provider key, calls a provider, or has anything to say about a connection.
+ * These five routes are the whole of that old arrangement:
+ *
+ * - `connect` and `link` minted and completed a browser connect flow. The
+ *   credentials form is in the notch now; there is no browser leg.
+ * - `integrations` listed and revoked connections the server held.
+ * - `metrics` fetched a widget's number on the app's behalf.
+ * - `notifications` served alerts, which the cron produced by polling each
+ *   provider with the stored credential. With no stored credentials there is
+ *   nothing to poll, so the feature is dark rather than broken.
+ *
+ * `connectors` and `providers` served the catalogue. That is static manifest
+ * data rather than anything of a user's, but the app compiles its own copy
+ * now (`pnpm catalogue`) and the website reads the manifests directly, so
+ * nothing asks.
+ *
+ * Kept in the tree because reinstating any of them is a line here, and
+ * because they document how it used to work better than a commit message
+ * would. Deleting them is a separate decision from switching them off.
+ */
+void [connect, link, integrations, metrics, notifications, connectors, providers];
 
 app.get("/health", (c) => c.json({ ok: true }));
 

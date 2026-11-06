@@ -10,7 +10,7 @@ faq:
   - question: What is the best way to track Stripe MRR on a Mac?
     answer: >-
       Put it somewhere you already look. Notch Metrics shows Stripe MRR in the
-      MacBook notch for $9 a month or $49 a year, MRRDock shows it in the menu
+      MacBook notch for $5, paid once, MRRDock shows it in the menu
       bar for free under an MIT licence, and Orbl puts it on your wallpaper with
       a $39 one-time Premium purchase. All three read the same Stripe account.
   - question: Is there a free Stripe MRR tracker for Mac?
@@ -50,7 +50,7 @@ faq:
 
 |     | Tool              | Price                               | Where it lives    | Best for                                         |
 | --- | ----------------- | ----------------------------------- | ----------------- | ------------------------------------------------ |
-| 1   | **Notch Metrics** | **$9/mo or $49/yr**                 | The MacBook notch | Several sources, and numbers beyond revenue      |
+| 1   | **Notch Metrics** | **$5 once**                         | The MacBook notch | Several sources, and numbers beyond revenue      |
 | 2   | MRRDock           | Free, MIT licensed                  | Menu bar          | One MRR total, open source, no cost              |
 | 3   | Orbl              | Free app, Premium $39 once          | Wallpaper         | Revenue in context with the rest of your desktop |
 | 4   | Baremetrics       | Free to $180K ARR, then from $49/mo | Browser           | Cohorts, LTV and churn analysis                  |
@@ -91,7 +91,7 @@ There is no dock icon and nothing in the menu bar, which matters more than it
 sounds: the menu bar is already full, and macOS hides the newest items when
 it runs out of room.
 
-Fourteen connectors, every one included on both plans with no per-integration
+Fourteen connectors, every one included with no per-integration
 charge. [Stripe](/sources/stripe), [Polar](/sources/polar),
 [Paddle](/sources/paddle), [Dodo Payments](/sources/dodopayments),
 [Lemon Squeezy](/sources/lemonsqueezy), [RevenueCat](/sources/revenuecat) and
@@ -112,7 +112,7 @@ And when a number has no connector, a coding agent writes a
 [custom metric](/blog/writing-a-custom-metric) over MCP: one JavaScript
 module running on your own machine, secrets in the Keychain.
 
-**Price.** $9 a month, or $49 a year. Seven-day trial, no card.
+**Price.** $5, paid once. Seven-day trial, no card.
 **Requires.** Apple silicon, macOS 14 or later.
 
 [Download Notch Metrics](/download) · [Every source](/sources)

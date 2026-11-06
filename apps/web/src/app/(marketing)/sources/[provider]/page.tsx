@@ -158,61 +158,37 @@ export default async function SourcePage({ params }: { params: Promise<{ provide
 
       <section className="mt-14">
         <h2 className="text-xl font-semibold tracking-tight">
-          Connecting {manifest.name}, once, on the web
+          Connecting {manifest.name}, once, in the notch
         </h2>
         <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">{authPhrase(manifest)}</p>
 
-        {manifest.authMode === "oauth2" && manifest.oauth ? (
-          <>
-            <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">
-              The prompt asks for exactly this much:
-            </p>
-            <ul className="mt-3 flex flex-col gap-2">
-              {manifest.oauth.scopeSummary.map((scope) => (
-                <li key={scope} className="text-ink/70 text-[15px] leading-relaxed">
-                  <span aria-hidden className="text-ink/30 mr-2">
-                    ·
+        <dl className="mt-5 flex flex-col gap-5">
+          {manifest.fields.map((field) => (
+            <div key={field.key}>
+              <dt className="text-ink/90 text-[15px] font-medium">
+                {field.label}
+                {!field.required && (
+                  <span className="text-ink/30 ml-2 font-mono text-[10px] uppercase tracking-wide">
+                    optional
                   </span>
-                  {scope}
-                </li>
-              ))}
-            </ul>
-            {manifest.oauth.requiresSelection && manifest.oauth.selectionLabel && (
-              <p className="text-ink/55 mt-4 text-[15px] leading-relaxed">
-                After authorising, you pick {manifest.oauth.selectionLabel.toLowerCase()}.
-              </p>
-            )}
-          </>
-        ) : (
-          <dl className="mt-5 flex flex-col gap-5">
-            {manifest.fields.map((field) => (
-              <div key={field.key}>
-                <dt className="text-ink/90 text-[15px] font-medium">
-                  {field.label}
-                  {!field.required && (
-                    <span className="text-ink/30 ml-2 font-mono text-[10px] uppercase tracking-wide">
-                      optional
-                    </span>
-                  )}
-                </dt>
-                {field.help && (
-                  <dd className="text-ink/55 mt-1.5 text-[15px] leading-relaxed">
-                    <Ticks>{field.help}</Ticks>
-                  </dd>
                 )}
-                {field.placeholder && (
-                  <dd className="text-ink/35 mt-1.5 font-mono text-[12px]">{field.placeholder}</dd>
-                )}
-              </div>
-            ))}
-          </dl>
-        )}
+              </dt>
+              {field.help && (
+                <dd className="text-ink/55 mt-1.5 text-[15px] leading-relaxed">
+                  <Ticks>{field.help}</Ticks>
+                </dd>
+              )}
+              {field.placeholder && (
+                <dd className="text-ink/35 mt-1.5 font-mono text-[12px]">{field.placeholder}</dd>
+              )}
+            </div>
+          ))}
+        </dl>
 
         <p className="text-ink/55 mt-6 text-[15px] leading-relaxed">
-          Your {manifest.name} credential is encrypted with its own key, bound to your account and
-          the provider. Our server calls {manifest.name} and hands your Mac a normalised number, so
-          the Mac app never holds the credential. Remove the integration and the encrypted key is
-          deleted with it.
+          Your {manifest.name} key is stored in your Mac&rsquo;s Keychain. The app calls{" "}
+          {manifest.name} directly, so the key never leaves your Mac and never reaches our servers.
+          Remove the connection and the key goes with it.
         </p>
         <p className="text-ink/40 mt-4 text-[13px]">
           <a href={manifest.docsUrl} target="_blank" rel="noopener noreferrer">

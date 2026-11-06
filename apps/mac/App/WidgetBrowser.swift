@@ -310,7 +310,11 @@ extension WidgetBrowserPane {
             appId: connector.id,
             // Whatever is already connected, so a new widget lands on real
             // numbers when there is only one account — the common case.
-            integrationId: connector.connections.first?.id,
+            //
+            // Nil for a connector with nothing to connect: npm needs no
+            // credential, so there is no account to bind to and a widget
+            // that waited for one would never fill in.
+            integrationId: connector.needsConnection ? connector.connections.first?.id : nil,
             metric: metric.id,
             title: metric.shortLabel,
             size: ChartKind.defaultFor(

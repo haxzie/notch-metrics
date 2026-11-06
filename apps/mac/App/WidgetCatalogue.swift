@@ -2,6 +2,7 @@ import AppKit
 import MetricsAPI
 import MetricsCore
 import NotchUI
+import Providers
 import SwiftUI
 
 // The Widgets settings pane used to live here: browse by app, pick a widget,
@@ -11,11 +12,16 @@ import SwiftUI
 
 // MARK: - Connecting, without leaving
 
-/// Opens the browser flow and waits for the account to appear.
+/// Connects an account without leaving the widget being configured.
 ///
 /// The same button in both tabs: somebody who gets as far as picking a widget
 /// and finds nothing to point it at should not have to go and find the Apps
 /// pane.
+///
+/// Two paths, chosen by whether this build can read the provider itself. A
+/// local connector opens the credentials pane in the notch and is done when
+/// the pane is; the rest still mint a link and wait for the browser, which is
+/// what a server-held credential needs.
 struct ConnectButton: View {
     let app: ConnectorEntry
     @Bindable var model: WidgetCatalogueModel
@@ -55,6 +61,29 @@ struct ConnectButton: View {
     }
 
     private func connect() {
+        // `ProviderRegistry.isLocal` rather than anything on the manifest:
+        // whether this build can read a provider is a fact about the binary,
+        // and the server has no way to know it.
+        //
+        // This used to be the browser for everything, which is why it was
+        // missed when the Integrations pane was converted — two Connect
+        // buttons, one changed. A widget dropped on the grid reaches this
+        // one, not that one, so it is the path most people actually take.
+        if ProviderRegistry.isLocal(app.id) {
+            let before = Set(model.entry(app.id)?.connections.map(\.id) ?? [])
+            env.notch.beginConnecting(app.id)
+            Task {
+                // The pane writes the connection and bumps the catalogue, so
+                // this is waiting on local state rather than on a browser.
+                if let added = await model.waitForNewConnection(
+                    to: app.id, notIn: before, env: env)
+                {
+                    onConnected?(added)
+                }
+            }
+            return
+        }
+
         busy = true
         problem = nil
         Task {
@@ -132,7 +161,7 @@ final class WidgetCatalogueModel {
 
     func load(env: AppEnvironment) async {
         do {
-            let catalogue = try await env.api.catalogue()
+            let catalogue = try await env.catalogue()
             // Only apps that actually offer a widget. A row you can open to
             // find an empty grid is a dead end.
             let groups = catalogue.categories.compactMap { group -> ConnectorCategoryGroup? in

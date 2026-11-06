@@ -89,5 +89,4 @@ from [Plausible](/sources/plausible) and
 [Google Analytics](/sources/google-analytics), search from
 [Search Console](/sources/google-search-console). [Every source](/sources).
 
-Apple silicon, macOS 14 and later. Seven days with no card, then $9 a month
-or $49 a year. [Download Notch Metrics](/download).
+Apple silicon, macOS 14 and later. Seven days with no card, then $5, paid once. [Download Notch Metrics](/download).

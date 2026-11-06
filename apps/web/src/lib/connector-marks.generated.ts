@@ -3,6 +3,7 @@ export const LIGHT_TILE_MARKS: ReadonlySet<string> = new Set([
   "github",
   "google-analytics",
   "google-search-console",
+  "npm",
 ]);
 export const OWN_COLOUR_MARKS: ReadonlySet<string> = new Set([
   "anthropic",
@@ -10,11 +11,12 @@ export const OWN_COLOUR_MARKS: ReadonlySet<string> = new Set([
   "github",
   "google-analytics",
   "google-search-console",
+  "npm",
   "openai",
   "polar",
   "posthog",
 ]);
-export const FULL_BLEED_MARKS: ReadonlySet<string> = new Set(["dodopayments"]);
+export const FULL_BLEED_MARKS: ReadonlySet<string> = new Set(["dodopayments", "npm"]);
 export const MONOCHROME_MARKS: ReadonlySet<string> = new Set(["github"]);
 export const MARKS: ReadonlySet<string> = new Set([
   "anthropic",
@@ -24,6 +26,7 @@ export const MARKS: ReadonlySet<string> = new Set([
   "google-search-console",
   "lemonsqueezy",
   "mixpanel",
+  "npm",
   "openai",
   "paddle",
   "plausible",

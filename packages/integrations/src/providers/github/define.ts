@@ -1,15 +1,18 @@
 import { z } from "zod";
-import { EXPIRES_AT_FIELD } from "../../oauth.ts";
 import { metricsFor } from "../../metric.ts";
 
 export const credentialSchema = z.object({
+  /**
+   * A personal access token: `ghp_` classic, or `github_pat_` fine-grained.
+   *
+   * Deliberately looser than the manifest's `pattern`. That one is a hint the
+   * app renders over what somebody types; this one also parses the blob back
+   * out of the database, where a connection made under the old OAuth flow
+   * still carries a `gho_` token that works. A prefix check here would fail
+   * those rows on the first fetch after deploying, which reads as every
+   * GitHub tile breaking at once.
+   */
   access_token: z.string().min(8),
-  // Both present only when the OAuth App has "expire user authorization
-  // tokens" switched on. GitHub turns that on by default for new apps, and
-  // the tokens it then issues still start with `gho_` — so nothing about the
-  // token itself says whether it will stop working in eight hours.
-  refresh_token: z.string().min(8).optional(),
-  [EXPIRES_AT_FIELD]: z.string().regex(/^\d+$/).optional(),
   /**
    * Legacy. Connections made before the repository moved onto the widget
    * carry one here, and their widgets have no `repository` param to supply —

@@ -34,8 +34,7 @@ faq:
   - question: Can Notch Metrics replace Baremetrics?
     answer: >-
       For the daily glance, yes, and across more than revenue: fourteen
-      connectors covering payments, analytics, search, video and GitHub, for $9
-      a month or $49 a year. For cohort analysis, LTV and forecasting, no. Those
+      connectors covering payments, analytics, search, video and GitHub, for $5, paid once. For cohort analysis, LTV and forecasting, no. Those
       are a different job and the notch is a few hundred pixels.
 ---
 
@@ -43,7 +42,7 @@ faq:
 
 | Alternative        | Price                               | Replaces                                  |
 | ------------------ | ----------------------------------- | ----------------------------------------- |
-| **Notch Metrics**  | **$9/mo or $49/yr**                 | The daily glance, across fourteen sources |
+| **Notch Metrics**  | **$5 once**                         | The daily glance, across fourteen sources |
 | MRRDock            | Free, MIT licensed                  | The MRR figure                            |
 | Stripe Dashboard   | Free                                | The detail and the source of truth        |
 | Baremetrics itself | Free to $180K ARR, then from $49/mo | Cohorts, LTV, forecasting                 |
@@ -110,7 +109,7 @@ What it does not do is cohort analysis, LTV or forecasting. That is
 deliberate: the notch is a few hundred pixels and a cohort chart does not fit
 in it.
 
-**Price.** $9 a month or $49 a year, every connector included. Seven-day
+**Price.** $5, paid once, every connector included. Seven-day
 trial, no card.
 **Requires.** Apple silicon, macOS 14 or later.
 

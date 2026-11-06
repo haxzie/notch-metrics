@@ -18,14 +18,10 @@ import { posthog } from "./providers/posthog/index.ts";
 import { plausible } from "./providers/plausible/index.ts";
 import { mixpanel } from "./providers/mixpanel/index.ts";
 import { amplitude } from "./providers/amplitude/index.ts";
-import { googleAnalytics } from "./providers/google-analytics/index.ts";
-
-// Marketing and SEO
-import { googleSearchConsole } from "./providers/google-search-console/index.ts";
-import { youtube } from "./providers/youtube/index.ts";
 
 // Developer
 import { github } from "./providers/github/index.ts";
+import { npm } from "./providers/npm/index.ts";
 
 // AI
 import { openai } from "./providers/openai/index.ts";
@@ -61,10 +57,8 @@ export const REGISTRY: Record<ProviderId, ProviderAdapter<any>> = {
   plausible,
   mixpanel,
   amplitude,
-  "google-analytics": googleAnalytics,
-  "google-search-console": googleSearchConsole,
-  youtube,
   github,
+  npm,
   openai,
   anthropic,
 };
@@ -155,9 +149,8 @@ export function catalogue(): { category: ConnectorCategory; connectors: Provider
   const position: Record<ConnectorCategory, number> = {
     revenue: 0,
     analytics: 1,
-    marketing: 2,
-    developer: 3,
-    ai: 4,
+    developer: 2,
+    ai: 3,
   };
   const order = (Object.keys(position) as ConnectorCategory[]).sort(
     (a, b) => position[a] - position[b],

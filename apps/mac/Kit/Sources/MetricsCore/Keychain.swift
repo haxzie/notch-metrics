@@ -14,6 +14,23 @@ public struct SecretKey: Hashable, Sendable {
     }
 
     public static func pluginPrefix(_ id: String) -> String { "plugin.\(id)." }
+
+    /// One item per (connection, field), for a connector this app ships.
+    ///
+    /// Keyed on the *connection* rather than the provider, because a user may
+    /// have two Stripe accounts and the second one's key must not overwrite
+    /// the first's.
+    ///
+    /// A separate namespace from `plugin.`, not a shared one, because the two
+    /// have different lifetimes and different owners: a plugin's secrets die
+    /// with the folder the user deletes, and these die when a connection is
+    /// removed. Sharing the prefix would make `deleteAll(matching:)` for a
+    /// local app called `stripe` take a real Stripe key with it.
+    public static func connection(_ id: String, _ field: String) -> SecretKey {
+        SecretKey(account: "connection.\(id).\(field)")
+    }
+
+    public static func connectionPrefix(_ id: String) -> String { "connection.\(id)." }
 }
 
 public enum SecretStoreError: Error, Equatable {

@@ -1,20 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { PLANS, annualSavingPercent, formatPrice } from "@notch/schemas";
+import { PLANS, formatPrice } from "@notch/schemas";
 import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
 
 /**
- * The two cards and the checkout call. Split from the page so the copy and
- * the FAQ render on the server and only this needs the session.
+ * The one card and the checkout call. Split from the page so the copy and the
+ * FAQ render on the server and only this needs the session.
  */
 export function PlanPicker() {
   const { data: session } = useSession();
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  async function choose(plan: "pro" | "pro_annual") {
+  async function choose(plan: "pro") {
     if (!session) {
       window.location.href = `/login?next=${encodeURIComponent("/#pricing")}`;
       return;
@@ -41,31 +41,18 @@ export function PlanPicker() {
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="mx-auto max-w-sm">
         <PlanCard
-          title="Monthly"
+          title="Lifetime"
           price={formatPrice(PLANS.pro.amount, "USD")}
-          cadence="per month"
-          note="Cancel whenever you like."
-          aside="One coffee a month."
+          cadence="once"
+          note="Pay once. It stays yours."
+          aside="Cheaper than the coffee you are holding."
           asideIcon={<CoffeeGlyph />}
+          highlighted
           busy={busy === "pro"}
           disabled={busy !== null}
           onChoose={() => void choose("pro")}
-        />
-        <PlanCard
-          title="Yearly"
-          price={formatPrice(PLANS.pro_annual.amount, "USD")}
-          cadence="per year"
-          was={formatPrice(PLANS.pro.amount * 12, "USD")}
-          note={`${formatPrice(Math.round(PLANS.pro_annual.amount / 12), "USD")} a month, billed once.`}
-          aside="Best value for money."
-          asideIcon={<TagGlyph />}
-          badge={`Save ${annualSavingPercent()}%`}
-          highlighted
-          busy={busy === "pro_annual"}
-          disabled={busy !== null}
-          onChoose={() => void choose("pro_annual")}
         />
       </div>
 

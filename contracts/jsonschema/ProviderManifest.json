@@ -16,10 +16,8 @@
         "plausible",
         "mixpanel",
         "amplitude",
-        "google-analytics",
-        "google-search-console",
-        "youtube",
         "github",
+        "npm",
         "openai",
         "anthropic"
       ]
@@ -32,7 +30,6 @@
       "enum": [
         "revenue",
         "analytics",
-        "marketing",
         "developer",
         "ai"
       ]
@@ -65,31 +62,8 @@
       "type": "string",
       "enum": [
         "api_key",
-        "oauth2"
+        "none"
       ]
-    },
-    "oauth": {
-      "type": "object",
-      "properties": {
-        "scopeSummary": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "requiresSelection": {
-          "default": false,
-          "type": "boolean"
-        },
-        "selectionLabel": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "scopeSummary",
-        "requiresSelection"
-      ],
-      "additionalProperties": false
     },
     "fields": {
       "type": "array",
@@ -225,6 +199,8 @@
               "open_issues",
               "open_pull_requests",
               "ci_runs",
+              "downloads",
+              "weekly_downloads",
               "tokens",
               "input_tokens",
               "output_tokens",
@@ -467,6 +443,8 @@
                       "open_issues",
                       "open_pull_requests",
                       "ci_runs",
+                      "downloads",
+                      "weekly_downloads",
                       "tokens",
                       "input_tokens",
                       "output_tokens",
@@ -531,6 +509,8 @@
                       "open_issues",
                       "open_pull_requests",
                       "ci_runs",
+                      "downloads",
+                      "weekly_downloads",
                       "tokens",
                       "input_tokens",
                       "output_tokens",
@@ -623,6 +603,8 @@
                   "open_issues",
                   "open_pull_requests",
                   "ci_runs",
+                  "downloads",
+                  "weekly_downloads",
                   "tokens",
                   "input_tokens",
                   "output_tokens",

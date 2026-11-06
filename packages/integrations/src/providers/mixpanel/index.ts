@@ -20,6 +20,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "Service account username",
       type: "string",
       required: true,
+      placeholder: "my-account.1a2b3c.mp-service-account",
       help: "Organization Settings \u2192 Service Accounts.",
     },
     {
@@ -27,12 +28,15 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "Service account secret",
       type: "secret",
       required: true,
+      placeholder: "Your service account secret",
+      help: "Shown once when the service account is created, and not again.",
     },
     {
       key: "project_id",
       label: "Project ID",
       type: "string",
       required: true,
+      placeholder: "1234567",
       help: "Project Settings \u2192 Project Details.",
     },
     {

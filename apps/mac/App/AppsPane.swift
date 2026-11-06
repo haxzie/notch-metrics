@@ -1,6 +1,7 @@
 import MetricsAPI
 import MetricsCore
 import NotchUI
+import Providers
 import SwiftUI
 
 /// Everything the app can connect to, grouped by category, with one button
@@ -13,6 +14,30 @@ struct AppsPane: View {
     @Environment(AppEnvironment.self) private var env
     @State private var model = ConnectorsModel()
     @State private var query = ""
+
+    /// The note under the list: where the keys for these connectors go.
+    ///
+    /// Names the ones still handled by the server rather than the ones held
+    /// here, because that list is now the short one and shrinking. Written
+    /// the other way round it listed thirteen connectors in a sentence
+    /// nobody would finish.
+    ///
+    /// Taken from the catalogue rather than from the registry, so the names
+    /// are the server's own — the same ones the rows above show.
+    private func storageNote(_ catalogue: ConnectorCatalogue) -> String {
+        let served = catalogue.allConnectors
+            .filter { $0.isConnectable && !$0.isLocal && !ProviderRegistry.isLocal($0.id) }
+            .map(\.name)
+            .sorted()
+
+        guard !served.isEmpty else {
+            return "Keys are stored in this Mac's Keychain and never sent anywhere else."
+        }
+        return "Keys are stored in this Mac's Keychain. "
+            + "\(ListFormatter.localizedString(byJoining: served)) "
+            + "\(served.count == 1 ? "is" : "are") still connected through your browser, "
+            + "and \(served.count == 1 ? "its key is" : "those keys are") held on our servers."
+    }
 
     /// The catalogue, filtered, with empty categories dropped.
     ///
@@ -92,10 +117,10 @@ struct AppsPane: View {
                 }
 
                 Section {
-                    Text(
-                        "Connecting opens your browser. Keys are encrypted on our servers and "
-                            + "never stored on this Mac."
-                    )
+                    // The line people read before typing a key, so it has to
+                    // be true of the row they are about to press rather than
+                    // true on average.
+                    Text(storageNote(catalogue))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 }
@@ -179,6 +204,7 @@ private struct ConnectorRow: View {
         if let problem = connector.connections.first(where: \.needsAttention) {
             return "\(problem.label) — needs reconnecting"
         }
+        if !connector.needsConnection { return connector.tagline }
         if let first = connector.connections.first {
             return connector.connections.count > 1
                 ? "\(connector.connections.count) accounts connected"
@@ -197,6 +223,13 @@ private struct ConnectorRow: View {
                 .foregroundStyle(.tertiary)
         } else if busy {
             ProgressView().controlSize(.small)
+        } else if !connector.needsConnection {
+            // Nothing to press. A Connect button here would write a row
+            // whose only job is to exist, and which could then be renamed
+            // and disconnected to no effect.
+            Text("No setup needed")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         } else if connector.isConnected {
             Button("Add another", action: onConnect)
                 .buttonStyle(.bordered)
@@ -247,19 +280,36 @@ final class ConnectorsModel {
 
     func load(env: AppEnvironment) async {
         do {
-            state = .loaded(try await env.api.catalogue())
+            state = .loaded(try await env.catalogue())
         } catch {
             state = .failed(Self.describe(error))
         }
     }
 
-    /// Mints a link and hands it to the browser.
+    /// Opens the credentials form, or falls back to the browser.
     ///
-    /// The app does not collect credentials itself. An OAuth flow needs a
-    /// real address bar, and a native window asking for a Stripe key is
-    /// indistinguishable from one a phishing app would show.
+    /// Two paths while the providers are ported one at a time. A connector
+    /// with a local adapter is asked for in the notch and its key stays on
+    /// this Mac; the rest still mint a link and hand it to the browser, which
+    /// is what the server-held credentials need.
+    ///
+    /// `ProviderRegistry.isLocal` rather than a flag on the manifest: whether
+    /// this build can read a provider itself is a fact about the binary, and
+    /// the server has no way to know it.
     func connect(_ connector: ConnectorEntry, env: AppEnvironment) {
         guard connecting == nil else { return }
+
+        // Nothing to connect, so nothing to open.
+        guard connector.needsConnection else { return }
+
+        if ProviderRegistry.isLocal(connector.id) {
+            // The form is in the notch, so the Settings window stops being
+            // the thing to look at. Nothing to poll and nothing to wait for:
+            // the pane writes the connection itself and bumps the catalogue.
+            env.notch.beginConnecting(connector.id)
+            return
+        }
+
         connecting = connector.id
 
         Task {

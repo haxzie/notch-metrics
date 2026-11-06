@@ -98,5 +98,4 @@ Revenue from [Stripe](/sources/stripe), traffic from
 [Google Analytics](/sources/google-analytics), product analytics from
 [PostHog](/sources/posthog). [Every source](/sources).
 
-Apple silicon, macOS 14 and later. Seven days with no card, then $9 a month
-or $49 a year. [Download Notch Metrics](/download).
+Apple silicon, macOS 14 and later. Seven days with no card, then $5, paid once. [Download Notch Metrics](/download).

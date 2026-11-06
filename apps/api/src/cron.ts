@@ -6,7 +6,6 @@ import { queryMetric, sweepCache } from "./lib/metrics.ts";
 import { sweep as sweepRateLimits } from "./lib/rate-limit.ts";
 import { getAdapter } from "@notch/integrations";
 import { logError, logInfo } from "./lib/redact.ts";
-import { sweepTokenRefresh } from "./lib/token-refresh.ts";
 import { sweepEvents } from "./lib/events.ts";
 import {
   dueIntegrationIds,
@@ -20,7 +19,7 @@ import {
   sweepNotifications,
 } from "./lib/notifications.ts";
 import { adapterContext } from "./lib/adapter.ts";
-import { openFreshCredentials } from "./lib/token-refresh.ts";
+import { openIntegrationCredentials } from "./lib/credentials.ts";
 import { widgetWarmTargets, type WarmTarget } from "./lib/warm.ts";
 import { DEFAULT_GRANULARITY } from "@notch/schemas";
 
@@ -30,20 +29,21 @@ import { DEFAULT_GRANULARITY } from "@notch/schemas";
  */
 export async function scheduled(env: Env): Promise<void> {
   const db = createDb(env);
-  // Tokens before metrics, so the poll that follows runs on the new ones
-  // rather than on a token with minutes left.
-  // The counts, every tick. "Is refresh keeping up" was previously a question
-  // you could only answer by querying the database and doing arithmetic on
-  // timestamps; as a line per tick it is a graph.
-  await sweepTokenRefresh(db, env)
-    .then((counts) => logInfo("cron.tokenRefresh", counts))
-    .catch((e) => logError("cron.tokenRefresh", e));
-  await refreshMetrics(db, env).catch((e) => logError("cron.refresh", e));
+
+  // Only the two sweeps that are about this server's own state.
   await expireGrace(db).catch((e) => logError("cron.grace", e));
-  await sweepNotifications(db).catch((e) => logError("cron.sweepNotifications", e));
-  await sweepCache(db).catch((e) => logError("cron.sweepCache", e));
-  await sweepEvents(db).catch((e) => logError("cron.sweepEvents", e));
   await sweepRateLimits(db).catch((e) => logError("cron.sweepRateLimits", e));
+
+  // The rest are switched off with the routes that fed them, not deleted —
+  // see the note in `index.ts`. Every one of them starts by reading an
+  // `integration` row for a credential to call a provider with, and no such
+  // credential reaches this server any more: keys live in each Mac's
+  // Keychain and the adapters that use them are compiled into the app.
+  //
+  // Left here rather than removed because switching them back on is
+  // uncommenting, and because a cron that silently stopped doing four of its
+  // six jobs is worth saying out loud in the file that used to do them.
+  void [refreshMetrics, sweepNotifications, sweepCache, sweepEvents];
 }
 
 /**
@@ -146,7 +146,7 @@ async function refreshMetrics(db: Database, env: Env): Promise<void> {
             preferredCurrency: owner.preferredCurrency,
             signal: AbortSignal.timeout(20_000),
           }),
-          credentials: (await openFreshCredentials(env, db, row)).credentials,
+          credentials: await openIntegrationCredentials(env, row),
           row,
           owner,
           subs,

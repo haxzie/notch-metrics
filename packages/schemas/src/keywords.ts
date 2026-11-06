@@ -57,4 +57,6 @@ export const METRIC_KEYWORDS: Partial<Record<MetricId, string[]>> = {
   open_issues: ["github", "bugs", "tickets", "repo"],
   open_pull_requests: ["github", "prs", "reviews", "repo"],
   ci_runs: ["ci", "build", "builds", "actions", "workflow", "pipeline", "checks", "green", "red"],
+  downloads: ["installs", "package downloads", "npm downloads"],
+  weekly_downloads: ["weekly installs", "downloads a week", "npm weekly"],
 };

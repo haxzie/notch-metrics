@@ -17,6 +17,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "API key",
       type: "secret",
       required: true,
+      placeholder: "32 hexadecimal characters",
       help: "Settings → Projects → your project → General. Both keys are per project.",
     },
     {
@@ -24,6 +25,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "Secret key",
       type: "secret",
       required: true,
+      placeholder: "32 hexadecimal characters",
       help: "Beside the API key. Amplitude signs Dashboard API requests with the pair.",
     },
     {

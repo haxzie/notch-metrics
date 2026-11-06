@@ -55,21 +55,6 @@ GOOGLE_CLIENT_SECRET=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 
-# The GitHub *connector* — reading stars, forks and open work from a
-# repository. A second OAuth App, not the sign-in one above: different
-# callback, different scopes, revoked independently. Sharing one would mean
-# signing in silently granted repository access.
-#
-# Authorization callback URL:
-#
-#   http://localhost:8787/v1/link/oauth/callback
-#   https://api.notchmetrics.com/v1/link/oauth/callback
-#
-# Scopes are requested by the adapter (public_repo, read:user) and are not
-# configured here.
-OAUTH_GITHUB_CLIENT_ID=
-OAUTH_GITHUB_CLIENT_SECRET=
-
 # The key that wraps every user's provider credentials. 32 bytes, base64:
 #
 #     openssl rand -base64 32

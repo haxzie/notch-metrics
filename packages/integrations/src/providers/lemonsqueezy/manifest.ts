@@ -18,6 +18,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "API key",
       type: "secret",
       required: true,
+      placeholder: "eyJ0eXAiOiJKV1Qi…",
       help: "Settings → API. A key is read-write; Lemon Squeezy has no read-only option.",
     },
     {
@@ -25,6 +26,7 @@ export const manifest: Omit<ProviderManifest, "metrics"> = {
       label: "Store ID",
       type: "string",
       required: false,
+      placeholder: "12345",
       help: "Leave empty to total every store on the account.",
     },
   ],

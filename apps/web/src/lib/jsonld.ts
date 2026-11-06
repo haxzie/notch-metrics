@@ -76,7 +76,12 @@ export function softwareApplicationJsonLd(): Record<string, unknown> {
       // everywhere in this codebase.
       price: (plan.amount / 100).toFixed(2),
       priceCurrency: plan.currency,
-      category: plan.interval === "year" ? "Annual subscription" : "Monthly subscription",
+      // A one-off purchase, not a subscription. Describing it as one would
+      // put "per month" under the price in a search result for something
+      // that is never charged again, which is the kind of wrong a rich
+      // result repeats to everybody who sees it.
+      category: "One-time purchase",
+      availability: "https://schema.org/InStock",
       url: absoluteUrl("/#pricing"),
     })),
   };

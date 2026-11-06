@@ -12,7 +12,7 @@ import { integration as integrationTable, metricCache } from "@notch/db";
 import type { Env } from "../env.ts";
 import type { Database } from "./db.ts";
 import { adapterContext, toMetricError } from "./adapter.ts";
-import { openFreshCredentials } from "./token-refresh.ts";
+import { openIntegrationCredentials } from "./credentials.ts";
 import { percentChange } from "@notch/integrations";
 import { logError } from "./redact.ts";
 import { trackBroken } from "./track.ts";
@@ -295,17 +295,14 @@ async function computeMetric(
 
   try {
     const adapter = getAdapter(row.provider);
-    // Refreshed first when the connector says the token is about to lapse,
-    // so a request inside the lead window does not race the cron.
-    //
     // Spanned separately from the fetch because the two fail for unrelated
-    // reasons and have unrelated fixes: a slow refresh is our token endpoint
-    // round trip, a slow fetch is the provider's data API.
-    const { credentials } = options.telemetry
+    // reasons and have unrelated fixes: this is a KEK unwrap and a decrypt,
+    // a slow fetch is the provider's data API.
+    const credentials = options.telemetry
       ? await options.telemetry.span(`credentials.${row.provider}`, () =>
-          openFreshCredentials(options.env, db, row),
+          openIntegrationCredentials(options.env, row),
         )
-      : await openFreshCredentials(options.env, db, row);
+      : await openIntegrationCredentials(options.env, row);
 
     const fetchMetric = () =>
       adapter.fetchMetric(

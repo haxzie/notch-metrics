@@ -95,5 +95,4 @@ Revenue also comes from [Stripe](/sources/stripe), [Polar](/sources/polar),
 [Paddle](/sources/paddle), [Dodo Payments](/sources/dodopayments) and
 [Lemon Squeezy](/sources/lemonsqueezy). [Every source](/sources).
 
-Apple silicon, macOS 14 and later. Seven days with no card, then $9 a month
-or $49 a year. [Download Notch Metrics](/download).
+Apple silicon, macOS 14 and later. Seven days with no card, then $5, paid once. [Download Notch Metrics](/download).

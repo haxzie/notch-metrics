@@ -169,6 +169,42 @@ public final class NotchViewModel {
         holdsSpinners ? Set(states.keys) : refreshingIDs
     }
 
+    /// The connector whose credentials are being entered, if any.
+    ///
+    /// An id rather than a `ConnectorEntry`: the catalogue belongs to the app
+    /// target, and the panel is supplied from there anyway, so NotchUI has no
+    /// use for the rest of the entry and no reason to be rebuilt when the
+    /// catalogue refreshes under it.
+    public var connectingConnectorId: String?
+
+    /// The credentials form for one connector.
+    ///
+    /// From the app target, for the same reason `browserPanel` and
+    /// `configuratorPanel` are: it needs the catalogue to know which fields
+    /// to render, and the Keychain to fill them in.
+    public var connectPanel: @MainActor (String) -> AnyView = { _ in AnyView(EmptyView()) }
+
+    /// How tall the credentials form is, as measured by the form itself.
+    ///
+    /// Measured rather than fixed, like the configure pane and unlike the
+    /// browser: one connector asks for a key and another asks for four fields
+    /// and six setup steps, so a fixed height is either too short for Mixpanel
+    /// or mostly empty for Stripe.
+    public var connectContentHeight: CGFloat = 0
+
+    /// Connect and Cancel for the credentials form, drawn in the header.
+    ///
+    /// From the app target rather than built here, unlike the configure
+    /// pane's Done: whether Connect can be pressed depends on the manifest's
+    /// required fields and its patterns, and on whether a verify is in
+    /// flight. NotchUI owns where the buttons sit and nothing about when
+    /// they work.
+    public var connectActions: @MainActor () -> AnyView = { AnyView(EmptyView()) }
+
+    /// Connecting ended — saved, or cancelled. The controller may be holding
+    /// the notch open on the pane's behalf and needs to let go.
+    public var onEndConnecting: @MainActor () -> Void = {}
+
     /// True while the notch is showing the notification centre.
     ///
     /// Mutually exclusive with `isBrowsing` and `configuringID`; the controller

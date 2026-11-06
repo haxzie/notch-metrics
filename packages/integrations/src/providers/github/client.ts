@@ -35,22 +35,24 @@ export async function errorFor(response: HttpResponse): Promise<ProviderError> {
     // same 404 — GitHub will not confirm a private repository to a caller
     // without access. The message has to cover both, because we cannot tell.
     //
-    // With `repo` the usual cause is no longer visibility but reach: a
-    // repository in an organisation that has not approved this OAuth app,
-    // or one the signed-in account is simply not a member of.
+    // With a token that reaches private repositories the usual cause is not
+    // visibility but reach: an organisation that has not approved personal
+    // access tokens, or one the token's account is simply not a member of.
     //
-    // Except for one case worth naming outright. A connection made before
-    // this connector asked for `repo` still holds a `public_repo` token, and
-    // it keeps working for public repositories, so nothing announces that it
-    // is the reason a private one 404s. GitHub returns the granted scopes on
-    // every response, so the token can say so itself rather than leaving
+    // Except for one case worth naming outright. A `public_repo` token keeps
+    // working for public repositories, so nothing announces that it is the
+    // reason a private one 404s. A classic token's granted scopes come back
+    // on every response, so the token can say so itself rather than leaving
     // somebody to re-check a repository name that was right all along.
+    //
+    // A fine-grained token sends no such header, which is why the empty case
+    // falls through: its permissions cannot be read off a response, and
+    // guessing would blame the scope for a renamed repository.
     const granted = response.headers.get("x-oauth-scopes") ?? "";
     if (granted !== "" && !granted.split(/,\s*/).includes("repo")) {
       return new ProviderError(
         "unsupported",
-        "Reconnect GitHub to read private repositories. This connection was " +
-          "authorised for public ones only.",
+        "This token reads public repositories only. Give it repo access to read private ones.",
       );
     }
     //

@@ -2,6 +2,7 @@ import AppKit
 import MetricsAPI
 import MetricsCore
 import NotchUI
+import Providers
 import SwiftUI
 
 /// The accounts this user has actually connected.
@@ -157,11 +158,19 @@ struct ConnectionsPane: View {
         defer { reconnecting = nil }
 
         let before = Set(loaded().map(\.id))
-        do {
-            let link = try await env.api.connectLink(for: connection.provider)
-            NSWorkspace.shared.open(link.url)
-        } catch {
-            return
+        // A connector this build reads itself asks for the key in the notch.
+        // The adoption below is unchanged either way: a local connect also
+        // mints a new connection rather than refreshing one in place, so the
+        // same two rows need reconciling.
+        if ProviderRegistry.isLocal(connection.provider) {
+            env.notch.beginConnecting(connection.provider)
+        } else {
+            do {
+                let link = try await env.api.connectLink(for: connection.provider)
+                NSWorkspace.shared.open(link.url)
+            } catch {
+                return
+            }
         }
 
         // Polls rather than waiting on the `notchmetrics://connected`
@@ -356,31 +365,28 @@ final class ConnectionsModel {
             state = .loaded(AlertSample.connectionsForDemo)
             return
         }
-        do {
-            state = .loaded(try await env.api.connections())
-        } catch {
-            state = .failed(Self.describe(error))
-        }
+        // Straight off `settings.json`. Nothing to fetch and nothing to
+        // fail, so there is no error state left to reach here.
+        state = .loaded(env.allConnections)
     }
 
     func rename(_ connection: Integration, to label: String, env: AppEnvironment) async {
-        let trimmed = label.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        do {
-            _ = try await env.api.rename(connection: connection.id, to: trimmed)
-            await load(env: env)
-        } catch {
-            state = .failed(Self.describe(error))
+        // Routed by where the connection lives: a local one is a line in
+        // settings, a served one is a PATCH. The pane does not need to know
+        // which, and must not grow a second code path for it.
+        if let problem = await env.renameConnection(connection.id, to: label) {
+            state = .failed(problem)
+            return
         }
+        await load(env: env)
     }
 
     func remove(_ connection: Integration, env: AppEnvironment) async {
-        do {
-            _ = try await env.api.disconnect(connection.id)
-            await load(env: env)
-        } catch {
-            state = .failed(Self.describe(error))
+        if let problem = await env.disconnect(connection.id) {
+            state = .failed(problem)
+            return
         }
+        await load(env: env)
     }
 
     private static func describe(_ error: Error) -> String {

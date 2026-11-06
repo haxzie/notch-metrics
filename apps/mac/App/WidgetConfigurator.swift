@@ -34,6 +34,14 @@ struct WidgetConfigPanel: View {
     /// that can never be connected.
     private var isCustom: Bool { draft?.kind == .customMetric }
 
+    /// A connector with nothing to connect — npm's download counts are
+    /// public. Its widgets carry no `integrationId`, so an Account picker
+    /// here would be a control with one empty option and no effect.
+    private var needsConnection: Bool {
+        guard let appId = draft?.appId else { return true }
+        return model.entry(appId)?.needsConnection ?? true
+    }
+
     /// Whether a time window means anything for this metric.
     ///
     /// A snapshot — GitHub's stargazers, forks, open issues — is whatever it
@@ -274,7 +282,7 @@ struct WidgetConfigPanel: View {
                 // the browser flow — which is why pointing it at one produced
                 // "Could not start that connection". Its credentials are asked
                 // for once per app in Settings, not once per tile.
-                if !isCustom { connectionSection(binding) }
+                if !isCustom, needsConnection { connectionSection(binding) }
                 appearanceSection(binding)
                 dataSection(binding)
                 // Not while the widget is being added: Cancel in the header

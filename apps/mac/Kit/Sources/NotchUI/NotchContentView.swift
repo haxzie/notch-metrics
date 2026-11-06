@@ -137,7 +137,9 @@ public struct NotchContentView: View {
             // edge of the notch. The only thing that makes the feature
             // discoverable without hovering, and it is a view reading an
             // observable property — no timer, no poll.
-            if presentation == .collapsed, view.unreadAlertCount > 0, view.isSignedIn {
+            if FeatureFlags.alertsEnabled, presentation == .collapsed, view.unreadAlertCount > 0,
+                view.isSignedIn
+            {
                 HStack(spacing: 0) {
                     Spacer(minLength: 0)
                     Circle()
@@ -295,6 +297,7 @@ public struct NotchContentView: View {
         case trialEnded
         case browser
         case alerts
+        case connect(String)
         case configure(NotchWidget)
         case grid
     }
@@ -309,6 +312,10 @@ public struct NotchContentView: View {
         if view.needsUpgrade { return .trialEnded }
         if view.isBrowsing { return .browser }
         if view.isShowingAlerts { return .alerts }
+        // Before `configure`: a connector's form is opened from the browser,
+        // on the way to a widget that cannot be configured until there is a
+        // connection behind it.
+        if let connectorId = view.connectingConnectorId { return .connect(connectorId) }
         if let widget = configuring { return .configure(widget) }
         return .grid
     }
@@ -336,7 +343,7 @@ public struct NotchContentView: View {
                 .transition(.opacity)
         } else if bodyKind == .trialEnded {
             // Second only to signed-out, and for the same reason: without an
-            // active plan every tile says "Subscription needed", which is the
+            // active plan every tile says "Purchase needed", which is the
             // same sentence repeated per widget with no way to act on it. One
             // panel, one button.
             TrialEndedNotch(onUpgrade: view.onUpgrade)
@@ -350,6 +357,8 @@ public struct NotchContentView: View {
             browser
         } else if view.isShowingAlerts {
             alertCentre
+        } else if let connectorId = view.connectingConnectorId {
+            connectForm(connectorId)
         } else if let widget = configuring {
             WidgetConfigurePane(
                 widget: widget,
@@ -398,6 +407,33 @@ public struct NotchContentView: View {
             // The same height as the browser, deliberately: the same
             // two-column frame at the same size reads as the same room.
             .frame(height: Self.alertsBodyHeight)
+            .transition(
+                .asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .opacity))
+    }
+
+    /// One connector's credentials, asked for in the notch.
+    ///
+    /// This used to be a trip to the browser: the app minted a link, opened a
+    /// tab, and the key was typed on the website and kept on the server. With
+    /// the keys living in this Mac's Keychain there is nothing on the other
+    /// end of that trip, and the form belongs where the thing being changed
+    /// is — which is the same argument the configure pane and the browser
+    /// already make.
+    ///
+    /// All this owns is the height, the insets and the way in and out. The
+    /// form comes from the app target, which has the catalogue and the
+    /// Keychain.
+    private func connectForm(_ connectorId: String) -> some View {
+        view.connectPanel(connectorId)
+            .padding(.horizontal, NotchWidgetCanvas.contentHorizontal)
+            .padding(.top, NotchWidgetCanvas.contentTop)
+            // No grabber under this one, so it owns its bottom margin.
+            .padding(.bottom, Self.configureBottomInset)
+            .onPreferenceChange(ConfigurePanelHeightKey.self) { height in
+                MainActor.assumeIsolated { view.connectContentHeight = height }
+            }
             .transition(
                 .asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -481,7 +517,9 @@ public struct NotchContentView: View {
             // are gated on the same plan.
             if view.isSignedIn, !view.needsUpgrade {
                 refreshButton
-                alertsButton
+                // See `FeatureFlags.alertsEnabled`. The bell is the only way
+                // into the alert centre, so hiding it hides the pane too.
+                if FeatureFlags.alertsEnabled { alertsButton }
             }
             // Settings stays for a lapsed plan — it is the way to the billing
             // pane — but not on the welcome screen, which carries the one
@@ -516,6 +554,13 @@ public struct NotchContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
             } else if view.isShowingAlerts {
                 backFromAlertsButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            } else if view.connectingConnectorId != nil {
+                // Supplied by the app target. Edit Widgets is deliberately
+                // not among them: there is nothing behind this pane to
+                // arrange, and a form whose header offers to rearrange the
+                // grid invites a click that throws away a half-typed key.
+                view.connectActions()
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
             } else if configuring != nil {
                 cancelConfiguringButton
@@ -1088,6 +1133,9 @@ public struct NotchContentView: View {
         case .alerts:
             content =
                 NotchWidgetCanvas.contentTop + Self.alertsBodyHeight + Self.configureBottomInset
+        case .connect:
+            content =
+                NotchWidgetCanvas.contentTop + connectBodyHeight + Self.configureBottomInset
         case .configure:
             content =
                 NotchWidgetCanvas.contentTop + configureBodyHeight + Self.configureBottomInset
@@ -1168,6 +1216,18 @@ public struct NotchContentView: View {
     /// and the column still scrolls if it ever hits that.
     private var configureBodyHeight: CGFloat {
         let measured = view.configureContentHeight
+        guard measured > 0 else { return Self.configureFallbackHeight }
+        return min(max(measured, Self.configureFallbackHeight), Self.configureMaxHeight)
+    }
+
+    /// How tall the credentials form opens: whatever it measured, clamped.
+    ///
+    /// The same treatment as the configure form and for the same reasons —
+    /// see `configureBodyHeight`. Shares its floor and ceiling rather than
+    /// introducing two more numbers: both are one column of form in the same
+    /// panel, and two pairs of limits would drift.
+    private var connectBodyHeight: CGFloat {
+        let measured = view.connectContentHeight
         guard measured > 0 else { return Self.configureFallbackHeight }
         return min(max(measured, Self.configureFallbackHeight), Self.configureMaxHeight)
     }
@@ -1973,7 +2033,7 @@ private struct TrialEndedNotch: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(NotchTheme.primaryText)
                 .padding(.top, 10)
-            Text("Subscribe to keep your numbers up to date.")
+            Text("Buy it once to keep your numbers up to date.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(NotchTheme.secondaryText)
                 .padding(.top, 3)

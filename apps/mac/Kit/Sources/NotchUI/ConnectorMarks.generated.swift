@@ -6,6 +6,7 @@ public enum ConnectorMarks {
         "github",
         "google-analytics",
         "google-search-console",
+        "npm",
     ]
 
     /// Marks with their own colours, whose tile is used exactly as the
@@ -16,6 +17,7 @@ public enum ConnectorMarks {
         "github",
         "google-analytics",
         "google-search-console",
+        "npm",
         "openai",
         "polar",
         "posthog",
@@ -25,6 +27,7 @@ public enum ConnectorMarks {
     /// corner radius, rather than inset into it.
     public static let fullBleed: Set<String> = [
         "dodopayments",
+        "npm",
     ]
 
     /// Light-background marks in a single dark colour, which can be drawn
