@@ -1,5 +1,21 @@
 # @notch/schemas
 
+## 0.4.0
+
+### Minor Changes
+
+- [`13958af`](https://github.com/haxzie/notch-metrics/commit/13958af9221a461e355052c4f63ec24bf50f4c9b) Thanks [@haxzie](https://github.com/haxzie)! - Read every connector on this Mac, with no server in the path.
+
+  Provider keys are entered in the notch and stored in the Keychain, and the
+  adapters that use them are compiled into the app, so a credential never
+  reaches our servers. The connector catalogue ships as a bundled resource, so
+  the integration list and its forms work with no network at all.
+
+  Thirteen connectors are ported, npm is new and needs no credential, and the
+  four OAuth connectors are gone.
+
+  One price, five dollars, paid once.
+
 ## 0.3.0
 
 ### Minor Changes
