@@ -41,6 +41,34 @@ if [ -z "$NOTARY" ]; then
   exit 1
 fi
 
+# `stapler staple`, with retries, because it is a *second* network call.
+#
+# Notarisation finishing with `status: Accepted` means Apple has the ticket.
+# Stapling then downloads it from `api.apple-cloudkit.com`, and that fetch
+# fails on its own schedule — twice in one afternoon here, with
+# `NSURLErrorDomain Code=-1005 "The network connection was lost."` and exit 68,
+# once on the app and once on the disk image. Both times the submission had
+# already been accepted, so the only thing lost was a signed build and fifteen
+# minutes of runner time.
+#
+# Retried rather than failed, because there is nothing to fix and nothing to
+# decide: the ticket exists, this end could not read it. The sleep grows
+# because a ticket just minted can take a moment to be readable.
+staple() {
+  local target="$1" attempt=1 max=5 delay=15
+  until xcrun stapler staple "$target"; do
+    if [ "$attempt" -ge "$max" ]; then
+      echo "::error::stapling $target failed $max times; the notarisation was accepted,"
+      echo "so re-running this workflow on the same tag will resume from here."
+      return 1
+    fi
+    echo "==> staple failed (attempt $attempt of $max); retrying in ${delay}s"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+    delay=$((delay * 2))
+  done
+}
+
 # Idempotent: Apple rate-limits submissions and each round trip is minutes, so
 # a re-run after a later step failed must not re-submit what already passed.
 if xcrun stapler validate "$TARGET" >/dev/null 2>&1; then
@@ -70,7 +98,7 @@ case "$TARGET" in
     xcrun notarytool submit "$ZIP" $NOTARY --wait --timeout 30m
 
     echo "==> stapling the app"
-    xcrun stapler staple "$TARGET"
+    staple "$TARGET"
     ;;
 
   *.dmg)
@@ -82,7 +110,7 @@ case "$TARGET" in
     xcrun notarytool submit "$TARGET" $NOTARY --wait --timeout 30m
 
     echo "==> stapling the disk image"
-    xcrun stapler staple "$TARGET"
+    staple "$TARGET"
     ;;
 
   *)
